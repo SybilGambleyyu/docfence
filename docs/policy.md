@@ -82,6 +82,8 @@ starter policy.
 | `no_word_vml_external_image_changes` | `DFP058` | VML external-image inventory differs | Comparison |
 | `require_no_word_vml_image_hyperlinks` | `DFP059` | Candidate has direct VML image-data hyperlink markup | Candidate |
 | `no_word_vml_image_hyperlink_changes` | `DFP060` | VML image-data hyperlink inventory differs | Comparison |
+| `require_no_word_vml_linked_ole_objects` | `DFP061` | Candidate has direct VML linked-OLE markup | Candidate |
+| `no_word_vml_linked_ole_object_changes` | `DFP062` | VML linked-OLE-object inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -142,6 +144,8 @@ intentionally retains direct legacy VML shape-link markup.
 intentionally retains direct legacy VML external-image markup.
 `no_word_vml_image_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct legacy VML image-data hyperlink markup.
+`no_word_vml_linked_ole_object_changes` provides the equivalent gate when it
+intentionally retains direct legacy VML linked-OLE markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -794,6 +798,40 @@ stored direct VML image-data hyperlink marker. Use it for a handoff that must
 carry no such markup. `no_word_vml_image_hyperlink_changes` compares the
 private inventory signature for a controlled baseline. Neither rule resolves,
 retrieves, follows, validates, evaluates, renders, or executes a target, or
+establishes that Word will honor it.
+
+## Legacy VML linked-OLE-object scope
+
+Direct legacy Office VML `o:OLEObject` markup with unqualified `Type="Link"`
+is separate from `Type="Embed"`, WordprocessingML `w:objectLink`, VML image
+data, VML shape links, DrawingML linked pictures, fields, and generic embedded
+OLE/package/control relationship or payload totals. DocFence records every
+direct marker in supported Word stories, including duplicates and markers in
+Markup Compatibility branches. It does not select a client-rendered branch,
+associate a marker with a visual object, or deduplicate an object.
+
+When a marker carries `r:id`, a standard OLE-object relationship with stored
+external or internal target mode is counted in the respective class. Any other
+resolved relationship type or mode is reviewable as unsupported evidence. A
+direct marker without `r:id` is retained as a distinct stored-evidence class;
+the schema permits the attribute to be absent. `UpdateMode="Always"` is
+reported only as a stored automatic-update marker. Every other or absent
+`UpdateMode` value is counted as nonautomatic-or-unspecified; neither class is
+a claim that a Word client will actually update an object.
+
+Public output exposes only aggregate marker/story, update-mode, and
+relationship-classification counts. Source locations, monikers, program,
+shape, and object IDs, relationship IDs and targets, field codes, VML markup,
+story paths, and fingerprints never appear in reports. The full direct marker
+is privately fingerprinted, so a same-count source, program, field-code,
+update-mode, or target rewrite remains visible. Relationship-ID renumbering
+with unchanged relationship semantics remains quiet.
+
+`require_no_word_vml_linked_ole_objects` fails whenever a candidate contains a
+stored direct VML linked-OLE marker. Use it for a handoff that must carry no
+such markup. `no_word_vml_linked_ole_object_changes` compares the private
+inventory signature for a controlled baseline. Neither rule resolves, retrieves,
+opens, updates, activates, evaluates, renders, or executes an OLE object, or
 establishes that Word will honor it.
 
 ## External Word document dependency scope

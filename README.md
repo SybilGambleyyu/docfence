@@ -10,7 +10,8 @@ style/default declarations, field codes, external-source field instructions,
 click/hover/mouse-over hyperlink-action markup, direct DrawingML linked-picture
 `a:blip/@r:link` markup, legacy VML shape `href` markup, legacy VML external
 image-data `v:imagedata/@r:id` markup, legacy VML image-data hyperlink
-`v:imagedata/@r:href` markup, external
+`v:imagedata/@r:href` markup, legacy Office VML linked-OLE
+`o:OLEObject Type="Link"` markup, external
 relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
@@ -58,6 +59,9 @@ identifiers, and story-part paths are private too.
 Legacy VML image and image-data-hyperlink targets, relationship IDs, raw
 image-source values, other VML image-data attributes, and story-part paths are
 private too.
+Legacy VML linked-OLE sources, monikers, program, shape, and object identifiers,
+relationship IDs, update metadata, field codes, markup, and story-part paths
+are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -88,7 +92,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.23 focuses on Office Open XML Word documents and templates and
+Version 0.24 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -103,6 +107,7 @@ deliberately keeps a small, inspectable contract:
   legacy VML shape/group/shape-template `href` markup,
   legacy VML `v:imagedata/@r:id` markup backed by an external relationship,
   legacy VML `v:imagedata/@r:href` hyperlink-target markup,
+  legacy Office VML `o:OLEObject Type="Link"` linked-OLE markup,
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
@@ -448,6 +453,38 @@ changes.
 image-data hyperlink marker, while `no_word_vml_image_hyperlink_changes`
 protects an approved marker baseline. The inventory never resolves, retrieves,
 follows, validates, evaluates, renders, or executes a target, and no count
+establishes that a client will honor it.
+
+Legacy Office VML linked-OLE markup is another deliberately separate direct
+surface. DocFence records each direct `o:OLEObject` whose unqualified `Type`
+is `Link` in supported Word stories, including duplicates and markers in
+Markup Compatibility branches. It does not select a branch, associate the
+marker with a rendered shape, deduplicate a visual object, retrieve a source,
+or activate or update an OLE object.
+
+If the marker has `r:id`, DocFence classifies a standard OLE-object relationship
+by its stored external or internal target mode; every other resolved type or
+mode remains reviewable as unsupported evidence. The OOXML schema makes `r:id`
+optional, so a direct `Type="Link"` marker without it remains a separate
+stored-evidence class. Public output also aggregates `UpdateMode="Always"` as
+a stored automatic-update marker; all other or absent update values are grouped
+as nonautomatic-or-unspecified. This is markup evidence, not proof that any
+Word client will retrieve a source or perform an update.
+
+`Type="Embed"`, WordprocessingML `w:objectLink`, VML image data, VML shape
+links, and broad embedded OLE/package/control relationship or payload totals
+remain separate inventories. Public output reports only aggregate marker/story,
+update, and relationship-classification counts. Sources, monikers, program,
+shape, and object IDs, relationship IDs and targets, field codes, VML markup,
+story paths, and fingerprints remain private. The full direct marker is
+privately fingerprinted, so same-count source, program, field-code,
+update-mode, or target rewrites remain visible; relationship-ID renumbering
+with unchanged semantics is quiet.
+
+`require_no_word_vml_linked_ole_objects` fails for every stored direct VML
+linked-OLE marker, while `no_word_vml_linked_ole_object_changes` protects an
+approved marker baseline. The inventory never resolves, retrieves, opens,
+updates, activates, evaluates, renders, or executes an OLE object, and no count
 establishes that a client will honor it.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
@@ -810,6 +847,22 @@ relationship. DocFence therefore records direct stored markers and classifies
 only recognized hyperlink relationships by mode; all other resolved
 relationship types or modes stay reviewable as unsupported evidence. It makes
 no rendering, link-following, or target-safety claim.
+The legacy VML linked-OLE boundary follows the Open XML SDK's
+[`o:OLEObject` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.vml.office.oleobject?view=openxml-3.0.1)
+and the ECMA-376 [`OLEObject` definition](https://c-rex.net/samples/ooxml/e1/Part4/OOXML_P4_DOCX_OLEObject_topic_ID0EXGUXB.html),
+which identify the direct Office VML element, its optional `r:id`, `Type`, and
+`UpdateMode` attributes. The standard specifies that update mode describes
+automatic versus on-demand new data only when `Type` is `Link`; the
+[Embedded Object Part contract](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Embedded_topic_ID0EA5BO.html)
+permits the standard OLE-object relationship target to be internal or external.
+Microsoft's [linked-versus-embedded-object guidance](https://support.microsoft.com/en-US/Word/linked-objects-and-embedded-objects)
+explains why the distinction matters for source-backed, independently maintained
+data. Public Word XML fragments show the direct stored form in practice: an
+[Excel-linked object](https://stackoverflow.com/questions/60565712/insert-ole-object-into-ms-word-document-and-keep-the-underlying-format-wmf-intac)
+with `Type="Link"` and `UpdateMode="Always"`, and a
+[linked OLE shape](https://forum.aspose.com/t/cannot-found-includepicture-field-type-via-doc-range-fields/277035)
+with `UpdateMode="OnCall"`. DocFence reports only bounded stored evidence from
+that markup, never a client update or retrieval outcome.
 The legacy VML boundary follows Microsoft's [`HRef` shape
 attribute](https://learn.microsoft.com/en-us/windows/win32/vml/href-attribute--shape--vml),
 which defines the URL used when a shape is clicked, and the W3C's

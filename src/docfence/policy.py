@@ -72,6 +72,8 @@ _RULES: Final = {
     "no_word_vml_external_image_changes": "DFP058",
     "require_no_word_vml_image_hyperlinks": "DFP059",
     "no_word_vml_image_hyperlink_changes": "DFP060",
+    "require_no_word_vml_linked_ole_objects": "DFP061",
+    "no_word_vml_linked_ole_object_changes": "DFP062",
 }
 
 
@@ -438,6 +440,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_vml_linked_ole_object_changes") and (
+        before.word_vml_linked_ole_objects.signature
+        != after.word_vml_linked_ole_objects.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_vml_linked_ole_object_changes",
+                "Stored VML linked-OLE-object inventory changed.",
+                {
+                    "before": before.word_vml_linked_ole_objects.public_dict(),
+                    "after": after.word_vml_linked_ole_objects.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -756,6 +772,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_vml_image_hyperlinks",
                 "Candidate contains stored VML image-data hyperlink markup.",
                 after.word_vml_image_hyperlinks.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_vml_linked_ole_objects") and any(
+        after.word_vml_linked_ole_objects.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_vml_linked_ole_objects",
+                "Candidate contains stored VML linked-OLE-object markup.",
+                after.word_vml_linked_ole_objects.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

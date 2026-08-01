@@ -27,6 +27,9 @@ _CONTROL_RELATIONSHIP_TYPE = (
 _OLE_OBJECT_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject"
 )
+_STRICT_OLE_OBJECT_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/oleObject"
+)
 _PACKAGE_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
 )
@@ -3655,6 +3658,211 @@ rules:
         assert marker not in rendered
 
 
+def test_word_vml_linked_ole_object_inventory_is_private_and_semantic(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    changed = tmp_path / "changed.docx"
+    moniker_changed = tmp_path / "moniker-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    orphaned_relationship = tmp_path / "orphaned-relationship.docx"
+    unavailable_marker = tmp_path / "unavailable-marker.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_vml_linked_ole_object_document(before, include_markup=False)
+    _write_vml_linked_ole_object_document(after)
+    _write_vml_linked_ole_object_document(
+        changed,
+        external_target=(
+            "https://CHANGED_VML_LINKED_OLE_TARGET_DO_NOT_LEAK.invalid/source"
+        ),
+    )
+    _write_vml_linked_ole_object_document(
+        moniker_changed,
+        moniker="VML_LINKED_OLE_CHANGED_MONIKER_DO_NOT_LEAK",
+    )
+    _write_vml_linked_ole_object_document(
+        renumbered,
+        external_relationship_id="rIdRENUMBERED_VML_LINKED_OLE_DO_NOT_LEAK",
+    )
+    _write_vml_linked_ole_object_document(
+        orphaned_relationship,
+        include_markup=False,
+        include_orphan_ole_relationship=True,
+    )
+    _write_vml_linked_ole_object_document(
+        unavailable_marker,
+        include_unavailable_link_marker=True,
+    )
+    _write_vml_linked_ole_object_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        relationship_attribute_namespace=_STRICT_RELATIONSHIP_NAMESPACE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+        ole_object_relationship_type=_STRICT_OLE_OBJECT_RELATIONSHIP_TYPE,
+        image_relationship_type=_STRICT_IMAGE_RELATIONSHIP_TYPE,
+    )
+
+    expected_inventory = {
+        "vml_linked_ole_object_count": 6,
+        "vml_linked_ole_object_story_count": 2,
+        "automatic_update_vml_linked_ole_object_count": 3,
+        "nonautomatic_or_unspecified_update_vml_linked_ole_object_count": 3,
+        "external_standard_ole_object_relationship_vml_linked_ole_object_count": 2,
+        "internal_standard_ole_object_relationship_vml_linked_ole_object_count": 2,
+        "unsupported_relationship_vml_linked_ole_object_count": 1,
+        "without_relationship_id_vml_linked_ole_object_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    changed_snapshot = load_snapshot(changed)
+    moniker_changed_snapshot = load_snapshot(moniker_changed)
+    renumbered_snapshot = load_snapshot(renumbered)
+    assert (
+        after_snapshot.public_dict()["word_vml_linked_ole_objects"]
+        == expected_inventory
+    )
+    assert after_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 6,
+        "external_relationship_count": 4,
+    }
+    assert after_snapshot.public_dict()["embedded_objects"] == {
+        "embedded_object_relationship_count": 5,
+        "embedded_object_part_count": 2,
+        "embedded_control_relationship_count": 0,
+        "embedded_control_part_count": 0,
+    }
+    assert before_snapshot.public_dict()["word_vml_linked_ole_objects"] == {
+        key: 0 for key in expected_inventory
+    }
+    orphaned_snapshot = load_snapshot(orphaned_relationship)
+    assert orphaned_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 1,
+        "external_relationship_count": 1,
+    }
+    assert orphaned_snapshot.public_dict()["word_vml_linked_ole_objects"] == {
+        key: 0 for key in expected_inventory
+    }
+    with pytest.raises(DocumentFormatError, match="unavailable relationship"):
+        load_snapshot(unavailable_marker)
+    assert (
+        load_snapshot(strict).public_dict()["word_vml_linked_ole_objects"]
+        == expected_inventory
+    )
+    assert (
+        renumbered_snapshot.word_vml_linked_ole_objects.signature
+        == after_snapshot.word_vml_linked_ole_objects.signature
+    )
+    for inventory_name in (
+        "word_hyperlink_fields",
+        "word_hyperlink_markup",
+        "word_drawing_hyperlinks",
+        "word_drawing_linked_pictures",
+        "word_vml_hyperlinks",
+        "word_vml_external_images",
+        "word_vml_image_hyperlinks",
+    ):
+        assert not any(after_snapshot.public_dict()[inventory_name].values())
+
+    report = diff_documents(before, after)
+    assert "word_vml_linked_ole_object_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_vml_linked_ole_object_inventory_changed" in {
+        change.kind for change in diff_documents(after, changed).changes
+    }
+    assert "word_vml_linked_ole_object_inventory_changed" in {
+        change.kind for change in diff_documents(after, moniker_changed).changes
+    }
+    assert "word_vml_linked_ole_object_inventory_changed" not in {
+        change.kind for change in diff_documents(after, renumbered).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_vml_linked_ole_objects: true
+  no_word_vml_linked_ole_object_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP061",
+        "DFP062",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, changed), policy).findings
+    } == {"DFP061", "DFP062"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, moniker_changed), policy
+        ).findings
+    } == {"DFP061", "DFP062"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP061"}
+
+    gated = apply_policy(report, policy)
+    changed_gated = apply_policy(diff_documents(after, changed), policy)
+    moniker_changed_gated = apply_policy(
+        diff_documents(after, moniker_changed), policy
+    )
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(changed_snapshot, "json"),
+            render_report(changed_gated, "sarif"),
+            render_profile(moniker_changed_snapshot, "markdown"),
+            render_report(moniker_changed_gated, "sarif"),
+            render_profile(renumbered_snapshot, "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_VML_LINKED_OLE_OBJECT_INVENTORY_CHANGED",
+        "DFP061",
+        "DFP062",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VISIBLE_DO_NOT_LEAK",
+        "HEADER_VISIBLE_DO_NOT_LEAK",
+        "VML_LINKED_OLE_TARGET_DO_NOT_LEAK",
+        "CHANGED_VML_LINKED_OLE_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_INTERNAL_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_UNSUPPORTED_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_EMBED_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_HEADER_TARGET_DO_NOT_LEAK",
+        "VML_LINKED_OLE_MONIKER_DO_NOT_LEAK",
+        "VML_LINKED_OLE_CHANGED_MONIKER_DO_NOT_LEAK",
+        "VML_LINKED_OLE_NO_ID_MONIKER_DO_NOT_LEAK",
+        "VML_LINKED_OLE_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_INTERNAL_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_UNSUPPORTED_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_DUPLICATE_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_NO_ID_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_EMBED_PROGID_DO_NOT_LEAK",
+        "VML_WORD_OBJECT_LINK_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_HEADER_PROGID_DO_NOT_LEAK",
+        "VML_LINKED_OLE_LINK_TYPE_DO_NOT_LEAK",
+        "VML_LINKED_OLE_FIELD_CODES_DO_NOT_LEAK",
+        "VML_LINKED_OLE_INTERNAL_PAYLOAD_DO_NOT_LEAK",
+        "VML_LINKED_OLE_HEADER_PAYLOAD_DO_NOT_LEAK",
+        "rIdRENUMBERED_VML_LINKED_OLE_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_vml_hyperlink_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -6100,6 +6308,169 @@ def _write_vml_external_image_document(
             "</w:p></w:hdr>"
         ).encode(),
     }
+    if relationship_entries:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{relationship_entries}</Relationships>"
+        ).encode()
+    if header_relationship_entries:
+        entries["word/_rels/header1.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{header_relationship_entries}</Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_vml_linked_ole_object_document(
+    path,
+    *,
+    include_markup: bool = True,
+    include_orphan_ole_relationship: bool = False,
+    include_unavailable_link_marker: bool = False,
+    external_target: str = (
+        "https://VML_LINKED_OLE_TARGET_DO_NOT_LEAK.invalid/source"
+    ),
+    moniker: str = "VML_LINKED_OLE_MONIKER_DO_NOT_LEAK",
+    external_relationship_id: str = "rIdVmlLinkedOleExternal",
+    word_namespace: str = W,
+    relationship_attribute_namespace: str = R,
+    relationship_namespace: str = PR,
+    ole_object_relationship_type: str = _OLE_OBJECT_RELATIONSHIP_TYPE,
+    image_relationship_type: str = _IMAGE_RELATIONSHIP_TYPE,
+) -> None:
+    """Write direct legacy VML Office linked-OLE markers across Word stories."""
+
+    body_markup = ""
+    header_markup = ""
+    relationship_entries = ""
+    header_relationship_entries = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                "<w:r><w:object>"
+                f'<o:OLEObject Type="Link" ProgID="VML_LINKED_OLE_PROGID_DO_NOT_LEAK" '
+                f'ShapeID="_x0000_i1025" r:id="{external_relationship_id}" '
+                f'UpdateMode="Always" Moniker="{moniker}">'
+                "<o:LinkType>VML_LINKED_OLE_LINK_TYPE_DO_NOT_LEAK</o:LinkType>"
+                "<o:LockedField>false</o:LockedField>"
+                "<o:FieldCodes>VML_LINKED_OLE_FIELD_CODES_DO_NOT_LEAK</o:FieldCodes>"
+                "</o:OLEObject></w:object></w:r>",
+                "<w:r><w:object>"
+                '<o:OLEObject Type="Link" '
+                'ProgID="VML_LINKED_OLE_INTERNAL_PROGID_DO_NOT_LEAK" '
+                'r:id="rIdVmlLinkedOleInternal" UpdateMode="OnCall"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<o:OLEObject Type="Link" '
+                'ProgID="VML_LINKED_OLE_UNSUPPORTED_PROGID_DO_NOT_LEAK" '
+                'r:id="rIdVmlLinkedOleUnsupported" UpdateMode="Unknown"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                f'<o:OLEObject Type="link" '
+                'ProgID="VML_LINKED_OLE_DUPLICATE_PROGID_DO_NOT_LEAK" '
+                f'r:id="{external_relationship_id}" UpdateMode="always"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<o:OLEObject Type="Link" '
+                'ProgID="VML_LINKED_OLE_NO_ID_PROGID_DO_NOT_LEAK" '
+                'UpdateMode="Always" '
+                'Moniker="VML_LINKED_OLE_NO_ID_MONIKER_DO_NOT_LEAK"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<o:OLEObject Type="Embed" '
+                'ProgID="VML_LINKED_OLE_EMBED_PROGID_DO_NOT_LEAK" '
+                'r:id="rIdVmlLinkedOleEmbed" UpdateMode="Always"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectLink w:progId="VML_WORD_OBJECT_LINK_PROGID_DO_NOT_LEAK" '
+                'r:id="rIdVmlWordObjectLink"/>'
+                "</w:object></w:r>",
+            )
+        )
+        if include_unavailable_link_marker:
+            body_markup += (
+                "<w:r><w:object>"
+                '<o:OLEObject Type="Link" '
+                'r:id="rIdUnavailableVmlLinkedOle" UpdateMode="Always"/>'
+                "</w:object></w:r>"
+            )
+        header_markup = (
+            "<w:r><w:object>"
+            '<o:OLEObject Type="Link" '
+            'ProgID="VML_LINKED_OLE_HEADER_PROGID_DO_NOT_LEAK" '
+            'r:id="rIdVmlLinkedOleHeader" UpdateMode="OnCall"/>'
+            "</w:object></w:r>"
+        )
+        relationship_entries = "".join(
+            (
+                f'<Relationship Id="{external_relationship_id}" '
+                f'Type="{ole_object_relationship_type}" Target="{external_target}" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdVmlLinkedOleInternal" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="embeddings/VML_LINKED_OLE_INTERNAL_TARGET_DO_NOT_LEAK.bin"/>',
+                '<Relationship Id="rIdVmlLinkedOleUnsupported" '
+                f'Type="{image_relationship_type}" '
+                'Target="https://VML_LINKED_OLE_UNSUPPORTED_TARGET_DO_NOT_LEAK.'
+                'invalid/image.png" TargetMode="External"/>',
+                '<Relationship Id="rIdVmlLinkedOleEmbed" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="https://VML_LINKED_OLE_EMBED_TARGET_DO_NOT_LEAK.'
+                'invalid/source" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdVmlWordObjectLink" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="https://VML_LINKED_OLE_WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK.'
+                'invalid/source" TargetMode="External"/>',
+            )
+        )
+        header_relationship_entries = (
+            '<Relationship Id="rIdVmlLinkedOleHeader" '
+            f'Type="{ole_object_relationship_type}" '
+            'Target="embeddings/VML_LINKED_OLE_HEADER_TARGET_DO_NOT_LEAK.bin"/>'
+        )
+    elif include_orphan_ole_relationship:
+        relationship_entries = (
+            '<Relationship Id="rIdVmlLinkedOleOrphan" '
+            f'Type="{ole_object_relationship_type}" '
+            'Target="https://VML_LINKED_OLE_ORPHAN_TARGET_DO_NOT_LEAK.invalid/source" '
+            'TargetMode="External"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            'xmlns:o="urn:schemas-microsoft-com:office:office">'
+            f"<w:body><w:p>{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            'xmlns:o="urn:schemas-microsoft-com:office:office">'
+            f"<w:p>{header_markup}"
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
+    if include_markup:
+        entries["word/embeddings/VML_LINKED_OLE_INTERNAL_TARGET_DO_NOT_LEAK.bin"] = (
+            b"VML_LINKED_OLE_INTERNAL_PAYLOAD_DO_NOT_LEAK"
+        )
+        entries["word/embeddings/VML_LINKED_OLE_HEADER_TARGET_DO_NOT_LEAK.bin"] = (
+            b"VML_LINKED_OLE_HEADER_PAYLOAD_DO_NOT_LEAK"
+        )
     if relationship_entries:
         entries["word/_rels/document.xml.rels"] = (
             f'<Relationships xmlns="{relationship_namespace}">'

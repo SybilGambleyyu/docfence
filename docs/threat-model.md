@@ -48,6 +48,9 @@ Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are sensitive package material too.
 Direct legacy VML image targets, relationship IDs, raw source values, other
 image-data attributes, and story-part paths are sensitive package material too.
+Direct legacy VML linked-OLE sources, monikers, program, shape, and object
+identifiers, relationship IDs and targets, update metadata, field codes,
+markup, and story-part paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -267,6 +270,23 @@ target rewrite remains review-visible; unchanged-semantics relationship-ID
 renumbering and excluded-attribute rewrites do not create image-data-hyperlink
 inventory churn.
 
+Direct legacy Office VML `o:OLEObject` markup with `Type="Link"` receives a
+separate private-digest treatment from broad embedded-object relationship and
+payload totals, `Type="Embed"`, WordprocessingML `w:objectLink`, VML image
+data, VML shape links, DrawingML linked pictures, and field instructions.
+DocFence retains every direct marker in supported Word stories, including
+duplicates and Markup Compatibility branches. A standard OLE-object
+relationship is classified by stored external or internal target mode; another
+resolved type or mode is unsupported, and a direct marker without `r:id`
+remains its own stored-evidence class. Public output reports only aggregate
+marker/story, stored-automatic-update, nonautomatic-or-unspecified-update, and
+relationship-classification counts. Sources, monikers, program, shape, and
+object IDs, relationship IDs and targets, field codes, markup, paths, and
+fingerprints remain private. The full direct marker is privately fingerprinted,
+so same-count source, program, field-code, update-mode, or target rewrites stay
+review-visible while relationship-ID renumbering with unchanged semantics stays
+quiet.
+
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
 `w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
@@ -471,6 +491,12 @@ follows a target, or executes an action. DocFence does not select Markup
 Compatibility branches, associate markers with rendered images, deduplicate a
 visual picture, resolve, retrieve, follow, validate, evaluate, render, or
 execute a target.
+Direct legacy VML linked-OLE counts are likewise stored-state evidence, not
+proof that a client selects a marker, associates it with a visual shape,
+retrieves a source, updates or activates an OLE object, or honors an automatic
+update flag. DocFence does not select Markup Compatibility branches, associate
+markers with rendered objects, deduplicate a visual object, resolve, retrieve,
+open, update, activate, evaluate, render, or execute an OLE object.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

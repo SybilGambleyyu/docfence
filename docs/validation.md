@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.23 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.24 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -18,6 +18,7 @@ following properties:
   linked-picture markup state, direct legacy VML shape-link `href` markup
   state, direct legacy VML external-image `v:imagedata/@r:id` markup state,
   direct legacy VML image-data hyperlink `v:imagedata/@r:href` markup state,
+  direct legacy Office VML linked-OLE `o:OLEObject Type="Link"` markup state,
   and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
@@ -159,6 +160,18 @@ following properties:
   excluded `r:id`, `r:pict`, raw-`src`, and `o:relid` attributes, same-count
   target changes, excluded-attribute change quietness, relationship-ID
   renumbering stability, JSON/Markdown/SARIF redaction, and policy findings;
+- direct legacy Office VML `o:OLEObject Type="Link"` markup is separately
+  inventoried from broad embedded-object relationship/payload totals,
+  `Type="Embed"`, WordprocessingML `w:objectLink`, VML image data, VML shape
+  links, DrawingML linked pictures, fields, and generic relationship totals.
+  Tests cover standard OLE-object relationships with external and internal
+  stored target modes, a resolved unsupported non-OLE relationship, a direct
+  marker without `r:id`, `UpdateMode="Always"` and other update modes,
+  duplicate markers, body/header stories, Transitional and Strict
+  Word/relationship namespaces, orphaned relationship exclusion, unavailable
+  relationship failure, same-count target/source-marker changes,
+  relationship-ID renumbering stability, JSON/Markdown/SARIF redaction, and
+  policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -200,6 +213,9 @@ following properties:
   and story paths,
   direct VML image targets, relationship IDs, raw source values, other
   image-data attributes, and story paths,
+  direct VML linked-OLE sources, monikers, program, shape, and object IDs,
+  relationship IDs and targets, update metadata, field codes, markup, and
+  story paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -338,6 +354,18 @@ release therefore checks both recognized hyperlink modes and a preserved
 unsupported relationship class; it does not claim that a Word client will
 render, honor, or follow the target.
 
+For legacy VML linked-OLE markup, release validation combines the controlled
+Word-story package constructed in the public regression test with two public
+real Word XML fragments. One [documents an Excel-linked object](https://stackoverflow.com/questions/60565712/insert-ole-object-into-ms-word-document-and-keep-the-underlying-format-wmf-intac)
+stored as `o:OLEObject Type="Link"` with `UpdateMode="Always"`; another
+[documents a linked OLE shape](https://forum.aspose.com/t/cannot-found-includepicture-field-type-via-doc-range-fields/277035)
+with `UpdateMode="OnCall"`, plus private-looking program and field-code
+metadata. The fragments are stored-marker evidence, not downloadable package
+fixtures, so the release verifies both modes and relationship classifications
+with a controlled package and separately confirms the real serialized form.
+It retains all source, program, and field data privately and makes no claim
+that Word will retrieve, update, activate, or honor the object.
+
 For legacy VML shape-link markup, the release check uses a controlled,
 standards-shaped Word-story package that places direct `href` attributes on all
 supported VML geometry kinds and keeps the package's relationship, field,
@@ -394,7 +422,10 @@ VML inheritance or inspect arbitrary VML elements. It likewise does not assert
 that a direct VML `imagedata/@r:id` marker is selected, valid, retrievable,
 rendered, updated, reachable, safe, or honored by a client; it records bounded
 stored relationship evidence only and does not use raw VML `src` as an
-alternate marker. The style/default layer is a stored
+alternate marker. It likewise does not assert that a direct VML
+`o:OLEObject Type="Link"` marker is valid, selected, retrievable, source-backed
+at review time, updated, activated, rendered, or honored by Word; it records
+bounded stored marker/relationship evidence only. The style/default layer is a stored
 declaration inventory, not a renderer. It does
 not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
@@ -408,5 +439,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.21 contract; see
+only, not field evaluation. Those limits are explicit in the 0.24 contract; see
 [threat model](threat-model.md).

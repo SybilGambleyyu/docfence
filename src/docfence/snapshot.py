@@ -50,6 +50,7 @@ from docfence.models import (
     WordVmlExternalImageInventory,
     WordVmlHyperlinkInventory,
     WordVmlImageHyperlinkInventory,
+    WordVmlLinkedOleObjectInventory,
 )
 
 
@@ -82,6 +83,7 @@ _DRAWING_NAMESPACES: Final = frozenset(
     }
 )
 _VML_NAMESPACE: Final = "urn:schemas-microsoft-com:vml"
+_OFFICE_VML_NAMESPACE: Final = "urn:schemas-microsoft-com:office:office"
 _REL_ATTRIBUTE_NAMESPACES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
@@ -116,6 +118,12 @@ _EMBEDDED_OBJECT_RELATIONSHIP_TYPES: Final = frozenset(
         "http://schemas.openxmlformats.org/officedocument/2006/relationships/package",
         "http://purl.oclc.org/ooxml/officedocument/relationships/oleobject",
         "http://purl.oclc.org/ooxml/officedocument/relationships/package",
+    }
+)
+_OLE_OBJECT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/oleobject",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/oleobject",
     }
 )
 _EMBEDDED_CONTROL_RELATIONSHIP_TYPES: Final = frozenset(
@@ -679,6 +687,16 @@ class _VmlImageHyperlinkReference:
 
 
 @dataclass(frozen=True)
+class _VmlLinkedOleObjectReference:
+    """One private direct legacy VML Office linked-OLE marker."""
+
+    story_part: str
+    markup_signature: str
+    update_mode_classification: str
+    relationship_classification: str
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -838,6 +856,7 @@ def _load_package(
                 vml_hyperlink_references,
                 vml_external_image_references,
                 vml_image_hyperlink_references,
+                vml_linked_ole_object_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -874,6 +893,9 @@ def _load_package(
             )
             word_vml_image_hyperlinks = _word_vml_image_hyperlink_inventory(
                 vml_image_hyperlink_references
+            )
+            word_vml_linked_ole_objects = _word_vml_linked_ole_object_inventory(
+                vml_linked_ole_object_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -967,6 +989,7 @@ def _load_package(
         word_vml_hyperlinks=word_vml_hyperlinks,
         word_vml_external_images=word_vml_external_images,
         word_vml_image_hyperlinks=word_vml_image_hyperlinks,
+        word_vml_linked_ole_objects=word_vml_linked_ole_objects,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3278,6 +3301,7 @@ def _story_snapshots(
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
     tuple[_VmlImageHyperlinkReference, ...],
+    tuple[_VmlLinkedOleObjectReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3291,6 +3315,7 @@ def _story_snapshots(
     vml_hyperlink_references: list[_VmlHyperlinkReference] = []
     vml_external_image_references: list[_VmlExternalImageReference] = []
     vml_image_hyperlink_references: list[_VmlImageHyperlinkReference] = []
+    vml_linked_ole_object_references: list[_VmlLinkedOleObjectReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3307,6 +3332,7 @@ def _story_snapshots(
             story_vml_hyperlink_references,
             story_vml_external_image_references,
             story_vml_image_hyperlink_references,
+            story_vml_linked_ole_object_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3323,6 +3349,9 @@ def _story_snapshots(
         vml_hyperlink_references.extend(story_vml_hyperlink_references)
         vml_external_image_references.extend(story_vml_external_image_references)
         vml_image_hyperlink_references.extend(story_vml_image_hyperlink_references)
+        vml_linked_ole_object_references.extend(
+            story_vml_linked_ole_object_references
+        )
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3345,6 +3374,7 @@ def _story_snapshots(
         tuple(vml_hyperlink_references),
         tuple(vml_external_image_references),
         tuple(vml_image_hyperlink_references),
+        tuple(vml_linked_ole_object_references),
         tuple(web_extension_control_references),
     )
 
@@ -3419,6 +3449,7 @@ def _snapshot_story(
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
     tuple[_VmlImageHyperlinkReference, ...],
+    tuple[_VmlLinkedOleObjectReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3521,6 +3552,7 @@ def _snapshot_story(
         _vml_hyperlink_references(root, part_key, relationships),
         _vml_external_image_references(root, part_key, relationships),
         _vml_image_hyperlink_references(root, part_key, relationships),
+        _vml_linked_ole_object_references(root, part_key, relationships),
     )
 
 
@@ -5069,6 +5101,137 @@ def _word_vml_image_hyperlink_inventory(
         ),
         unsupported_relationship_vml_image_hyperlink_count=(
             classification_counts["unsupported_relationship"]
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _vml_linked_ole_object_relationship_classification(
+    relationship: _Relationship | None,
+) -> str:
+    """Classify the stored OLE-object relation behind a linked-OLE marker."""
+
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold()
+        not in _OLE_OBJECT_RELATIONSHIP_TYPES
+    ):
+        return "unsupported_relationship"
+    target_mode = relationship.target_mode.casefold()
+    if target_mode == "external":
+        return "external_standard_ole_object_relationship"
+    if target_mode == "internal":
+        return "internal_standard_ole_object_relationship"
+    return "unsupported_relationship"
+
+
+def _vml_linked_ole_object_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_VmlLinkedOleObjectReference, ...]:
+    """Retain direct legacy VML Office ``OLEObject Type=Link`` markers.
+
+    This is a narrow stored-markup inventory. It records each direct Office VML
+    OLE-object marker whose unqualified ``Type`` is ``Link`` in a supported Word
+    story, including duplicate markers and markers in markup-compatibility
+    branches. The direct marker remains privately fingerprinted so source and
+    update metadata never reach output while same-count rewrites stay
+    review-visible. It does not select a rendering branch, associate a marker
+    with a shape, resolve or retrieve a source, update or activate an OLE
+    object, or claim that a client will honor one.
+
+    An OLE relationship is optional in the legacy marker, so a direct marker
+    without ``r:id`` remains stored evidence in its own public class. VML image
+    data, VML shape links, WordprocessingML ``w:objectLink`` markup, and broad
+    embedded-object relationship totals remain separate surfaces.
+    """
+
+    references: list[_VmlLinkedOleObjectReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace != _OFFICE_VML_NAMESPACE or local_name != "OLEObject":
+            continue
+        marker_type = _unqualified_attribute_value(element, "Type")
+        if marker_type is None or marker_type.strip().casefold() != "link":
+            continue
+        relationship_id = _relationship_id_value(element)
+        if relationship_id is None:
+            relationship_classification = "without_relationship_id"
+        else:
+            relationship_classification = (
+                _vml_linked_ole_object_relationship_classification(
+                    relationships.get(relationship_id)
+                )
+            )
+        update_mode = _unqualified_attribute_value(element, "UpdateMode")
+        update_mode_classification = (
+            "automatic_update"
+            if update_mode is not None and update_mode.strip().casefold() == "always"
+            else "nonautomatic_or_unspecified_update"
+        )
+        references.append(
+            _VmlLinkedOleObjectReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                update_mode_classification=update_mode_classification,
+                relationship_classification=relationship_classification,
+            )
+        )
+    return tuple(references)
+
+
+def _word_vml_linked_ole_object_inventory(
+    references: tuple[_VmlLinkedOleObjectReference, ...],
+) -> WordVmlLinkedOleObjectInventory:
+    """Aggregate VML linked-OLE-object markers without emitting source data."""
+
+    update_mode_counts = {
+        "automatic_update": 0,
+        "nonautomatic_or_unspecified_update": 0,
+    }
+    relationship_counts = {
+        "external_standard_ole_object_relationship": 0,
+        "internal_standard_ole_object_relationship": 0,
+        "unsupported_relationship": 0,
+        "without_relationship_id": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        update_mode_counts[reference.update_mode_classification] += 1
+        relationship_counts[reference.relationship_classification] += 1
+        records.append(
+            (
+                "word_vml_linked_ole_object",
+                reference.story_part,
+                reference.markup_signature,
+                reference.update_mode_classification,
+                reference.relationship_classification,
+            )
+        )
+
+    return WordVmlLinkedOleObjectInventory(
+        vml_linked_ole_object_count=len(references),
+        vml_linked_ole_object_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        automatic_update_vml_linked_ole_object_count=(
+            update_mode_counts["automatic_update"]
+        ),
+        nonautomatic_or_unspecified_update_vml_linked_ole_object_count=(
+            update_mode_counts["nonautomatic_or_unspecified_update"]
+        ),
+        external_standard_ole_object_relationship_vml_linked_ole_object_count=(
+            relationship_counts["external_standard_ole_object_relationship"]
+        ),
+        internal_standard_ole_object_relationship_vml_linked_ole_object_count=(
+            relationship_counts["internal_standard_ole_object_relationship"]
+        ),
+        unsupported_relationship_vml_linked_ole_object_count=(
+            relationship_counts["unsupported_relationship"]
+        ),
+        without_relationship_id_vml_linked_ole_object_count=(
+            relationship_counts["without_relationship_id"]
         ),
         signature=_digest_records(records),
     )

@@ -2,6 +2,33 @@
 
 All notable changes are documented here.
 
+## 0.24.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct legacy Office VML
+  `o:OLEObject Type="Link"` markup in supported Word stories. It is separate
+  from broad embedded-object relationship/payload totals, `Type="Embed"`,
+  WordprocessingML `w:objectLink`, VML image data, VML shape links, DrawingML
+  linked pictures, and field-code inventories.
+- Added `DFP061` to require a handoff with no stored VML linked-OLE marker and
+  `DFP062` to protect an approved linked-OLE marker baseline.
+- Reports expose only aggregate marker/story, stored automatic-update versus
+  nonautomatic-or-unspecified-update, and backing relationship classes:
+  standard OLE-object relationships with stored external or internal target
+  mode, unsupported relationships, and markers without `r:id`. Link sources,
+  program IDs, relationship IDs, field codes, VML markup, story paths, and
+  fingerprints remain private.
+- The private signature retains each full direct linked-OLE marker, with
+  relationship IDs normalized to their stored relationship semantics. Therefore
+  same-count source, program, update-mode, field-code, or target rewrites stay
+  review-visible while a relationship-ID renumbering with unchanged semantics
+  remains quiet.
+- Added regression coverage for external/internal/unsupported/missing-ID
+  classes, `UpdateMode="Always"`, duplicate markers, body/header stories,
+  Strict encodings, `Type="Embed"` and `w:objectLink` separation, orphan
+  exclusion, unavailable relationships, same-count source/target rewrites,
+  relationship-ID renumbering stability, privacy redaction, and policy/SARIF
+  output.
+
 ## 0.23.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct legacy VML
