@@ -34,6 +34,8 @@ starter policy.
 | `require_track_revisions_disabled` | `DFP010` | Candidate enables Track Changes | Candidate |
 | `require_no_field_codes` | `DFP011` | Candidate has stored field-code markup | Candidate |
 | `require_no_content_controls` | `DFP012` | Candidate has stored content controls | Candidate |
+| `require_no_hidden_text_style_declarations` | `DFP013` | Candidate has stored style/default declarations that can hide text | Candidate |
+| `require_no_hidden_paragraph_marks` | `DFP014` | Candidate has direct hidden paragraph-mark markup | Candidate |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -51,7 +53,22 @@ Choose policies based on the handoff boundary. A publishing gate often uses the
 starter policy and candidate-state rules. A controlled template workflow might
 also enable `no_document_settings_changes` and
 `no_unclassified_package_payload_changes`; those are intentionally stricter and
-can flag a style, media, metadata, or other opaque package mutation.
+can flag a media, metadata, or other opaque package mutation. `word/styles.xml`
+is handled by the dedicated style inventory instead.
+
+## Hidden-text scope
+
+`require_no_hidden_text` covers direct `w:vanish` on ordinary runs only.
+`require_no_hidden_paragraph_marks` covers direct `w:vanish` or `w:specVanish`
+under `w:pPr/w:rPr`; it is separate because a paragraph mark is not a text run.
+
+`require_no_hidden_text_style_declarations` fails when an enabled `w:vanish`
+appears in a stored style's text-run properties or in document-default run
+properties. Word treats hidden text as a toggle property in styles, and its
+effective state also depends on style inheritance and application. Therefore,
+this rule is a conservative declaration gate, not a claim that DocFence has
+resolved which candidate runs Word will display as hidden. A `w:vanish` with an
+explicit false value does not trigger the declaration count.
 
 ## CI example
 

@@ -24,6 +24,7 @@ from docfence.models import (
     RelationshipInventory,
     RevisionInventory,
     StorySnapshot,
+    StyleInventory,
 )
 
 
@@ -144,6 +145,7 @@ def _load_package(
             relationships, relationship_maps = _relationship_inventory(
                 archive, members, limits
             )
+            styles = _styles_inventory(archive, members, relationship_maps, limits)
             stories, comment_count = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
             )
@@ -175,6 +177,7 @@ def _load_package(
         package_member_count=len(members),
         stories=stories,
         relationships=relationships,
+        styles=styles,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -513,6 +516,7 @@ def _snapshot_story(
     tables = 0
     text_runs = 0
     hidden_text_runs = 0
+    hidden_paragraph_marks = 0
     simple_fields = 0
     field_begins = 0
     loose_instructions = 0
@@ -530,6 +534,8 @@ def _snapshot_story(
             continue
         if local_name == "p":
             paragraphs += 1
+            if _paragraph_mark_is_hidden(element):
+                hidden_paragraph_marks += 1
         elif local_name == "tbl":
             tables += 1
         elif local_name == "r":
@@ -576,6 +582,7 @@ def _snapshot_story(
         table_count=tables,
         text_run_count=text_runs,
         hidden_text_run_count=hidden_text_runs,
+        hidden_paragraph_mark_count=hidden_paragraph_marks,
         field_code_count=field_code_count,
         content_control_count=content_controls,
         comment_anchor_count=comment_anchors,
@@ -610,10 +617,45 @@ def _run_is_hidden(run: ET.Element) -> bool:
     for child in run:
         if not _is_word_element(child, "rPr"):
             continue
-        for property_element in child:
-            if _is_word_element(property_element, "vanish"):
-                return _is_enabled(property_element)
+        return _vanish_state(child) is True
     return False
+
+
+def _paragraph_mark_is_hidden(paragraph: ET.Element) -> bool:
+    paragraph_properties = _first_word_child(paragraph, "pPr")
+    if paragraph_properties is None:
+        return False
+    run_properties = _first_word_child(paragraph_properties, "rPr")
+    if run_properties is None:
+        return False
+    return _paragraph_mark_hidden_state(run_properties)
+
+
+def _paragraph_mark_hidden_state(properties: ET.Element) -> bool:
+    return _spec_vanish_is_enabled(properties) or _vanish_state(properties) is True
+
+
+def _spec_vanish_is_enabled(properties: ET.Element) -> bool:
+    return any(
+        _is_word_element(property_element, "specVanish")
+        and _is_enabled(property_element)
+        for property_element in properties
+    )
+
+
+def _vanish_state(properties: ET.Element) -> bool | None:
+    vanish: bool | None = None
+    for property_element in properties:
+        if _is_word_element(property_element, "vanish"):
+            vanish = _is_enabled(property_element)
+    return vanish
+
+
+def _first_word_child(element: ET.Element, local_name: str) -> ET.Element | None:
+    return next(
+        (child for child in element if _is_word_element(child, local_name)),
+        None,
+    )
 
 
 def _field_char_is_begin(element: ET.Element) -> bool:
@@ -658,6 +700,73 @@ def _settings_inventory(
     )
 
 
+def _styles_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> StyleInventory:
+    styles_member = members.get("word/styles.xml")
+    if styles_member is None:
+        return StyleInventory(
+            style_definition_count=0,
+            hidden_text_style_definition_count=0,
+            document_default_hidden_text_enabled=False,
+            signature=_digest_bytes(b"styles-absent"),
+        )
+    root = _read_xml(archive, styles_member, limits)
+    if not _is_word_element(root, "styles"):
+        raise DocumentFormatError("document styles are invalid")
+    style_definitions = [
+        element for element in root if _is_word_element(element, "style")
+    ]
+    hidden_definitions = sum(
+        1
+        for definition in style_definitions
+        if _style_definition_can_hide_text(definition)
+    )
+    return StyleInventory(
+        style_definition_count=len(style_definitions),
+        hidden_text_style_definition_count=hidden_definitions,
+        document_default_hidden_text_enabled=_document_default_hides_text(root),
+        signature=_fingerprint_element(
+            root, relationship_maps.get("word/styles.xml", {})
+        ),
+    )
+
+
+def _style_definition_can_hide_text(definition: ET.Element) -> bool:
+    return _contains_hidden_text_run_properties(definition)
+
+
+def _contains_hidden_text_run_properties(element: ET.Element) -> bool:
+    """Find current text-run properties, excluding mark and revision branches."""
+
+    for child in element:
+        if _is_word_element(child, "pPr") or _is_word_element(child, "rPrChange"):
+            continue
+        if _is_word_element(child, "rPr"):
+            if _vanish_state(child) is True:
+                return True
+            continue
+        if _contains_hidden_text_run_properties(child):
+            return True
+    return False
+
+
+def _document_default_hides_text(root: ET.Element) -> bool:
+    document_defaults = _first_word_child(root, "docDefaults")
+    if document_defaults is None:
+        return False
+    run_defaults = _first_word_child(document_defaults, "rPrDefault")
+    if run_defaults is None:
+        return False
+    run_properties = _first_word_child(run_defaults, "rPr")
+    if run_properties is None:
+        return False
+    return _vanish_state(run_properties) is True
+
+
 def _custom_xml_inventory(
     archive: zipfile.ZipFile,
     members: dict[str, zipfile.ZipInfo],
@@ -688,6 +797,7 @@ def _unclassified_inventory(
 ) -> tuple[int, str]:
     known_parts = {
         "word/settings.xml",
+        "word/styles.xml",
         *(story.part_key for story in stories),
         *_custom_xml_part_names(members),
         *_macro_part_names(members),

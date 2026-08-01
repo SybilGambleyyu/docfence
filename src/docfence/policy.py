@@ -24,6 +24,8 @@ _RULES: Final = {
     "require_track_revisions_disabled": "DFP010",
     "require_no_field_codes": "DFP011",
     "require_no_content_controls": "DFP012",
+    "require_no_hidden_text_style_declarations": "DFP013",
+    "require_no_hidden_paragraph_marks": "DFP014",
 }
 
 
@@ -222,6 +224,31 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_hidden_text",
                 "Candidate contains stored hidden-text runs.",
                 {"hidden_text_run_count": after.hidden_text_run_count},
+            )
+        )
+    if policy.enabled("require_no_hidden_text_style_declarations") and (
+        after.styles.hidden_text_style_definition_count
+        or after.styles.document_default_hidden_text_enabled
+    ):
+        findings.append(
+            _finding(
+                "require_no_hidden_text_style_declarations",
+                (
+                    "Candidate contains stored style or document-default "
+                    "declarations that can hide text."
+                ),
+                after.styles.public_dict(),
+            )
+        )
+    if (
+        policy.enabled("require_no_hidden_paragraph_marks")
+        and after.hidden_paragraph_mark_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_hidden_paragraph_marks",
+                "Candidate contains hidden paragraph marks.",
+                {"hidden_paragraph_mark_count": after.hidden_paragraph_mark_count},
             )
         )
     if (

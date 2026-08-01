@@ -40,6 +40,27 @@ class RevisionInventory:
 
 
 @dataclass(frozen=True)
+class StyleInventory:
+    """Stored style/default declarations relevant to hidden-text review coverage."""
+
+    style_definition_count: int
+    hidden_text_style_definition_count: int
+    document_default_hidden_text_enabled: bool
+    signature: str
+
+    def public_dict(self) -> dict[str, object]:
+        return {
+            "style_definition_count": self.style_definition_count,
+            "hidden_text_style_definition_count": (
+                self.hidden_text_style_definition_count
+            ),
+            "document_default_hidden_text_enabled": (
+                self.document_default_hidden_text_enabled
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -51,6 +72,7 @@ class StorySnapshot:
     table_count: int
     text_run_count: int
     hidden_text_run_count: int
+    hidden_paragraph_mark_count: int
     field_code_count: int
     content_control_count: int
     comment_anchor_count: int
@@ -64,6 +86,7 @@ class StorySnapshot:
             "table_count": self.table_count,
             "text_run_count": self.text_run_count,
             "hidden_text_run_count": self.hidden_text_run_count,
+            "hidden_paragraph_mark_count": self.hidden_paragraph_mark_count,
             "field_code_count": self.field_code_count,
             "content_control_count": self.content_control_count,
             "comment_anchor_count": self.comment_anchor_count,
@@ -95,6 +118,7 @@ class DocumentSnapshot:
     package_member_count: int
     stories: tuple[StorySnapshot, ...]
     relationships: RelationshipInventory
+    styles: StyleInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -122,6 +146,10 @@ class DocumentSnapshot:
         return sum(story.hidden_text_run_count for story in self.stories)
 
     @property
+    def hidden_paragraph_mark_count(self) -> int:
+        return sum(story.hidden_paragraph_mark_count for story in self.stories)
+
+    @property
     def field_code_count(self) -> int:
         return sum(story.field_code_count for story in self.stories)
 
@@ -146,6 +174,7 @@ class DocumentSnapshot:
             "table_count": sum(story.table_count for story in self.stories),
             "text_run_count": sum(story.text_run_count for story in self.stories),
             "hidden_text_run_count": self.hidden_text_run_count,
+            "hidden_paragraph_mark_count": self.hidden_paragraph_mark_count,
             "field_code_count": self.field_code_count,
             "content_control_count": self.content_control_count,
             "comment_anchor_count": sum(
@@ -155,6 +184,7 @@ class DocumentSnapshot:
             "track_revisions_enabled": self.track_revisions_enabled,
             "revisions": self.revisions.public_dict(),
             "relationships": self.relationships.public_dict(),
+            "styles": self.styles.public_dict(),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

@@ -7,11 +7,11 @@ package. It is not a general-purpose malware sandbox or a renderer.
 ## Assets and boundaries
 
 The source document is treated as sensitive. Its body text, hidden text,
-comments, reviewer metadata, relationship targets, field instructions, custom
-XML, and macro bytes must not become DocFence report content. The report may be
-stored in CI artifacts, pasted into an issue, or uploaded to a SARIF consumer,
-so it is intentionally restricted to counts, fixed categories, booleans, and
-generic story kinds.
+comments, reviewer metadata, relationship targets, field instructions, style
+identifiers, custom XML, and macro bytes must not become DocFence report
+content. The report may be stored in CI artifacts, pasted into an issue, or
+uploaded to a SARIF consumer, so it is intentionally restricted to counts,
+fixed categories, booleans, and generic story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -63,8 +63,11 @@ and external tools are outside this contract.
 
 The tool compares stored OOXML, not Word's rendered result. It intentionally
 does not resolve styles, fields, tracked-change acceptance, markup-compatibility
-choices, or external content. Direct `w:vanish` run markup is counted; an
-equivalent appearance caused by inherited style properties is not. Unsupported
+choices, or external content. Direct `w:vanish` run markup is counted. Direct
+`w:vanish` and `w:specVanish` paragraph-mark markup is counted separately.
+The dedicated styles inventory records enabled `w:vanish` declarations in
+text-run style properties and document defaults, but does not decide whether a
+style is used or calculate inherited/toggled effective formatting. Unsupported
 or unclassified package parts are still fingerprinted as an opaque category so
 their mutation is visible, but DocFence does not claim to explain their visual
 or business effect.

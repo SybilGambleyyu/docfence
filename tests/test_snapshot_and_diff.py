@@ -39,6 +39,12 @@ def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None
 
     assert public["paragraph_count"] == 2
     assert public["hidden_text_run_count"] == 1
+    assert public["hidden_paragraph_mark_count"] == 0
+    assert public["styles"] == {
+        "style_definition_count": 0,
+        "hidden_text_style_definition_count": 0,
+        "document_default_hidden_text_enabled": False,
+    }
     assert public["field_code_count"] == 1
     assert public["content_control_count"] == 1
     assert public["comment_anchor_count"] == 1
@@ -63,6 +69,97 @@ def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None
         "UNCLASSIFIED_DO_NOT_LEAK",
     ):
         assert marker not in rendered
+
+
+def test_hidden_markup_and_style_declarations_are_separate_and_private(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    policy_path = tmp_path / "docfence.yml"
+    write_document(before)
+    write_document(
+        after,
+        hidden=True,
+        hidden_paragraph_mark=True,
+        special_hidden_paragraph_mark=True,
+        styles_xml=_styles_with_hidden_text_declarations(),
+    )
+
+    snapshot = load_snapshot(after)
+    public = snapshot.public_dict()
+    assert public["hidden_text_run_count"] == 1
+    assert public["hidden_paragraph_mark_count"] == 1
+    assert public["styles"] == {
+        "style_definition_count": 5,
+        "hidden_text_style_definition_count": 1,
+        "document_default_hidden_text_enabled": True,
+    }
+
+    report = diff_documents(before, after)
+    assert {
+        "hidden_text_inventory_changed",
+        "hidden_paragraph_mark_inventory_changed",
+        "style_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_hidden_text: true
+  require_no_hidden_text_style_declarations: true
+  require_no_hidden_paragraph_marks: true
+""",
+        encoding="utf-8",
+    )
+    gated = apply_policy(report, load_policy(policy_path))
+    assert {finding.rule_id for finding in gated.findings} == {
+        "DFP006",
+        "DFP013",
+        "DFP014",
+    }
+
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert any(
+        result["ruleId"] == "DFC_STYLE_INVENTORY_CHANGED"
+        for result in sarif["runs"][0]["results"]
+    )
+    for marker in (
+        "HIDDEN_TEXT_STYLE_DO_NOT_LEAK",
+        "PARAGRAPH_MARK_STYLE_DO_NOT_LEAK",
+        "SPECIAL_PARAGRAPH_MARK_STYLE_DO_NOT_LEAK",
+        "TRACKED_STYLE_CHANGE_DO_NOT_LEAK",
+        "VISIBLE_STYLE_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_spec_vanish_is_inventoried_only_for_a_paragraph_mark(tmp_path) -> None:
+    document = tmp_path / "special-paragraph-mark.docx"
+    _write_raw_package(
+        document,
+        f"""<w:document xmlns:w=\"{W}\"><w:body><w:p>
+  <w:pPr><w:rPr><w:specVanish/></w:rPr></w:pPr>
+  <w:r><w:rPr><w:specVanish/></w:rPr><w:t>SPECIAL_DO_NOT_LEAK</w:t></w:r>
+  <w:r><w:rPr><w:vanish w:val=\"false\"/></w:rPr>
+  <w:t>DIRECT_FALSE_DO_NOT_LEAK</w:t></w:r>
+</w:p></w:body></w:document>""",
+    )
+
+    snapshot = load_snapshot(document)
+    assert snapshot.hidden_text_run_count == 0
+    assert snapshot.hidden_paragraph_mark_count == 1
+    rendered = render_profile(snapshot, "markdown")
+    assert "SPECIAL_DO_NOT_LEAK" not in rendered
+    assert "DIRECT_FALSE_DO_NOT_LEAK" not in rendered
 
 
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
@@ -264,6 +361,14 @@ def test_rejects_unsafe_xml_and_unsafe_package_member_names(tmp_path) -> None:
         load_snapshot(prefix_collision_document)
 
 
+def test_rejects_a_styles_part_with_the_wrong_word_root(tmp_path) -> None:
+    document = tmp_path / "invalid-styles.docx"
+    write_document(document, styles_xml=f'<w:settings xmlns:w="{W}"/>')
+
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(document)
+
+
 def test_policy_parser_is_strict_and_cli_returns_gate_status(tmp_path, capsys) -> None:
     policy_path = tmp_path / "docfence.yml"
     invalid_policy_path = tmp_path / "invalid.yml"
@@ -320,3 +425,26 @@ def _write_raw_package(path, document_xml: str, extra_name: str | None = None) -
         archive.writestr("word/document.xml", document_xml)
         if extra_name is not None:
             archive.writestr(extra_name, b"x")
+
+
+def _styles_with_hidden_text_declarations() -> str:
+    return f"""<w:styles xmlns:w=\"{W}\">
+  <w:docDefaults>
+    <w:rPrDefault><w:rPr><w:vanish w:val=\"true\"/></w:rPr></w:rPrDefault>
+  </w:docDefaults>
+  <w:style w:type=\"character\" w:styleId=\"HIDDEN_TEXT_STYLE_DO_NOT_LEAK\">
+    <w:rPr><w:vanish/></w:rPr>
+  </w:style>
+  <w:style w:type=\"paragraph\" w:styleId=\"PARAGRAPH_MARK_STYLE_DO_NOT_LEAK\">
+    <w:pPr><w:rPr><w:vanish/></w:rPr></w:pPr>
+  </w:style>
+  <w:style w:type=\"character\" w:styleId=\"SPECIAL_PARAGRAPH_MARK_STYLE_DO_NOT_LEAK\">
+    <w:rPr><w:specVanish/></w:rPr>
+  </w:style>
+  <w:style w:type=\"character\" w:styleId=\"TRACKED_STYLE_CHANGE_DO_NOT_LEAK\">
+    <w:rPr><w:rPrChange><w:rPr><w:vanish/></w:rPr></w:rPrChange></w:rPr>
+  </w:style>
+  <w:style w:type=\"character\" w:styleId=\"VISIBLE_STYLE_DO_NOT_LEAK\">
+    <w:rPr><w:vanish w:val=\"false\"/></w:rPr>
+  </w:style>
+</w:styles>"""

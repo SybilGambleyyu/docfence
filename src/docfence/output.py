@@ -44,6 +44,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(_single_document_table(document))
     lines.extend(_story_kind_section(document.get("story_kind_counts", {})))
     lines.extend(_revision_section(document.get("revisions", {})))
+    lines.extend(_style_section(document.get("styles", {})))
     return "\n".join(lines) + "\n"
 
 
@@ -54,6 +55,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_comparison_table(before, after))
     lines.extend(_story_kind_comparison(before, after))
     lines.extend(_revision_comparison(before, after))
+    lines.extend(_style_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
         lines.append("No stored changes detected by the supported inventories.")
@@ -84,6 +86,7 @@ def _single_document_table(document: dict[str, object]) -> list[str]:
         "table_count",
         "text_run_count",
         "hidden_text_run_count",
+        "hidden_paragraph_mark_count",
         "field_code_count",
         "content_control_count",
         "comment_anchor_count",
@@ -107,6 +110,7 @@ def _comparison_table(before: dict[str, object], after: dict[str, object]) -> li
         "table_count",
         "text_run_count",
         "hidden_text_run_count",
+        "hidden_paragraph_mark_count",
         "field_code_count",
         "content_control_count",
         "comment_anchor_count",
@@ -168,6 +172,34 @@ def _revision_comparison(
             key,
             before_revisions.get(key, 0),
             after_revisions.get(key, 0),
+        )
+        for key in keys
+    )
+    return [*lines, ""]
+
+
+def _style_section(value: object) -> list[str]:
+    styles = _mapping(value)
+    lines = ["## Style inventory", "", "| Field | Value |", "| --- | ---: |"]
+    lines.extend(f"| `{key}` | {_value(styles[key])} |" for key in sorted(styles))
+    return [*lines, ""]
+
+
+def _style_comparison(before: dict[str, object], after: dict[str, object]) -> list[str]:
+    before_styles = _mapping(before.get("styles", {}))
+    after_styles = _mapping(after.get("styles", {}))
+    keys = sorted(set(before_styles) | set(after_styles))
+    lines = [
+        "## Style inventory",
+        "",
+        "| Field | Before | After |",
+        "| --- | ---: | ---: |",
+    ]
+    lines.extend(
+        _comparison_row(
+            key,
+            before_styles.get(key, 0),
+            after_styles.get(key, 0),
         )
         for key in keys
     )

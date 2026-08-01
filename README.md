@@ -3,9 +3,10 @@
 DocFence is a local-first change-assurance CLI for Word `.docx` and `.docm`
 files. It turns an opaque document diff into a reviewable, privacy-safe account
 of stored content-block changes and the review surfaces that often stay hidden:
-tracked revisions, comments, hidden runs, field codes, external relationships,
-custom XML, macros, headers, footers, notes, document settings, and otherwise
-unclassified package payloads.
+tracked revisions, comments, hidden runs and paragraph marks, stored
+style/default declarations, field codes, external relationships, custom XML,
+macros, headers, footers, notes, document settings, and otherwise unclassified
+package payloads.
 
 It never opens Word, executes macros, follows links, renders a document, uploads
 source material, or writes a redline. By default, reports contain counts,
@@ -40,17 +41,19 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.1 focuses on Office Open XML Word documents and deliberately keeps a
+Version 0.2 focuses on Office Open XML Word documents and deliberately keeps a
 small, inspectable contract:
 
 - bounded `.docx` / `.docm` ZIP packages;
 - body, header, footer, footnote, endnote, comment, and glossary stories;
 - paragraph/table block fingerprints that ignore Word's volatile `rsid`
   bookkeeping while retaining stored text and formatting semantics privately;
-- revision markup, comments, hidden text, field-code, content-control,
-  external-relationship, custom-XML, macro, and Track Changes inventories;
+- revision markup, comments, direct hidden-text runs, direct hidden
+  paragraph-mark markup, stored style/default hidden-text declarations,
+  field-code, content-control, external-relationship, custom-XML, macro, and
+  Track Changes inventories;
 - a generic alert for changed package payload outside those specialized
-  inventories (for example, style, media, embedded, or metadata parts);
+  inventories (for example, media, embedded, or metadata parts);
 - JSON, Markdown, and SARIF output with content redaction by design.
 
 The reader rejects symlinks, encrypted ZIP entries, duplicate or colliding
@@ -64,8 +67,14 @@ the exact trust boundary.
 DocFence is not a Word renderer, a document-calculation engine, an authoring
 tool, or a replacement for legal review. It does not accept or reject changes,
 evaluate fields, resolve or retrieve targets, authenticate external content, or
-perform style resolution. In particular, a hidden-run count covers direct stored
-`w:vanish` markup, not hiddenness inherited from a style; stored markup is
+perform style resolution. `hidden_text_run_count` covers direct `w:vanish`
+markup on ordinary runs. `hidden_paragraph_mark_count` covers direct
+`w:vanish` or `w:specVanish` markup under a paragraph's mark properties. The
+style inventory reports how many stored style definitions contain enabled
+text-run `w:vanish` declarations and whether document-default run properties do
+so. It is deliberately not an effective-format calculation: it does not say
+which styles are used, resolve `basedOn`, table/numbering styles or toggle
+semantics, or claim that any individual run will render hidden. Stored markup is
 fingerprinted rather than rendered. Treat any report as bounded evidence about
 the package, not a statement that Word would render an identical view.
 
@@ -87,6 +96,14 @@ rules:
   require_no_hidden_text: true
 ```
 
+For stricter template or publishing gates, add the following under `rules:`
+rather than assuming the run count resolves Word's style hierarchy:
+
+```yaml
+  require_no_hidden_text_style_declarations: true
+  require_no_hidden_paragraph_marks: true
+```
+
 YAML anchors, aliases, sequences, nested mappings, duplicate keys, unknown
 rules, and non-boolean values are rejected. That keeps a policy reviewable and
 avoids making the CLI's safety contract depend on a broad YAML loader.
@@ -96,9 +113,10 @@ avoids making the CLI's safety contract depend on a broad YAML loader.
 DocFence keeps document material in memory only long enough to create private
 SHA-256 fingerprints. Public models and renderers intentionally omit package
 part names, paragraph content, reviewer identity, dates, comment content,
-relationship targets, field instructions, custom XML values, macro bytes, and
-all fingerprints. Regression tests place unique sensitive markers in each of
-those surfaces and assert that JSON, Markdown, and SARIF never reproduce them.
+relationship targets, field instructions, style identifiers and names, custom
+XML values, macro bytes, and all fingerprints. Regression tests place unique
+sensitive markers in each of those surfaces and assert that JSON, Markdown, and
+SARIF never reproduce them.
 
 This contract applies to DocFence's own reports. It cannot prevent a caller from
 printing a source path, retaining a source document, or independently logging
@@ -110,7 +128,9 @@ Microsoft documents both the [legal blackline comparison workflow](https://suppo
 and the [hidden data surfaces found by Document Inspector](https://support.microsoft.com/en-us/office/collab-files/remove-hidden-data-and-personal-information-by-inspecting-documents-presentations-or-workbooks).
 The rule boundary also follows the Open XML SDK's guidance on [WordprocessingML
 revisions](https://learn.microsoft.com/en-us/office/open-xml/word/how-to-accept-all-revisions-in-a-word-processing-document)
-and [markup compatibility](https://learn.microsoft.com/en-us/office/open-xml/general/introduction-to-markup-compatibility).
+and [markup compatibility](https://learn.microsoft.com/en-us/office/open-xml/general/introduction-to-markup-compatibility), plus its
+[hidden-text semantics](https://learn.microsoft.com/en-us/office/open-xml/word/how-to-remove-hidden-text-from-a-word-processing-document)
+and [`specVanish` paragraph-mark semantics](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.specvanish?view=openxml-3.0.1).
 
 ## Development
 

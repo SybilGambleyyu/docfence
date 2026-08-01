@@ -53,6 +53,8 @@ def write_document(
     relationship_external: bool = False,
     revision: bool = False,
     hidden: bool = False,
+    special_hidden_paragraph_mark: bool = False,
+    hidden_paragraph_mark: bool = False,
     field: bool = False,
     control: bool = False,
     comment: bool = False,
@@ -60,6 +62,7 @@ def write_document(
     custom_xml: bytes | None = None,
     macro: bytes | None = None,
     unclassified: bytes | None = None,
+    styles_xml: str | None = None,
     include_settings_rsids: bool = False,
     extra_stories: dict[str, str] | None = None,
 ) -> None:
@@ -71,6 +74,8 @@ def write_document(
         relationship_id=relationship_id,
         revision=revision,
         hidden=hidden,
+        special_hidden_paragraph_mark=special_hidden_paragraph_mark,
+        hidden_paragraph_mark=hidden_paragraph_mark,
         field=field,
         control=control,
         comment=comment,
@@ -114,7 +119,9 @@ def write_document(
     if macro is not None:
         entries["word/vbaProject.bin"] = macro
     if unclassified is not None:
-        entries["word/styles.xml"] = unclassified
+        entries["word/media/image1.bin"] = unclassified
+    if styles_xml is not None:
+        entries["word/styles.xml"] = styles_xml.encode()
     for kind, story_text in (extra_stories or {}).items():
         part_name, root_name, _ = STORY_PARTS[kind]
         entries[part_name] = _story_xml(kind, root_name, story_text).encode()
@@ -159,6 +166,8 @@ def _paragraph(
     relationship_id: str | None,
     revision: bool,
     hidden: bool,
+    special_hidden_paragraph_mark: bool,
+    hidden_paragraph_mark: bool,
     field: bool,
     control: bool,
     comment: bool,
@@ -180,8 +189,18 @@ def _paragraph(
         )
     if control:
         run = f"<w:sdt><w:sdtContent>{run}</w:sdtContent></w:sdt>"
+    paragraph_mark_properties = ""
+    if hidden_paragraph_mark:
+        paragraph_mark_properties += "<w:vanish/>"
+    if special_hidden_paragraph_mark:
+        paragraph_mark_properties += "<w:specVanish/>"
+    paragraph_properties = (
+        f"<w:pPr><w:rPr>{paragraph_mark_properties}</w:rPr></w:pPr>"
+        if paragraph_mark_properties
+        else ""
+    )
     anchor = '<w:commentRangeStart w:id="0"/>' if comment else ""
-    return f'<w:p w:rsidR="{rsid}">{anchor}{run}</w:p>'
+    return f'<w:p w:rsidR="{rsid}">{paragraph_properties}{anchor}{run}</w:p>'
 
 
 def _story_xml(kind: str, root_name: str, text: str) -> str:

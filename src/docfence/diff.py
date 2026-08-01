@@ -261,6 +261,14 @@ def _append_review_inventory_changes(
     )
     _append_count_change(
         changes,
+        "hidden_paragraph_mark_inventory_changed",
+        "Stored hidden paragraph-mark inventory changed.",
+        "hidden_paragraph_mark_count",
+        before.hidden_paragraph_mark_count,
+        after.hidden_paragraph_mark_count,
+    )
+    _append_count_change(
+        changes,
         "field_code_inventory_changed",
         "Stored field-code inventory changed.",
         "field_code_count",
@@ -299,6 +307,17 @@ def _append_review_inventory_changes(
                 details={
                     "before_enabled": before.track_revisions_enabled,
                     "after_enabled": after.track_revisions_enabled,
+                },
+            )
+        )
+    if before.styles.signature != after.styles.signature:
+        changes.append(
+            Change(
+                kind="style_inventory_changed",
+                message="Stored style inventory changed.",
+                details={
+                    "before": before.styles.public_dict(),
+                    "after": after.styles.public_dict(),
                 },
             )
         )
