@@ -380,6 +380,61 @@ class WordHyperlinkMarkupInventory:
 
 
 @dataclass(frozen=True)
+class WordDrawingHyperlinkInventory:
+    """Direct DrawingML hyperlink-action markup in Word stories, aggregate only.
+
+    Drawing hyperlink targets, invalid URLs, actions, tooltips, frame names,
+    history settings, story paths, and fingerprints can reveal document context.
+    They remain in the private signature; public output reports only stored
+    action kind, relationship-mode, and selected attribute-presence evidence.
+    """
+
+    drawing_hyperlink_reference_count: int
+    drawing_hyperlink_story_count: int
+    click_drawing_hyperlink_count: int
+    hover_drawing_hyperlink_count: int
+    mouse_over_drawing_hyperlink_count: int
+    external_relationship_drawing_hyperlink_count: int
+    internal_relationship_drawing_hyperlink_count: int
+    unsupported_relationship_drawing_hyperlink_count: int
+    missing_relationship_id_drawing_hyperlink_count: int
+    action_attribute_drawing_hyperlink_count: int
+    invalid_url_attribute_drawing_hyperlink_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "drawing_hyperlink_reference_count": (
+                self.drawing_hyperlink_reference_count
+            ),
+            "drawing_hyperlink_story_count": self.drawing_hyperlink_story_count,
+            "click_drawing_hyperlink_count": self.click_drawing_hyperlink_count,
+            "hover_drawing_hyperlink_count": self.hover_drawing_hyperlink_count,
+            "mouse_over_drawing_hyperlink_count": (
+                self.mouse_over_drawing_hyperlink_count
+            ),
+            "external_relationship_drawing_hyperlink_count": (
+                self.external_relationship_drawing_hyperlink_count
+            ),
+            "internal_relationship_drawing_hyperlink_count": (
+                self.internal_relationship_drawing_hyperlink_count
+            ),
+            "unsupported_relationship_drawing_hyperlink_count": (
+                self.unsupported_relationship_drawing_hyperlink_count
+            ),
+            "missing_relationship_id_drawing_hyperlink_count": (
+                self.missing_relationship_id_drawing_hyperlink_count
+            ),
+            "action_attribute_drawing_hyperlink_count": (
+                self.action_attribute_drawing_hyperlink_count
+            ),
+            "invalid_url_attribute_drawing_hyperlink_count": (
+                self.invalid_url_attribute_drawing_hyperlink_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -729,6 +784,7 @@ class DocumentSnapshot:
     word_document_variable_fields: WordDocumentVariableFieldInventory
     word_hyperlink_fields: WordHyperlinkFieldInventory
     word_hyperlink_markup: WordHyperlinkMarkupInventory
+    word_drawing_hyperlinks: WordDrawingHyperlinkInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -828,6 +884,7 @@ class DocumentSnapshot:
             ),
             "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
             "word_hyperlink_markup": self.word_hyperlink_markup.public_dict(),
+            "word_drawing_hyperlinks": self.word_drawing_hyperlinks.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

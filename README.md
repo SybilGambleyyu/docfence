@@ -6,8 +6,9 @@ reviewable, privacy-safe account of stored content-block changes and the review
 surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
-`HYPERLINK` field references, direct `w:hyperlink` markup, external
-relationships, custom XML, macros,
+`HYPERLINK` field references, direct `w:hyperlink` markup, DrawingML
+click/hover/mouse-over hyperlink-action markup, external relationships, custom
+XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
@@ -44,6 +45,9 @@ frame targets, and story-part paths are private too.
 Direct WordprocessingML hyperlink targets, anchors, locations, tooltips, frame
 names, history values, display text, relationship IDs, and story-part paths are
 private too.
+DrawingML hyperlink-action targets, invalid URLs, actions, tooltips, frame
+names, history settings, relationship IDs, and story-part paths are private
+too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -74,7 +78,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.18 focuses on Office Open XML Word documents and templates and
+Version 0.19 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -84,6 +88,7 @@ deliberately keeps a small, inspectable contract:
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, `HYPERLINK` field-reference, direct `w:hyperlink` markup,
+  DrawingML click/hover/mouse-over hyperlink-action markup,
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
@@ -302,6 +307,31 @@ claim that a target is reachable or safe.
 `require_no_word_hyperlink_markup` fails for every stored direct
 `w:hyperlink` element, while `no_word_hyperlink_markup_changes` protects an
 approved direct-markup baseline.
+
+DrawingML hyperlink-action elements are a separate direct surface again: a
+Word image or shape can contain `a:hlinkClick`, `a:hlinkHover`, or
+`a:hlinkMouseOver` even when it has no `w:hyperlink` element or `HYPERLINK`
+field. DocFence scans those direct DrawingML elements in every supported Word
+story and counts stored click, hover, and mouse-over markers individually. It
+does not collapse markers that share a relationship or a visual object, and it
+does not choose a Markup Compatibility branch; the count is evidence of stored
+markup, not a rendered-link count.
+
+Markers with `r:id` are classified from the referenced relationship as
+external, internal, or unsupported. A marker with no `r:id` is separately
+counted as malformed stored evidence. An unreferenced hyperlink relationship is
+not counted as DrawingML markup. Public output also notes the presence of
+`action` and `invalidUrl` attributes, while keeping values, relationship
+targets, tooltips, frame names, history settings, relationship IDs, story
+paths, and fingerprints private. The private signature catches same-count
+target or attribute rewrites and normalizes relationship-ID renumbering with
+unchanged semantics.
+
+`require_no_word_drawing_hyperlinks` fails for every stored direct DrawingML
+hyperlink-action marker, while `no_word_drawing_hyperlink_changes` protects an
+approved marker baseline. This inventory never resolves, retrieves, follows,
+validates, evaluates, or renders an action, and no count establishes that a
+target is reachable, safe, or honored by a Word client.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -620,6 +650,14 @@ Those specifications distinguish an `r:id` relationship target from a local
 `w:anchor`, give `r:id` precedence when both are present, and permit hyperlink
 relationship targets inside or outside the package. DocFence reports only that
 stored mechanism and mode evidence; it keeps target and markup values private.
+The DrawingML hyperlink-action boundary follows ECMA-376's
+[`a:hlinkClick` definition](https://c-rex.net/samples/ooxml/e1/Part4/OOXML_P4_DOCX_hlinkClick_topic_ID0ENF2KB.html),
+which lists drawing object properties among its parents and documents the
+relationship-ID target plus action, invalid-URL, tooltip, frame, and history
+attributes; the corresponding [`a:hlinkHover` definition](https://c-rex.net/samples/ooxml/e1/part4/OOXML_P4_DOCX_hlinkHover_topic_ID0EF62IB.html)
+and Open XML SDK [`a:hlinkMouseOver` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.hyperlinkonmouseover?view=openxml-3.0.1)
+complete the stored action family. DocFence counts direct stored markers only,
+keeps all values private, and makes no client-execution or target-safety claim.
 The editable-range boundary follows the Open XML SDK's
 [`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
 and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),

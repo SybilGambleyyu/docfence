@@ -107,6 +107,12 @@ _HYPERLINK_RELATIONSHIP_TYPE = (
 _STRICT_HYPERLINK_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink"
 )
+_DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_STRICT_DRAWING_NAMESPACE = "http://purl.oclc.org/ooxml/drawingml/main"
+_WORDPROCESSING_DRAWING_NAMESPACE = (
+    "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+)
+_PICTURE_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 _CORE_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
 _EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
 _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
@@ -2983,6 +2989,153 @@ rules:
         assert marker not in rendered
 
 
+def test_word_drawing_hyperlink_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    changed = tmp_path / "changed.docx"
+    markup_changed = tmp_path / "markup-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    orphaned_relationship = tmp_path / "orphaned-relationship.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_drawing_hyperlink_document(before, include_markup=False)
+    _write_drawing_hyperlink_document(after)
+    _write_drawing_hyperlink_document(
+        changed,
+        external_target="https://CHANGED_DRAWING_TARGET_DO_NOT_LEAK.invalid/path",
+    )
+    _write_drawing_hyperlink_document(
+        markup_changed,
+        action="CHANGED_DRAWING_ACTION_DO_NOT_LEAK",
+    )
+    _write_drawing_hyperlink_document(
+        renumbered,
+        external_relationship_id="rIdRENUMBERED_DRAWING_DO_NOT_LEAK",
+    )
+    _write_drawing_hyperlink_document(
+        orphaned_relationship,
+        include_markup=False,
+        include_orphan_hyperlink_relationship=True,
+    )
+    _write_drawing_hyperlink_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        drawing_namespace=_STRICT_DRAWING_NAMESPACE,
+        relationship_attribute_namespace=_STRICT_RELATIONSHIP_NAMESPACE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+        hyperlink_relationship_type=_STRICT_HYPERLINK_RELATIONSHIP_TYPE,
+    )
+
+    expected_inventory = {
+        "drawing_hyperlink_reference_count": 7,
+        "drawing_hyperlink_story_count": 2,
+        "click_drawing_hyperlink_count": 4,
+        "hover_drawing_hyperlink_count": 2,
+        "mouse_over_drawing_hyperlink_count": 1,
+        "external_relationship_drawing_hyperlink_count": 4,
+        "internal_relationship_drawing_hyperlink_count": 1,
+        "unsupported_relationship_drawing_hyperlink_count": 1,
+        "missing_relationship_id_drawing_hyperlink_count": 1,
+        "action_attribute_drawing_hyperlink_count": 1,
+        "invalid_url_attribute_drawing_hyperlink_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    changed_snapshot = load_snapshot(changed)
+    markup_changed_snapshot = load_snapshot(markup_changed)
+    renumbered_snapshot = load_snapshot(renumbered)
+    assert after_snapshot.public_dict()["word_drawing_hyperlinks"] == expected_inventory
+    assert before_snapshot.public_dict()["word_drawing_hyperlinks"] == {
+        key: 0 for key in expected_inventory
+    }
+    orphaned_snapshot = load_snapshot(orphaned_relationship)
+    assert orphaned_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 1,
+        "external_relationship_count": 1,
+    }
+    assert orphaned_snapshot.public_dict()["word_drawing_hyperlinks"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert load_snapshot(strict).public_dict()["word_drawing_hyperlinks"] == (
+        expected_inventory
+    )
+    assert (
+        renumbered_snapshot.word_drawing_hyperlinks.signature
+        == after_snapshot.word_drawing_hyperlinks.signature
+    )
+
+    report = diff_documents(before, after)
+    assert "word_drawing_hyperlink_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_drawing_hyperlink_inventory_changed" in {
+        change.kind for change in diff_documents(after, changed).changes
+    }
+    assert "word_drawing_hyperlink_inventory_changed" in {
+        change.kind for change in diff_documents(after, markup_changed).changes
+    }
+    assert "word_drawing_hyperlink_inventory_changed" not in {
+        change.kind for change in diff_documents(after, renumbered).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_drawing_hyperlinks: true
+  no_word_drawing_hyperlink_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP051",
+        "DFP052",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, changed), policy).findings
+    } == {"DFP051", "DFP052"}
+
+    gated = apply_policy(report, policy)
+    changed_gated = apply_policy(diff_documents(after, changed), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(changed_snapshot, "json"),
+            render_report(changed_gated, "sarif"),
+            render_profile(markup_changed_snapshot, "markdown"),
+            render_profile(renumbered_snapshot, "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_DRAWING_HYPERLINK_INVENTORY_CHANGED",
+        "DFP051",
+        "DFP052",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "DRAWING_EXTERNAL_TARGET_DO_NOT_LEAK",
+        "CHANGED_DRAWING_TARGET_DO_NOT_LEAK",
+        "DRAWING_INTERNAL_TARGET_DO_NOT_LEAK",
+        "DRAWING_UNSUPPORTED_TARGET_DO_NOT_LEAK",
+        "DRAWING_HEADER_TARGET_DO_NOT_LEAK",
+        "DRAWING_ACTION_DO_NOT_LEAK",
+        "CHANGED_DRAWING_ACTION_DO_NOT_LEAK",
+        "DRAWING_INVALID_URL_DO_NOT_LEAK",
+        "DRAWING_TOOLTIP_DO_NOT_LEAK",
+        "DRAWING_TARGET_FRAME_DO_NOT_LEAK",
+        "DRAWING_OBJECT_NAME_DO_NOT_LEAK",
+        "DRAWING_PICTURE_OBJECT_DO_NOT_LEAK",
+        "rIdRENUMBERED_DRAWING_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     noncanonical = tmp_path / "noncanonical.docx"
     strict_relationship = tmp_path / "strict-relationship.docx"
@@ -4906,6 +5059,136 @@ def _write_hyperlink_markup_document(
         "word/header1.xml": (
             f'<w:hdr xmlns:w="{word_namespace}" '
             f'xmlns:r="{relationship_attribute_namespace}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
+    if relationship_entries:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{relationship_entries}</Relationships>"
+        ).encode()
+    if header_relationship_entries:
+        entries["word/_rels/header1.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{header_relationship_entries}</Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_drawing_hyperlink_document(
+    path,
+    *,
+    include_markup: bool = True,
+    include_orphan_hyperlink_relationship: bool = False,
+    external_target: str = "https://DRAWING_EXTERNAL_TARGET_DO_NOT_LEAK.invalid/path",
+    action: str = "DRAWING_ACTION_DO_NOT_LEAK",
+    external_relationship_id: str = "rIdDrawingExternal",
+    word_namespace: str = W,
+    drawing_namespace: str = _DRAWING_NAMESPACE,
+    relationship_attribute_namespace: str = R,
+    relationship_namespace: str = PR,
+    hyperlink_relationship_type: str = _HYPERLINK_RELATIONSHIP_TYPE,
+) -> None:
+    """Write DrawingML link-action markers across body and header stories."""
+
+    body_markup = ""
+    header_markup = ""
+    relationship_entries = ""
+    header_relationship_entries = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                "<w:drawing><wp:inline><wp:docPr id=\"1\" "
+                "name=\"DRAWING_OBJECT_NAME_DO_NOT_LEAK\">"
+                f'<a:hlinkClick r:id="{external_relationship_id}" '
+                f'action="{action}" '
+                'invalidUrl="DRAWING_INVALID_URL_DO_NOT_LEAK" '
+                'tooltip="DRAWING_TOOLTIP_DO_NOT_LEAK" '
+                'tgtFrame="DRAWING_TARGET_FRAME_DO_NOT_LEAK" '
+                'history="true" highlightClick="false" endSnd="true"/>'
+                "</wp:docPr><pic:pic><pic:nvPicPr><pic:cNvPr id=\"101\" "
+                "name=\"DRAWING_PICTURE_OBJECT_DO_NOT_LEAK\">"
+                f'<a:hlinkClick r:id="{external_relationship_id}"/>'
+                "</pic:cNvPr></pic:nvPicPr></pic:pic>"
+                "</wp:inline></w:drawing>",
+                '<w:drawing><wp:inline><wp:docPr id="2" name="INTERNAL">'
+                '<a:hlinkHover r:id="rIdDrawingInternal"/>'
+                "</wp:docPr></wp:inline></w:drawing>",
+                '<w:drawing><wp:inline><wp:docPr id="3" name="MOUSE_OVER">'
+                '<a:hlinkMouseOver r:id="rIdDrawingMouseOver"/>'
+                "</wp:docPr></wp:inline></w:drawing>",
+                '<w:drawing><wp:inline><wp:docPr id="4" name="UNSUPPORTED">'
+                '<a:hlinkClick r:id="rIdDrawingUnsupported"/>'
+                "</wp:docPr></wp:inline></w:drawing>",
+                '<w:drawing><wp:inline><wp:docPr id="5" name="MISSING">'
+                "<a:hlinkHover/>"
+                "</wp:docPr></wp:inline></w:drawing>",
+            )
+        )
+        header_markup = (
+            '<w:drawing><wp:inline><wp:docPr id="6" name="HEADER">'
+            '<a:hlinkClick r:id="rIdDrawingHeaderExternal"/>'
+            "</wp:docPr></wp:inline></w:drawing>"
+        )
+        relationship_entries = "".join(
+            (
+                f'<Relationship Id="{external_relationship_id}" '
+                f'Type="{hyperlink_relationship_type}" Target="{external_target}" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdDrawingInternal" '
+                f'Type="{hyperlink_relationship_type}" '
+                'Target="DRAWING_INTERNAL_TARGET_DO_NOT_LEAK.xml"/>',
+                '<Relationship Id="rIdDrawingMouseOver" '
+                f'Type="{hyperlink_relationship_type}" '
+                'Target="https://DRAWING_MOUSE_OVER_TARGET_DO_NOT_LEAK.invalid" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdDrawingUnsupported" '
+                'Type="urn:docfence:unsupported-relationship" '
+                'Target="https://DRAWING_UNSUPPORTED_TARGET_DO_NOT_LEAK.invalid" '
+                'TargetMode="External"/>',
+            )
+        )
+        header_relationship_entries = (
+            '<Relationship Id="rIdDrawingHeaderExternal" '
+            f'Type="{hyperlink_relationship_type}" '
+            'Target="https://DRAWING_HEADER_TARGET_DO_NOT_LEAK.invalid" '
+            'TargetMode="External"/>'
+        )
+    elif include_orphan_hyperlink_relationship:
+        relationship_entries = (
+            '<Relationship Id="rIdDrawingOrphan" '
+            f'Type="{hyperlink_relationship_type}" '
+            'Target="https://DRAWING_ORPHAN_TARGET_DO_NOT_LEAK.invalid" '
+            'TargetMode="External"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            f'xmlns:a="{drawing_namespace}" '
+            f'xmlns:wp="{_WORDPROCESSING_DRAWING_NAMESPACE}" '
+            f'xmlns:pic="{_PICTURE_NAMESPACE}"><w:body><w:p>'
+            f"{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            f'xmlns:a="{drawing_namespace}" '
+            f'xmlns:wp="{_WORDPROCESSING_DRAWING_NAMESPACE}" '
+            f'xmlns:pic="{_PICTURE_NAMESPACE}"><w:p>{header_markup}'
             "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
             "</w:p></w:hdr>"
         ).encode(),

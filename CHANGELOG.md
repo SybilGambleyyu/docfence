@@ -2,6 +2,35 @@
 
 All notable changes are documented here.
 
+## 0.19.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct DrawingML
+  `a:hlinkClick`, `a:hlinkHover`, and `a:hlinkMouseOver` markers in supported
+  Word stories, separate from stored `HYPERLINK` fields, direct `w:hyperlink`
+  markup, and broad package relationship totals. An unreferenced hyperlink
+  relationship is not counted as DrawingML markup.
+- Added `DFP051` to require a handoff with no direct DrawingML hyperlink-action
+  markup and `DFP052` to protect an approved marker baseline.
+- Reports now expose only aggregate marker/story, click/hover/mouse-over,
+  external/internal/unsupported/missing-relationship-ID, and `action`/
+  `invalidUrl`-attribute-presence counts. Relationship targets, invalid URL
+  values, action strings, tooltips, frame names, history settings,
+  relationship IDs, story paths, and fingerprints remain private.
+- Counts each stored direct marker rather than deduplicating by target,
+  relationship, or visual object, and does not select Markup Compatibility
+  branches. A missing `r:id` remains reviewable malformed stored evidence;
+  recognized relationship modes may be internal or external. No count is a
+  safety, reachability, rendering, or action-execution claim.
+- Private inventory signatures catch same-count relationship-target and markup
+  changes while normalizing relationship-ID renumbering with unchanged
+  semantics. The implementation does not resolve, retrieve, follow, validate,
+  evaluate, render, or execute an action.
+- Added regression coverage for privacy redaction, policy/SARIF output,
+  marker kinds, relationship modes/type mismatch, missing IDs, action and
+  invalid-URL attributes, orphaned relationship exclusion, header and Strict
+  encodings, same-count target/action changes, and relationship-ID renumbering
+  stability.
+
 ## 0.18.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct WordprocessingML

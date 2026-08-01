@@ -72,6 +72,8 @@ starter policy.
 | `no_word_hyperlink_field_changes` | `DFP048` | Word `HYPERLINK` field-reference inventory differs | Comparison |
 | `require_no_word_hyperlink_markup` | `DFP049` | Candidate has direct WordprocessingML `w:hyperlink` markup | Candidate |
 | `no_word_hyperlink_markup_changes` | `DFP050` | WordprocessingML hyperlink-markup inventory differs | Comparison |
+| `require_no_word_drawing_hyperlinks` | `DFP051` | Candidate has direct DrawingML hyperlink-action markup | Candidate |
+| `no_word_drawing_hyperlink_changes` | `DFP052` | DrawingML hyperlink-action inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -122,6 +124,8 @@ intentionally retains stored `DOCVARIABLE` field references.
 intentionally retains stored `HYPERLINK` field references.
 `no_word_hyperlink_markup_changes` provides the equivalent gate when it
 intentionally retains direct WordprocessingML hyperlink markup.
+`no_word_drawing_hyperlink_changes` provides the equivalent gate when it
+intentionally retains direct DrawingML hyperlink-action markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -625,6 +629,34 @@ markup. `no_word_hyperlink_markup_changes` compares the private inventory
 signature for a controlled baseline. Neither rule resolves, retrieves, follows,
 validates, evaluates, or renders a target, and neither establishes that a
 relationship target is reachable, safe, or honored by a Word client.
+
+## DrawingML hyperlink-action scope
+
+Direct DrawingML `a:hlinkClick`, `a:hlinkHover`, and `a:hlinkMouseOver`
+elements are a separate stored surface from direct WordprocessingML
+`w:hyperlink` markup, `HYPERLINK` field codes, and broad package relationship
+totals. The inventory scans those elements across supported Word stories and
+counts each stored marker rather than deduplicating by relationship or visual
+object. It does not select a Markup Compatibility branch or determine whether a
+client renders a marker.
+
+Markers with an `r:id` are classified from the referenced relationship's stored
+type and target mode as external, internal, or unsupported. A marker with no
+`r:id` remains separately visible as malformed stored evidence. An unreferenced
+hyperlink relationship remains visible to the generic relationship inventory
+but does not become a DrawingML marker count. The public aggregate also records
+the presence of `action` and `invalidUrl` attributes; targets, URL values,
+actions, tooltips, frame names, history settings, relationship IDs, story
+paths, and fingerprints never appear in reports.
+
+`require_no_word_drawing_hyperlinks` fails whenever a candidate contains a
+stored DrawingML hyperlink-action marker. Use it for a handoff that must carry
+no such stored action markup. `no_word_drawing_hyperlink_changes` compares the
+private inventory signature for a controlled baseline; same-count target or
+attribute rewrites remain visible, while relationship-ID renumbering with
+unchanged semantics remains quiet. Neither rule resolves, retrieves, follows,
+validates, evaluates, renders, or executes an action, nor does either establish
+that a target is reachable, safe, or honored by a Word client.
 
 ## External Word document dependency scope
 

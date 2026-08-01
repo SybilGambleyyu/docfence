@@ -192,6 +192,21 @@ fingerprints remain private. A relationship-ID rewrite with unchanged semantics
 does not add report churn; a same-count target or markup rewrite remains
 review-visible in the private signature.
 
+Direct DrawingML `a:hlinkClick`, `a:hlinkHover`, and `a:hlinkMouseOver` markup
+receives a separate private-digest treatment from field instructions,
+`w:hyperlink` markup, and broad relationship totals. DocFence scans direct
+elements in supported Word stories and retains each stored marker separately;
+it does not deduplicate markers sharing a relationship or visual object, nor
+does it choose a Markup Compatibility branch. A marker with `r:id` is privately
+normalized through its resolved relationship semantics and publicly classified
+as external, internal, or unsupported. A missing `r:id` remains a distinct
+malformed stored-evidence count. Public output also reports only whether
+`action` or `invalidUrl` is present. Targets, URL values, actions, tooltips,
+frame names, history settings, relationship IDs, paths, and fingerprints remain
+private. A same-count target or attribute rewrite remains review-visible in the
+private signature; an ID rewrite with identical semantics does not add report
+churn.
+
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
 `w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
@@ -365,6 +380,12 @@ Direct `w:hyperlink` markup counts are likewise stored-state evidence, not proof
 that a relationship target is external in the everyday web sense, reachable,
 safe, permitted, or honored by a Word client. DocFence does not resolve,
 retrieve, follow, validate, evaluate, or render a direct hyperlink target.
+Direct DrawingML hyperlink-action counts are likewise stored-state evidence, not
+proof that Word selects a stored marker, a relationship target is reachable,
+safe, permitted, or honored, or an `action` executes. DocFence does not select
+Markup Compatibility branches, associate markers with rendered objects,
+deduplicate a visual link, resolve, retrieve, follow, validate, evaluate,
+render, or execute an action.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

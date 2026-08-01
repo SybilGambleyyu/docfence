@@ -41,6 +41,7 @@ from docfence.models import (
     TaskpaneWebExtensionInventory,
     WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
+    WordDrawingHyperlinkInventory,
     WordHyperlinkFieldInventory,
     WordHyperlinkMarkupInventory,
     WordPermissionRangeInventory,
@@ -68,6 +69,12 @@ _WORD_NAMESPACES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
         "http://purl.oclc.org/ooxml/wordprocessingml/main",
+    }
+)
+_DRAWING_NAMESPACES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "http://purl.oclc.org/ooxml/drawingml/main",
     }
 )
 _REL_ATTRIBUTE_NAMESPACES: Final = frozenset(
@@ -125,6 +132,11 @@ _HYPERLINK_RELATIONSHIP_TYPES: Final = frozenset(
         "http://purl.oclc.org/ooxml/officedocument/relationships/hyperlink",
     }
 )
+_DRAWING_HYPERLINK_REFERENCE_KINDS: Final = {
+    "hlinkClick": "click",
+    "hlinkHover": "hover",
+    "hlinkMouseOver": "mouse_over",
+}
 _DOCUMENT_PROPERTY_RELATIONSHIP_TYPES: Final = {
     (
         "http://schemas.openxmlformats.org/package/2006/relationships/metadata/"
@@ -594,6 +606,18 @@ class _HyperlinkMarkupReference:
 
 
 @dataclass(frozen=True)
+class _DrawingHyperlinkReference:
+    """One private direct DrawingML hyperlink-action marker in a Word story."""
+
+    story_part: str
+    markup_signature: str
+    kind: str
+    classification: str
+    action_attribute_present: bool
+    invalid_url_attribute_present: bool
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -748,6 +772,7 @@ def _load_package(
                 document_variable_field_references,
                 hyperlink_field_references,
                 hyperlink_markup_references,
+                drawing_hyperlink_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -769,6 +794,9 @@ def _load_package(
             )
             word_hyperlink_markup = _word_hyperlink_markup_inventory(
                 hyperlink_markup_references
+            )
+            word_drawing_hyperlinks = _word_drawing_hyperlink_inventory(
+                drawing_hyperlink_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -857,6 +885,7 @@ def _load_package(
         word_document_variable_fields=word_document_variable_fields,
         word_hyperlink_fields=word_hyperlink_fields,
         word_hyperlink_markup=word_hyperlink_markup,
+        word_drawing_hyperlinks=word_drawing_hyperlinks,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3163,6 +3192,7 @@ def _story_snapshots(
     tuple[_DocumentVariableFieldReference, ...],
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
+    tuple[_DrawingHyperlinkReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3171,6 +3201,7 @@ def _story_snapshots(
     document_variable_field_references: list[_DocumentVariableFieldReference] = []
     hyperlink_field_references: list[_HyperlinkFieldReference] = []
     hyperlink_markup_references: list[_HyperlinkMarkupReference] = []
+    drawing_hyperlink_references: list[_DrawingHyperlinkReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3182,6 +3213,7 @@ def _story_snapshots(
             story_document_variable_field_references,
             story_hyperlink_field_references,
             story_hyperlink_markup_references,
+            story_drawing_hyperlink_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3191,6 +3223,7 @@ def _story_snapshots(
         )
         hyperlink_field_references.extend(story_hyperlink_field_references)
         hyperlink_markup_references.extend(story_hyperlink_markup_references)
+        drawing_hyperlink_references.extend(story_drawing_hyperlink_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3208,6 +3241,7 @@ def _story_snapshots(
         tuple(document_variable_field_references),
         tuple(hyperlink_field_references),
         tuple(hyperlink_markup_references),
+        tuple(drawing_hyperlink_references),
         tuple(web_extension_control_references),
     )
 
@@ -3277,6 +3311,7 @@ def _snapshot_story(
     tuple[_DocumentVariableFieldReference, ...],
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
+    tuple[_DrawingHyperlinkReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3374,6 +3409,7 @@ def _snapshot_story(
         _document_variable_field_references(field_instruction_references),
         _hyperlink_field_references(field_instruction_references),
         _hyperlink_markup_references(root, part_key, relationships),
+        _drawing_hyperlink_references(root, part_key, relationships),
     )
 
 
@@ -3876,6 +3912,16 @@ def _word_attribute_value(element: ET.Element, local_name: str) -> str | None:
     for attribute, value in element.attrib.items():
         namespace, attribute_local_name = _qualified_name(attribute)
         if namespace in _WORD_NAMESPACES and attribute_local_name == local_name:
+            return value
+    return None
+
+
+def _unqualified_attribute_value(element: ET.Element, local_name: str) -> str | None:
+    """Return a direct unqualified attribute without treating empty as absent."""
+
+    for attribute, value in element.attrib.items():
+        namespace, attribute_local_name = _qualified_name(attribute)
+        if not namespace and attribute_local_name == local_name:
             return value
     return None
 
@@ -4430,6 +4476,112 @@ def _word_hyperlink_markup_inventory(
         relationship_backed_anchor_attribute_count=(
             relationship_backed_anchor_attribute_count
         ),
+        signature=_digest_records(records),
+    )
+
+
+def _drawing_hyperlink_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_DrawingHyperlinkReference, ...]:
+    """Retain direct DrawingML hyperlink actions without exposing link material.
+
+    This deliberately inventories each stored marker in supported Word stories,
+    including duplicate markers that point at the same relationship and markers
+    inside markup-compatibility branches. It does not select a rendering branch,
+    deduplicate visual objects, retrieve a target, or claim an action executes.
+    ``r:id`` is schema-required for these elements; an omitted attribute remains
+    reviewable malformed stored evidence instead of being resolved as a target.
+    """
+
+    references: list[_DrawingHyperlinkReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace not in _DRAWING_NAMESPACES:
+            continue
+        kind = _DRAWING_HYPERLINK_REFERENCE_KINDS.get(local_name)
+        if kind is None:
+            continue
+        relationship_id = _relationship_id_value(element)
+        classification = (
+            "missing_relationship_id"
+            if relationship_id is None
+            else _hyperlink_markup_relationship_classification(
+                relationships.get(relationship_id)
+            )
+        )
+        references.append(
+            _DrawingHyperlinkReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                kind=kind,
+                classification=classification,
+                action_attribute_present=(
+                    _unqualified_attribute_value(element, "action") is not None
+                ),
+                invalid_url_attribute_present=(
+                    _unqualified_attribute_value(element, "invalidUrl") is not None
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _word_drawing_hyperlink_inventory(
+    references: tuple[_DrawingHyperlinkReference, ...],
+) -> WordDrawingHyperlinkInventory:
+    """Aggregate DrawingML hyperlink-action markers without emitting targets."""
+
+    kind_counts = {"click": 0, "hover": 0, "mouse_over": 0}
+    classification_counts = {
+        "external_relationship": 0,
+        "internal_relationship": 0,
+        "unsupported_relationship": 0,
+        "missing_relationship_id": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    action_attribute_count = 0
+    invalid_url_attribute_count = 0
+    for reference in references:
+        kind_counts[reference.kind] += 1
+        classification_counts[reference.classification] += 1
+        action_attribute_count += int(reference.action_attribute_present)
+        invalid_url_attribute_count += int(reference.invalid_url_attribute_present)
+        records.append(
+            (
+                "word_drawing_hyperlink",
+                reference.story_part,
+                reference.markup_signature,
+                reference.kind,
+                reference.classification,
+                str(reference.action_attribute_present),
+                str(reference.invalid_url_attribute_present),
+            )
+        )
+
+    return WordDrawingHyperlinkInventory(
+        drawing_hyperlink_reference_count=len(references),
+        drawing_hyperlink_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        click_drawing_hyperlink_count=kind_counts["click"],
+        hover_drawing_hyperlink_count=kind_counts["hover"],
+        mouse_over_drawing_hyperlink_count=kind_counts["mouse_over"],
+        external_relationship_drawing_hyperlink_count=classification_counts[
+            "external_relationship"
+        ],
+        internal_relationship_drawing_hyperlink_count=classification_counts[
+            "internal_relationship"
+        ],
+        unsupported_relationship_drawing_hyperlink_count=classification_counts[
+            "unsupported_relationship"
+        ],
+        missing_relationship_id_drawing_hyperlink_count=classification_counts[
+            "missing_relationship_id"
+        ],
+        action_attribute_drawing_hyperlink_count=action_attribute_count,
+        invalid_url_attribute_drawing_hyperlink_count=invalid_url_attribute_count,
         signature=_digest_records(records),
     )
 

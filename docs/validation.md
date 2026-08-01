@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.18 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.19 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -12,8 +12,9 @@ following properties:
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
-  state, Word `HYPERLINK` field-reference state, and direct WordprocessingML
-  `w:hyperlink` markup state, and
+  state, Word `HYPERLINK` field-reference state, direct WordprocessingML
+  `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
+  hyperlink-action markup state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -107,6 +108,15 @@ following properties:
   `r:id` precedence over a shadowed `w:anchor`, body/header stories,
   Transitional and Strict Word/relationship namespaces, orphaned relationship
   exclusion, same-count target changes, relationship-ID renumbering stability,
+  JSON/Markdown/SARIF redaction, and policy findings;
+- direct DrawingML `a:hlinkClick`, `a:hlinkHover`, and `a:hlinkMouseOver`
+  action markup is separately inventoried from direct `w:hyperlink` markup,
+  `HYPERLINK` fields, and broad relationship totals. Tests cover click/hover/
+  mouse-over kinds, recognized external and internal relationships, a resolved
+  unsupported relationship, missing `r:id` stored evidence, `action` and
+  `invalidUrl` attribute presence, body/header stories, Transitional and Strict
+  DrawingML/Word/relationship namespaces, orphaned relationship exclusion,
+  same-count target and action changes, relationship-ID renumbering stability,
   JSON/Markdown/SARIF redaction, and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
@@ -235,6 +245,16 @@ external relationship-backed elements without emitting the targets or display
 text. This is a compatibility smoke test, not a runtime dependency or a
 statement about link rendering.
 
+For DrawingML hyperlink-action markup, the release check profiles LibreOffice's
+public [`tdf78657_picture_hyperlink.docx` regression
+fixture](https://github.com/LibreOffice/core/blob/100f43ab871bedda6b427645cbfc2c8083da98b5/sw/qa/extras/ooxmlexport/data/tdf78657_picture_hyperlink.docx).
+Its commit identifies it as a Microsoft Word 2016 test file. The package stores
+two direct `a:hlinkClick` markers around its image and one external hyperlink
+relationship; DocFence reports two click markers and two external
+relationship-backed marker references without emitting a target. This is a
+compatibility smoke test, not a runtime dependency or a statement about link
+rendering or action execution.
+
 For the package-signature boundary, the release check profiles the signed DOCX
 fixture from the public [USENIX 2023 OOXML Signature Security
 artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). It confirms
@@ -266,7 +286,10 @@ assert that a `HYPERLINK` field is valid, external, reachable, safe, rendered,
 or followed by Word; it records bounded private-digest evidence only. It
 likewise does not assert that direct `w:hyperlink` markup is valid,
 reachable, safe, rendered, or followed by Word; it records bounded stored
-relationship/markup evidence only. The style/default layer is a stored
+relationship/markup evidence only. It likewise does not assert that a direct
+DrawingML hyperlink-action marker is valid, selected by Word, reachable, safe,
+rendered, followed, or executed; it records bounded stored marker evidence
+only. The style/default layer is a stored
 declaration inventory, not a renderer. It does
 not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
@@ -280,5 +303,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.18 contract; see
+only, not field evaluation. Those limits are explicit in the 0.19 contract; see
 [threat model](threat-model.md).

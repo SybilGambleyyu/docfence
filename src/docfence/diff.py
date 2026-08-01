@@ -521,6 +521,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_drawing_hyperlinks.signature
+        != after.word_drawing_hyperlinks.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_drawing_hyperlink_inventory_changed",
+                message="Stored DrawingML hyperlink-action inventory changed.",
+                details={
+                    "before": before.word_drawing_hyperlinks.public_dict(),
+                    "after": after.word_drawing_hyperlinks.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):
