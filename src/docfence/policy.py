@@ -70,6 +70,8 @@ _RULES: Final = {
     "no_word_drawing_linked_picture_changes": "DFP056",
     "require_no_word_vml_external_images": "DFP057",
     "no_word_vml_external_image_changes": "DFP058",
+    "require_no_word_vml_image_hyperlinks": "DFP059",
+    "no_word_vml_image_hyperlink_changes": "DFP060",
 }
 
 
@@ -422,6 +424,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_vml_image_hyperlink_changes") and (
+        before.word_vml_image_hyperlinks.signature
+        != after.word_vml_image_hyperlinks.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_vml_image_hyperlink_changes",
+                "Stored VML image-data hyperlink inventory changed.",
+                {
+                    "before": before.word_vml_image_hyperlinks.public_dict(),
+                    "after": after.word_vml_image_hyperlinks.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -730,6 +746,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_vml_external_images",
                 "Candidate contains stored VML external-image markup.",
                 after.word_vml_external_images.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_vml_image_hyperlinks") and any(
+        after.word_vml_image_hyperlinks.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_vml_image_hyperlinks",
+                "Candidate contains stored VML image-data hyperlink markup.",
+                after.word_vml_image_hyperlinks.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

@@ -574,6 +574,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_vml_image_hyperlinks.signature
+        != after.word_vml_image_hyperlinks.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_vml_image_hyperlink_inventory_changed",
+                message="Stored VML image-data hyperlink inventory changed.",
+                details={
+                    "before": before.word_vml_image_hyperlinks.public_dict(),
+                    "after": after.word_vml_image_hyperlinks.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

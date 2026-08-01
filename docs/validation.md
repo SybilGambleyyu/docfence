@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.22 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.23 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -17,6 +17,7 @@ following properties:
   hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
   linked-picture markup state, direct legacy VML shape-link `href` markup
   state, direct legacy VML external-image `v:imagedata/@r:id` markup state,
+  direct legacy VML image-data hyperlink `v:imagedata/@r:href` markup state,
   and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
@@ -148,6 +149,16 @@ following properties:
   excluded raw-`src`, `r:pict`, and `r:href` attributes, same-count external
   target changes, raw-`src` change quietness, relationship-ID renumbering
   stability, JSON/Markdown/SARIF redaction, and policy findings;
+- direct legacy VML `v:imagedata/@r:href` markup is separately inventoried from
+  VML image-data `r:id` external-image markers, VML shape `href`, DrawingML
+  linked pictures, `HYPERLINK` fields, direct `w:hyperlink` markup, and generic
+  relationship totals. Tests cover standard hyperlink relationships with
+  external and internal stored target modes, a resolved unsupported image
+  relationship, duplicate markers, body/header stories, Transitional and
+  Strict Word/relationship namespaces, orphaned relationship exclusion,
+  excluded `r:id`, `r:pict`, raw-`src`, and `o:relid` attributes, same-count
+  target changes, excluded-attribute change quietness, relationship-ID
+  renumbering stability, JSON/Markdown/SARIF redaction, and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -312,6 +323,20 @@ image relationships. DocFence reports two direct markers and two external-image
 classifications while keeping relationship IDs and paths out of the output.
 This is a compatibility smoke test, not a runtime dependency or a statement
 that any Word client will retrieve, update, or render the images.
+
+For legacy VML image-data hyperlink markup, release validation combines the
+controlled Word-story package constructed in the public regression test with a
+public real Word XML fragment from a
+[Stack Overflow question](https://stackoverflow.com/questions/52124509/read-images-from-docx-file-with-python-docx).
+That fragment contains the exact `v:imagedata r:id="…" r:href="…"` form in
+legacy VML. It is marker evidence rather than a downloadable fixture suitable
+for an end-to-end package smoke test. The Open XML SDK documents `r:href` as an
+explicit relationship to a hyperlink target, while a separate public
+[Aspose report](https://forum.aspose.com/t/corrupted-targetmode-attribute-value-in-relationship-tag/22502)
+shows the marker paired with an external standard image relationship. The
+release therefore checks both recognized hyperlink modes and a preserved
+unsupported relationship class; it does not claim that a Word client will
+render, honor, or follow the target.
 
 For legacy VML shape-link markup, the release check uses a controlled,
 standards-shaped Word-story package that places direct `href` attributes on all

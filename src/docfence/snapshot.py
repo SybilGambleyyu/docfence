@@ -49,6 +49,7 @@ from docfence.models import (
     WordProtectionInventory,
     WordVmlExternalImageInventory,
     WordVmlHyperlinkInventory,
+    WordVmlImageHyperlinkInventory,
 )
 
 
@@ -669,6 +670,15 @@ class _VmlExternalImageReference:
 
 
 @dataclass(frozen=True)
+class _VmlImageHyperlinkReference:
+    """One private VML ``imagedata/@r:href`` relationship marker."""
+
+    story_part: str
+    marker_signature: str
+    classification: str
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -827,6 +837,7 @@ def _load_package(
                 drawing_linked_picture_references,
                 vml_hyperlink_references,
                 vml_external_image_references,
+                vml_image_hyperlink_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -860,6 +871,9 @@ def _load_package(
             )
             word_vml_external_images = _word_vml_external_image_inventory(
                 vml_external_image_references
+            )
+            word_vml_image_hyperlinks = _word_vml_image_hyperlink_inventory(
+                vml_image_hyperlink_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -952,6 +966,7 @@ def _load_package(
         word_drawing_linked_pictures=word_drawing_linked_pictures,
         word_vml_hyperlinks=word_vml_hyperlinks,
         word_vml_external_images=word_vml_external_images,
+        word_vml_image_hyperlinks=word_vml_image_hyperlinks,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3262,6 +3277,7 @@ def _story_snapshots(
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
+    tuple[_VmlImageHyperlinkReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3274,6 +3290,7 @@ def _story_snapshots(
     drawing_linked_picture_references: list[_DrawingLinkedPictureReference] = []
     vml_hyperlink_references: list[_VmlHyperlinkReference] = []
     vml_external_image_references: list[_VmlExternalImageReference] = []
+    vml_image_hyperlink_references: list[_VmlImageHyperlinkReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3289,6 +3306,7 @@ def _story_snapshots(
             story_drawing_linked_picture_references,
             story_vml_hyperlink_references,
             story_vml_external_image_references,
+            story_vml_image_hyperlink_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3304,6 +3322,7 @@ def _story_snapshots(
         )
         vml_hyperlink_references.extend(story_vml_hyperlink_references)
         vml_external_image_references.extend(story_vml_external_image_references)
+        vml_image_hyperlink_references.extend(story_vml_image_hyperlink_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3325,6 +3344,7 @@ def _story_snapshots(
         tuple(drawing_linked_picture_references),
         tuple(vml_hyperlink_references),
         tuple(vml_external_image_references),
+        tuple(vml_image_hyperlink_references),
         tuple(web_extension_control_references),
     )
 
@@ -3398,6 +3418,7 @@ def _snapshot_story(
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
+    tuple[_VmlImageHyperlinkReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3499,6 +3520,7 @@ def _snapshot_story(
         _drawing_linked_picture_references(root, part_key, relationships),
         _vml_hyperlink_references(root, part_key, relationships),
         _vml_external_image_references(root, part_key, relationships),
+        _vml_image_hyperlink_references(root, part_key, relationships),
     )
 
 
@@ -4956,6 +4978,96 @@ def _word_vml_external_image_inventory(
             classification_counts["external_image_relationship"]
         ),
         unsupported_relationship_vml_external_image_count=(
+            classification_counts["unsupported_relationship"]
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _vml_image_hyperlink_marker_signature(relationship: _Relationship) -> str:
+    """Fingerprint only the reviewed VML image-data hyperlink relationship."""
+
+    return _digest_records(
+        [("word_vml_image_hyperlink_marker", *relationship.canonical_value())]
+    )
+
+
+def _vml_image_hyperlink_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_VmlImageHyperlinkReference, ...]:
+    """Retain direct VML ``imagedata/@r:href`` markers without link material.
+
+    ``r:href`` is the VML image-data relationship attribute documented for a
+    hyperlink target. This inventories each stored direct marker in supported
+    Word stories, including duplicate markers that share a relationship and
+    markers in markup-compatibility branches. It does not select a rendering
+    branch, associate a marker with a visual image, resolve a target, follow a
+    link, or claim that a client will honor one. Other VML image-data surfaces
+    (including ``r:id``, ``r:pict``, ``src``, and ``o:relid``) stay outside this
+    narrow marker and signature boundary.
+    """
+
+    references: list[_VmlImageHyperlinkReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace != _VML_NAMESPACE or local_name != "imagedata":
+            continue
+        relationship_id = _relationship_attribute_value(element, "href")
+        if relationship_id is None:
+            continue
+        relationship = relationships.get(relationship_id)
+        if relationship is None:
+            continue
+        references.append(
+            _VmlImageHyperlinkReference(
+                story_part=story_part,
+                marker_signature=_vml_image_hyperlink_marker_signature(
+                    relationship
+                ),
+                classification=_hyperlink_markup_relationship_classification(
+                    relationship
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _word_vml_image_hyperlink_inventory(
+    references: tuple[_VmlImageHyperlinkReference, ...],
+) -> WordVmlImageHyperlinkInventory:
+    """Aggregate VML image-data hyperlink markers without emitting targets."""
+
+    classification_counts = {
+        "external_relationship": 0,
+        "internal_relationship": 0,
+        "unsupported_relationship": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        classification_counts[reference.classification] += 1
+        records.append(
+            (
+                "word_vml_image_hyperlink",
+                reference.story_part,
+                reference.marker_signature,
+                reference.classification,
+            )
+        )
+
+    return WordVmlImageHyperlinkInventory(
+        vml_image_hyperlink_reference_count=len(references),
+        vml_image_hyperlink_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        external_relationship_vml_image_hyperlink_count=(
+            classification_counts["external_relationship"]
+        ),
+        internal_relationship_vml_image_hyperlink_count=(
+            classification_counts["internal_relationship"]
+        ),
+        unsupported_relationship_vml_image_hyperlink_count=(
             classification_counts["unsupported_relationship"]
         ),
         signature=_digest_records(records),

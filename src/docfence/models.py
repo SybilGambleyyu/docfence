@@ -541,6 +541,45 @@ class WordVmlExternalImageInventory:
 
 
 @dataclass(frozen=True)
+class WordVmlImageHyperlinkInventory:
+    """Direct legacy VML image-data hyperlink markup, aggregate only.
+
+    Relationship targets and IDs, VML markup, story paths, and fingerprints can
+    reveal document context. Public output reports only direct-marker and
+    relationship-classification counts; the private signature carries only the
+    reviewed relationship semantics, not other VML image-data attributes. A
+    stored marker is not evidence that a Word client will select, follow, or
+    otherwise honor a target.
+    """
+
+    vml_image_hyperlink_reference_count: int
+    vml_image_hyperlink_story_count: int
+    external_relationship_vml_image_hyperlink_count: int
+    internal_relationship_vml_image_hyperlink_count: int
+    unsupported_relationship_vml_image_hyperlink_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "vml_image_hyperlink_reference_count": (
+                self.vml_image_hyperlink_reference_count
+            ),
+            "vml_image_hyperlink_story_count": (
+                self.vml_image_hyperlink_story_count
+            ),
+            "external_relationship_vml_image_hyperlink_count": (
+                self.external_relationship_vml_image_hyperlink_count
+            ),
+            "internal_relationship_vml_image_hyperlink_count": (
+                self.internal_relationship_vml_image_hyperlink_count
+            ),
+            "unsupported_relationship_vml_image_hyperlink_count": (
+                self.unsupported_relationship_vml_image_hyperlink_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -894,6 +933,7 @@ class DocumentSnapshot:
     word_drawing_linked_pictures: WordDrawingLinkedPictureInventory
     word_vml_hyperlinks: WordVmlHyperlinkInventory
     word_vml_external_images: WordVmlExternalImageInventory
+    word_vml_image_hyperlinks: WordVmlImageHyperlinkInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -1000,6 +1040,9 @@ class DocumentSnapshot:
             "word_vml_hyperlinks": self.word_vml_hyperlinks.public_dict(),
             "word_vml_external_images": (
                 self.word_vml_external_images.public_dict()
+            ),
+            "word_vml_image_hyperlinks": (
+                self.word_vml_image_hyperlinks.public_dict()
             ),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),

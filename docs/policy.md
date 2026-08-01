@@ -80,6 +80,8 @@ starter policy.
 | `no_word_drawing_linked_picture_changes` | `DFP056` | DrawingML linked-picture inventory differs | Comparison |
 | `require_no_word_vml_external_images` | `DFP057` | Candidate has direct VML external-image markup | Candidate |
 | `no_word_vml_external_image_changes` | `DFP058` | VML external-image inventory differs | Comparison |
+| `require_no_word_vml_image_hyperlinks` | `DFP059` | Candidate has direct VML image-data hyperlink markup | Candidate |
+| `no_word_vml_image_hyperlink_changes` | `DFP060` | VML image-data hyperlink inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -138,6 +140,8 @@ intentionally retains direct DrawingML linked-picture markup.
 intentionally retains direct legacy VML shape-link markup.
 `no_word_vml_external_image_changes` provides the equivalent gate when it
 intentionally retains direct legacy VML external-image markup.
+`no_word_vml_image_hyperlink_changes` provides the equivalent gate when it
+intentionally retains direct legacy VML image-data hyperlink markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -757,6 +761,40 @@ such markup. `no_word_vml_external_image_changes` compares the private
 inventory signature for a controlled baseline. Neither rule resolves,
 retrieves, renders, updates, or validates an image target, or establishes that
 Word will load, reach, or honor it.
+
+## Legacy VML image-data hyperlink scope
+
+Direct legacy VML `v:imagedata/@r:href` markup is separate from image-data
+`r:id` external-image markers, VML shape `href`, `HYPERLINK` fields, direct
+WordprocessingML `w:hyperlink` markup, DrawingML linked pictures, and generic
+relationship totals. DocFence records every direct `r:href` marker in supported
+Word stories, including duplicate markers and markers in Markup Compatibility
+branches. It does not select a client-rendered branch or associate a marker
+with a visual image.
+
+The Open XML SDK identifies this attribute as an explicit relationship to a
+hyperlink target. A standard hyperlink relationship with stored external or
+internal target mode is counted in the respective class. Any other resolved
+relationship type or mode remains reviewable as unsupported stored evidence;
+it is not silently treated as a conventional hyperlink. An orphaned hyperlink
+relationship does not create a marker count. Image-data `r:id`, `r:pict`, raw
+`src`, and `o:relid` are deliberately excluded rather than treated as alternate
+forms of this marker.
+
+Public output reports only aggregate marker/story and relationship-classification
+counts. Targets, relationship IDs, VML attributes, story paths, and fingerprints
+never appear in reports. The private signature is limited to the reviewed
+`r:href` relationship semantics: a same-count target rewrite stays visible, an
+unchanged-semantics relationship-ID renumbering remains quiet, and changes to
+the excluded image-data attributes do not become an image-data-hyperlink
+inventory change.
+
+`require_no_word_vml_image_hyperlinks` fails whenever a candidate contains a
+stored direct VML image-data hyperlink marker. Use it for a handoff that must
+carry no such markup. `no_word_vml_image_hyperlink_changes` compares the
+private inventory signature for a controlled baseline. Neither rule resolves,
+retrieves, follows, validates, evaluates, renders, or executes a target, or
+establishes that Word will honor it.
 
 ## External Word document dependency scope
 

@@ -253,6 +253,20 @@ and fingerprints remain private. A same-count external target rewrite remains
 review-visible; relationship-ID renumbering with unchanged semantics and a
 raw-`src` rewrite do not create external-image inventory churn.
 
+Direct legacy VML `v:imagedata/@r:href` markup receives a separate
+private-digest treatment from image-data `r:id` external-image markers, VML
+shape links, DrawingML linked pictures, field instructions, `w:hyperlink`
+markup, and broad relationship totals. DocFence records every direct marker in
+supported Word stories and classifies a resolved standard hyperlink relationship
+by stored external or internal target mode. Another resolved relationship type
+or mode remains visible only as unsupported stored evidence. Image-data `r:id`,
+`r:pict`, raw `src`, and `o:relid` are intentionally excluded from both the
+marker definition and its private signature. Targets, relationship IDs, VML
+attributes, paths, and fingerprints remain private. A same-count reviewed
+target rewrite remains review-visible; unchanged-semantics relationship-ID
+renumbering and excluded-attribute rewrites do not create image-data-hyperlink
+inventory churn.
+
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
 `w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
@@ -450,6 +464,13 @@ picture, or honors an external relationship. DocFence does not select Markup
 Compatibility branches, associate a marker with a rendered image, deduplicate a
 visual picture, resolve, retrieve, validate, evaluate, render, or update an
 image target.
+Direct legacy VML image-data hyperlink counts are likewise stored-state
+evidence, not proof that a client selects a marker, associates it with a visual
+image, treats a relationship as a conventional hyperlink, reaches or safely
+follows a target, or executes an action. DocFence does not select Markup
+Compatibility branches, associate markers with rendered images, deduplicate a
+visual picture, resolve, retrieve, follow, validate, evaluate, render, or
+execute a target.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

@@ -88,6 +88,11 @@ def _profile_markdown(document: dict[str, object]) -> str:
         )
     )
     lines.extend(
+        _word_vml_image_hyperlink_section(
+            document.get("word_vml_image_hyperlinks", {})
+        )
+    )
+    lines.extend(
         _word_permission_range_section(document.get("word_permission_ranges", {}))
     )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
@@ -132,6 +137,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_drawing_linked_picture_comparison(before, after))
     lines.extend(_word_vml_hyperlink_comparison(before, after))
     lines.extend(_word_vml_external_image_comparison(before, after))
+    lines.extend(_word_vml_image_hyperlink_comparison(before, after))
     lines.extend(_word_permission_range_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
@@ -348,6 +354,10 @@ def _word_vml_external_image_section(value: object) -> list[str]:
     return _inventory_section("VML external-image inventory", value)
 
 
+def _word_vml_image_hyperlink_section(value: object) -> list[str]:
+    return _inventory_section("VML image-data hyperlink inventory", value)
+
+
 def _word_permission_range_section(value: object) -> list[str]:
     return _inventory_section("Word editable-range permission inventory", value)
 
@@ -534,6 +544,16 @@ def _word_vml_external_image_comparison(
         "VML external-image inventory",
         before.get("word_vml_external_images", {}),
         after.get("word_vml_external_images", {}),
+    )
+
+
+def _word_vml_image_hyperlink_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "VML image-data hyperlink inventory",
+        before.get("word_vml_image_hyperlinks", {}),
+        after.get("word_vml_image_hyperlinks", {}),
     )
 
 
