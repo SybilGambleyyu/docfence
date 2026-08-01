@@ -12,7 +12,8 @@ click/hover/mouse-over hyperlink-action markup, direct DrawingML linked-picture
 image-data `v:imagedata/@r:id` markup, legacy VML image-data hyperlink
 `v:imagedata/@r:href` markup, legacy Office VML linked-OLE
 `o:OLEObject Type="Link"` markup, direct WordprocessingML linked-object-property
-`w:objectLink` markup, external
+`w:objectLink` markup, direct WordprocessingML embedded-control-anchor
+`w:control` markup, external
 relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
@@ -66,6 +67,8 @@ are private too.
 WordprocessingML linked-object-property program and shape identifiers,
 relationship IDs and targets, field codes, locking and update metadata, markup,
 and story-part paths are private too.
+WordprocessingML embedded-control names and shape identifiers, relationship IDs
+and targets, markup, and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -96,7 +99,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.25 focuses on Office Open XML Word documents and templates and
+Version 0.26 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -114,6 +117,8 @@ deliberately keeps a small, inspectable contract:
   legacy Office VML `o:OLEObject Type="Link"` linked-OLE markup,
   direct WordprocessingML `w:object/w:objectLink` linked-object-property
   markup,
+  direct WordprocessingML `w:object/w:control` and `w:pict/w:control`
+  embedded-control-anchor markup,
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
@@ -163,6 +168,12 @@ the conventional `word/embeddings/` and `word/activeX/` payload folders. An
 encountered `w:altChunk` must reference an internal standard `aFChunk`
 relationship; the target must resolve to a stored package member or parsing
 fails closed. The payload itself remains opaque and private.
+
+Direct Word embedded-control anchors are a separate stored-markup boundary from
+those generic relationship and payload totals. DocFence records only direct
+`w:control` children of `w:object` or `w:pict` in supported stories and does
+not equate a package-level ActiveX/control relationship with a displayed
+control anchor.
 
 Document properties are likewise recorded without exposing their names or
 values. DocFence recognizes the standard core, extended, and custom property
@@ -527,6 +538,40 @@ WordprocessingML linked-object-property marker, while
 inventory never resolves, retrieves, opens, updates, activates, evaluates,
 renders, or executes an OLE object, and no count establishes that a client will
 honor it.
+
+WordprocessingML embedded-control anchors are a separate, direct compatibility
+surface. DocFence records every direct `w:control` child of `w:object` or
+`w:pict` in supported Word stories, including duplicates and markers in Markup
+Compatibility branches. The two parent positions are reported separately. It
+does not select a branch, associate a marker with a rendered shape, deduplicate
+a visual control, instantiate or load a control, inspect its persistence data,
+or predict a client outcome. Arbitrary `w:control` elements outside those two
+direct parent positions, `w:objectLink`, `w:objectEmbed`, VML image data and
+shapes, ActiveX-binary relationships, fields, and generic embedded-control
+relationship/payload totals remain separate inventories.
+
+When an anchor carries `r:id`, DocFence recognizes only a standard control
+relationship. An internal target mode receives the standard internal class; an
+external target mode is surfaced separately as stored nonconforming evidence,
+because an Embedded Control Persistence Part must be internal. Another
+resolved type or mode remains unsupported. `r:id` is optional, so an anchor
+without it stays in a separate stored-evidence class rather than being
+discarded. None of the classes says that a control is available, enabled, safe,
+or loaded by a client.
+
+Public output exposes only aggregate marker/story, direct-parent, and
+relationship-classification counts. Control names and shape identifiers,
+relationship IDs and targets, markup, story paths, and fingerprints remain
+private. The full direct marker is privately fingerprinted, so same-count
+control-name, shape, or target rewrites remain visible; a relationship-ID
+renumbering with unchanged relationship semantics stays quiet.
+
+`require_no_word_embedded_controls` fails for every stored direct
+WordprocessingML embedded-control anchor, while
+`no_word_embedded_control_changes` protects an approved marker baseline. The
+inventory never resolves, retrieves, opens, instantiates, loads, activates,
+evaluates, renders, or executes a control, and no count establishes that a
+client will honor it.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -917,6 +962,19 @@ permits the standard OLE-object relationship target to be internal or external.
 The Microsoft API page's illustrative `updateMode="user"` is not promoted to a
 standard mode: DocFence keeps an absent or unexpected stored mode only as
 unsupported evidence, never as a client-behavior claim.
+The direct embedded-control-anchor boundary follows the Open XML SDK's
+[`w:control` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.control?view=openxml-3.0.1),
+which documents `w:object` and `w:pict` parent forms and the optional property
+relationship. The ISO 29500 schema's
+[`CT_Control`, `CT_Object`, and `CT_Picture` definitions](https://github.com/dolanmiu/docx/blob/309b972e107b8cc12c65027d5161b7045e404b6c/ooxml-schemas/ISO-IEC29500-4_2016/wml.xsd#L1146-L1199)
+confirm the optional `r:id` and the two direct parent positions. The ECMA-376
+[Embedded Control Persistence Part contract](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Embedded_topic_ID0EQDBO.html)
+requires its target relationship to be internal. Microsoft lists ActiveX
+controls among active content that Trust Center can block or warn about, which
+makes an anchored-control review signal useful without equating every anchor
+with executable behavior ([Microsoft Support](https://support.microsoft.com/en-us/office/collab-files/active-content-types-in-your-files)).
+Release validation also profiles docx4j's public
+[`LegacyForms.docx` fixture at `74ea743`](https://github.com/plutext/docx4j/blob/74ea74323a33d92769fdbd3e6d5fe730bbfd8ffb/docx4j-core-tests/src/test/resources/LegacyForms.docx): it contains five direct `w:object/w:control` anchors, each backed by an internal standard control relationship. The release reports only aggregate anchor and relationship classes, never the fixture's control names, shape IDs, or payload data.
 The legacy VML boundary follows Microsoft's [`HRef` shape
 attribute](https://learn.microsoft.com/en-us/windows/win32/vml/href-attribute--shape--vml),
 which defines the URL used when a shape is clicked, and the W3C's

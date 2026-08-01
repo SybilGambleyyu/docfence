@@ -615,6 +615,23 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_embedded_controls.signature
+        != after.word_embedded_controls.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_embedded_control_inventory_changed",
+                message=(
+                    "Stored WordprocessingML embedded-control-anchor inventory "
+                    "changed."
+                ),
+                details={
+                    "before": before.word_embedded_controls.public_dict(),
+                    "after": after.word_embedded_controls.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

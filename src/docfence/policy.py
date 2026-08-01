@@ -76,6 +76,8 @@ _RULES: Final = {
     "no_word_vml_linked_ole_object_changes": "DFP062",
     "require_no_word_object_links": "DFP063",
     "no_word_object_link_changes": "DFP064",
+    "require_no_word_embedded_controls": "DFP065",
+    "no_word_embedded_control_changes": "DFP066",
 }
 
 
@@ -469,6 +471,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_embedded_control_changes") and (
+        before.word_embedded_controls.signature
+        != after.word_embedded_controls.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_embedded_control_changes",
+                "Stored WordprocessingML embedded-control-anchor inventory changed.",
+                {
+                    "before": before.word_embedded_controls.public_dict(),
+                    "after": after.word_embedded_controls.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -810,6 +826,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                     "linked-object-property markup."
                 ),
                 after.word_object_links.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_embedded_controls") and any(
+        after.word_embedded_controls.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_embedded_controls",
+                "Candidate contains stored WordprocessingML embedded-control anchors.",
+                after.word_embedded_controls.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

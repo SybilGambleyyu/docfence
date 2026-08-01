@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.25 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.26 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -20,7 +20,8 @@ following properties:
   direct legacy VML image-data hyperlink `v:imagedata/@r:href` markup state,
   direct legacy Office VML linked-OLE `o:OLEObject Type="Link"` markup state,
   direct WordprocessingML `w:object/w:objectLink` linked-object-property
-  markup state, and
+  markup state, direct WordprocessingML `w:object/w:control` and
+  `w:pict/w:control` embedded-control-anchor markup state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -184,6 +185,17 @@ following properties:
   exclusion, unavailable relationship failure, same-count field/target
   changes, relationship-ID renumbering stability, JSON/Markdown/SARIF
   redaction, and policy findings;
+- direct WordprocessingML `w:control` markup is separately inventoried only
+  as a direct child of `w:object` or `w:pict`, distinct from arbitrary
+  unparented markers, `w:objectLink`, `w:objectEmbed`, legacy VML linked-OLE
+  markup, VML image data/shapes, ActiveX-binary relationships, field
+  inventories, and generic control relationship/payload totals. Tests cover
+  parent-position counts, standard internal and external control relationships,
+  unsupported and missing relationships, duplicate markers, body/header
+  stories, Transitional and Strict Word/relationship namespaces, orphaned and
+  unparented-marker exclusion, unavailable relationship failure, same-count
+  control-name/target rewrites, relationship-ID renumbering stability,
+  JSON/Markdown/SARIF redaction, and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -231,6 +243,8 @@ following properties:
   direct WordprocessingML linked-object-property program and shape IDs,
   relationship IDs and targets, field codes, locking and update metadata,
   markup, and story paths,
+  direct WordprocessingML embedded-control names and shape IDs, relationship
+  IDs and targets, markup, and story paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -406,6 +420,32 @@ release is a narrow, standards-shaped stored-XML compatibility boundary, not an
 assertion of widespread contemporary Word authoring behavior or runtime
 interoperability.
 
+For WordprocessingML embedded-control anchors, release validation uses the
+controlled Word-story package in the public regression test. It exercises the
+two direct parent positions, standard internal and external control
+relationships, unsupported and missing-ID state, duplicates, body/header
+stories, Strict encodings, orphan and unparented-marker exclusion, unavailable
+relationships, same-count name/target rewrites, and relationship-ID renumbering.
+The Open XML SDK [documents `w:control`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.control?view=openxml-3.0.1)
+as an Office 2007+ element with `w:object` and `w:pict` parent forms; the
+ISO-schema [`CT_Control`, `CT_Object`, and `CT_Picture` source](https://github.com/dolanmiu/docx/blob/309b972e107b8cc12c65027d5161b7045e404b6c/ooxml-schemas/ISO-IEC29500-4_2016/wml.xsd#L1146-L1199)
+shows the optional `r:id` and direct parent positions. The ECMA-376
+[Embedded Control Persistence Part contract](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Embedded_topic_ID0EQDBO.html)
+requires the persistence relationship target to be internal.
+
+Public package coverage is deliberately modest but includes a real positive
+fixture. The 503 readable packages from the 505 nominal Open XML SDK test-asset
+corpus at `cd2b359` contain no direct `w:control` marker or `word/activeX/`
+member. A scan of 141 Word packages at docx4j commit
+[`74ea743`](https://github.com/plutext/docx4j/tree/74ea74323a33d92769fdbd3e6d5fe730bbfd8ffb)
+found one positive package: [`LegacyForms.docx`](https://github.com/plutext/docx4j/blob/74ea74323a33d92769fdbd3e6d5fe730bbfd8ffb/docx4j-core-tests/src/test/resources/LegacyForms.docx)
+has five direct `w:object/w:control` anchors, all with internal standard
+control relationships, plus fifteen `word/activeX/` ZIP members. Profiling the
+public raw fixture reports the five anchors while the existing generic inventory
+reports ten control relationships, demonstrating why the direct-anchor boundary
+is not interchangeable with package-level totals. This is stored-package
+evidence, not a claim that every Word client will load or enable a control.
+
 For legacy VML shape-link markup, the release check uses a controlled,
 standards-shaped Word-story package that places direct `href` attributes on all
 supported VML geometry kinds and keeps the package's relationship, field,
@@ -469,6 +509,10 @@ bounded stored marker/relationship evidence only. It also does not assert that
 a direct WordprocessingML `w:objectLink` marker is schema-valid,
 selected, source-backed at review time, updated, activated, rendered, or
 honored by Word; it records bounded stored marker/relationship evidence only.
+It also does not assert that a direct WordprocessingML `w:control` marker is
+schema-valid, selected, installed, loaded, enabled, safe, activated, rendered,
+or honored by Word; it records bounded stored marker/relationship evidence
+only.
 The style/default layer is a stored declaration inventory, not a renderer. It
 does not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
@@ -482,5 +526,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.25 contract; see
+only, not field evaluation. Those limits are explicit in the 0.26 contract; see
 [threat model](threat-model.md).

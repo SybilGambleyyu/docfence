@@ -2,6 +2,36 @@
 
 All notable changes are documented here.
 
+## 0.26.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct WordprocessingML
+  embedded-control anchors: `w:control` children of `w:object` or `w:pict` in
+  supported Word stories. It is separate from arbitrary `w:control` markup,
+  `w:objectLink`, `w:objectEmbed`, VML linked-OLE/image/shape markup, fields,
+  ActiveX-binary relationships, and broad embedded-control relationship/payload
+  totals.
+- Added `DFP065` to require a handoff with no direct Word embedded-control
+  anchor and `DFP066` to protect an approved anchor baseline.
+- Reports expose only aggregate anchor/story, direct-parent, and backing
+  relationship classes: standard control relationships with stored internal or
+  external target mode, unsupported relationships, and anchors without `r:id`.
+  The external class remains reviewable nonconforming evidence because the
+  standard Embedded Control Persistence Part requires an internal target.
+  Control names and shape identifiers, relationship IDs and targets, markup,
+  story paths, and fingerprints remain private.
+- The private signature retains each full direct marker, with relationship IDs
+  normalized to their stored relationship semantics. Same-count name, shape, or
+  target rewrites therefore remain review-visible while a relationship-ID
+  renumbering with unchanged semantics remains quiet.
+- Added regression coverage for `w:object`/`w:pict` direct-parent scoping,
+  external/internal/unsupported/missing-ID relationship classes, duplicates,
+  body/header stories, Strict encodings, unparented and orphan exclusion,
+  unavailable relationships, same-count name/target rewrites, relationship-ID
+  renumbering stability, privacy redaction, and policy/SARIF output. Release
+  validation also profiles docx4j's public `LegacyForms.docx` fixture, which
+  supplies five real direct anchors and their internal standard relationship
+  chains.
+
 ## 0.25.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct WordprocessingML

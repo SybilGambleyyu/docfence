@@ -678,6 +678,53 @@ class WordObjectLinkInventory:
 
 
 @dataclass(frozen=True)
+class WordEmbeddedControlInventory:
+    """Direct WordprocessingML embedded-control anchors, aggregate only.
+
+    Relationship targets and IDs, control names, shape identifiers, markup,
+    story paths, and fingerprints can reveal document context. Public output
+    reports only direct-marker, parent-position, and relationship-classification
+    counts; the private signature retains the direct reviewed marker. A stored
+    marker is not evidence that a Word client will load, render, activate, or
+    otherwise honor an embedded control.
+    """
+
+    embedded_control_count: int
+    embedded_control_story_count: int
+    object_parent_embedded_control_count: int
+    pict_parent_embedded_control_count: int
+    internal_standard_control_relationship_embedded_control_count: int
+    external_standard_control_relationship_embedded_control_count: int
+    unsupported_relationship_embedded_control_count: int
+    without_relationship_id_embedded_control_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "embedded_control_count": self.embedded_control_count,
+            "embedded_control_story_count": self.embedded_control_story_count,
+            "object_parent_embedded_control_count": (
+                self.object_parent_embedded_control_count
+            ),
+            "pict_parent_embedded_control_count": (
+                self.pict_parent_embedded_control_count
+            ),
+            "internal_standard_control_relationship_embedded_control_count": (
+                self.internal_standard_control_relationship_embedded_control_count
+            ),
+            "external_standard_control_relationship_embedded_control_count": (
+                self.external_standard_control_relationship_embedded_control_count
+            ),
+            "unsupported_relationship_embedded_control_count": (
+                self.unsupported_relationship_embedded_control_count
+            ),
+            "without_relationship_id_embedded_control_count": (
+                self.without_relationship_id_embedded_control_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -1034,6 +1081,7 @@ class DocumentSnapshot:
     word_vml_image_hyperlinks: WordVmlImageHyperlinkInventory
     word_vml_linked_ole_objects: WordVmlLinkedOleObjectInventory
     word_object_links: WordObjectLinkInventory
+    word_embedded_controls: WordEmbeddedControlInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -1148,6 +1196,7 @@ class DocumentSnapshot:
                 self.word_vml_linked_ole_objects.public_dict()
             ),
             "word_object_links": self.word_object_links.public_dict(),
+            "word_embedded_controls": self.word_embedded_controls.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

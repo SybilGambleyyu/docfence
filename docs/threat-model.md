@@ -54,6 +54,9 @@ markup, and story-part paths are sensitive package material too.
 Direct WordprocessingML linked-object-property program and shape identifiers,
 relationship IDs and targets, field codes, locking and update metadata, markup,
 and story-part paths are sensitive package material too.
+Direct WordprocessingML embedded-control names and shape identifiers,
+relationship IDs and targets, markup, and story-part paths are sensitive package
+material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -290,6 +293,24 @@ so same-count source, program, field-code, update-mode, or target rewrites stay
 review-visible while relationship-ID renumbering with unchanged semantics stays
 quiet.
 
+Direct WordprocessingML `w:control` markup receives a separate private-digest
+treatment only when it is a direct child of `w:object` or `w:pict` in a
+supported Word story. The direct parent position is retained as an aggregate
+class because the standard describes the two forms separately; arbitrary
+`w:control` elements elsewhere do not become anchors. This boundary is distinct
+from `w:objectLink`, `w:objectEmbed`, legacy VML linked-OLE markup, VML image
+data and shapes, ActiveX-binary relationships, fields, and broad embedded
+control relationship/payload totals. A direct marker without optional `r:id`
+remains reviewable evidence. When it has an ID, only a standard control
+relationship is classified: internal is the conforming persistence-part mode,
+while external remains separately visible as nonconforming stored evidence;
+another resolved type or mode is unsupported. Public output exposes only
+aggregate anchor/story, parent-position, and relationship-classification counts.
+Control names and shape identifiers, relationship IDs and targets, markup,
+paths, and fingerprints remain private. The full direct marker is privately
+fingerprinted, so same-count name, shape, or target rewrites stay review-visible
+while a relationship-ID renumbering with unchanged semantics stays quiet.
+
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
 `w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
@@ -506,6 +527,13 @@ object, retrieves a source, updates or activates an OLE object, or honors a
 stored update mode. DocFence does not select Markup Compatibility branches,
 associate markers with rendered objects, deduplicate a visual object, resolve,
 retrieve, open, update, activate, evaluate, render, or execute an OLE object.
+Direct WordprocessingML embedded-control-anchor counts are likewise stored-state
+evidence, not proof that a client selects a marker, associates it with a visual
+control, has an applicable control installed, loads persisted data, enables
+active content, or renders or honors it. DocFence does not select Markup
+Compatibility branches, associate markers with rendered controls, deduplicate a
+visual control, resolve, retrieve, open, instantiate, load, activate, evaluate,
+render, or execute a control.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

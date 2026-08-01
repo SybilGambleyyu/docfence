@@ -43,6 +43,7 @@ from docfence.models import (
     WordDocumentVariableInventory,
     WordDrawingHyperlinkInventory,
     WordDrawingLinkedPictureInventory,
+    WordEmbeddedControlInventory,
     WordHyperlinkFieldInventory,
     WordHyperlinkMarkupInventory,
     WordObjectLinkInventory,
@@ -127,10 +128,14 @@ _OLE_OBJECT_RELATIONSHIP_TYPES: Final = frozenset(
         "http://purl.oclc.org/ooxml/officedocument/relationships/oleobject",
     }
 )
-_EMBEDDED_CONTROL_RELATIONSHIP_TYPES: Final = frozenset(
+_CONTROL_RELATIONSHIP_TYPES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officedocument/2006/relationships/control",
         "http://purl.oclc.org/ooxml/officedocument/relationships/control",
+    }
+)
+_EMBEDDED_CONTROL_RELATIONSHIP_TYPES: Final = _CONTROL_RELATIONSHIP_TYPES | frozenset(
+    {
         "http://schemas.microsoft.com/office/2006/relationships/activexcontrolbinary",
     }
 )
@@ -708,6 +713,16 @@ class _WordObjectLinkReference:
 
 
 @dataclass(frozen=True)
+class _WordEmbeddedControlReference:
+    """One private direct WordprocessingML embedded-control anchor."""
+
+    story_part: str
+    markup_signature: str
+    parent_kind: str
+    relationship_classification: str
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -869,6 +884,7 @@ def _load_package(
                 vml_image_hyperlink_references,
                 vml_linked_ole_object_references,
                 word_object_link_references,
+                word_embedded_control_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -910,6 +926,9 @@ def _load_package(
                 vml_linked_ole_object_references
             )
             word_object_links = _word_object_link_inventory(word_object_link_references)
+            word_embedded_controls = _word_embedded_control_inventory(
+                word_embedded_control_references
+            )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
                     archive,
@@ -1004,6 +1023,7 @@ def _load_package(
         word_vml_image_hyperlinks=word_vml_image_hyperlinks,
         word_vml_linked_ole_objects=word_vml_linked_ole_objects,
         word_object_links=word_object_links,
+        word_embedded_controls=word_embedded_controls,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3317,6 +3337,7 @@ def _story_snapshots(
     tuple[_VmlImageHyperlinkReference, ...],
     tuple[_VmlLinkedOleObjectReference, ...],
     tuple[_WordObjectLinkReference, ...],
+    tuple[_WordEmbeddedControlReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3332,6 +3353,7 @@ def _story_snapshots(
     vml_image_hyperlink_references: list[_VmlImageHyperlinkReference] = []
     vml_linked_ole_object_references: list[_VmlLinkedOleObjectReference] = []
     word_object_link_references: list[_WordObjectLinkReference] = []
+    word_embedded_control_references: list[_WordEmbeddedControlReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3350,6 +3372,7 @@ def _story_snapshots(
             story_vml_image_hyperlink_references,
             story_vml_linked_ole_object_references,
             story_word_object_link_references,
+            story_word_embedded_control_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3370,6 +3393,9 @@ def _story_snapshots(
             story_vml_linked_ole_object_references
         )
         word_object_link_references.extend(story_word_object_link_references)
+        word_embedded_control_references.extend(
+            story_word_embedded_control_references
+        )
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3394,6 +3420,7 @@ def _story_snapshots(
         tuple(vml_image_hyperlink_references),
         tuple(vml_linked_ole_object_references),
         tuple(word_object_link_references),
+        tuple(word_embedded_control_references),
         tuple(web_extension_control_references),
     )
 
@@ -3470,6 +3497,7 @@ def _snapshot_story(
     tuple[_VmlImageHyperlinkReference, ...],
     tuple[_VmlLinkedOleObjectReference, ...],
     tuple[_WordObjectLinkReference, ...],
+    tuple[_WordEmbeddedControlReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3574,6 +3602,7 @@ def _snapshot_story(
         _vml_image_hyperlink_references(root, part_key, relationships),
         _vml_linked_ole_object_references(root, part_key, relationships),
         _word_object_link_references(root, part_key, relationships),
+        _word_embedded_control_references(root, part_key, relationships),
     )
 
 
@@ -5364,6 +5393,138 @@ def _word_object_link_inventory(
             relationship_counts["unsupported_relationship"]
         ),
         without_relationship_id_object_link_count=(
+            relationship_counts["without_relationship_id"]
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _control_relationship_classification(
+    relationship: _Relationship | None,
+) -> str:
+    """Classify a Word embedded-control property relationship as stored.
+
+    A control-persistence relationship must be internal under the OOXML part
+    model. The external class therefore records a standard control relationship
+    type with a nonconforming stored target mode rather than treating it as a
+    usable control payload.
+    """
+
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold() not in _CONTROL_RELATIONSHIP_TYPES
+    ):
+        return "unsupported_relationship"
+    target_mode = relationship.target_mode.casefold()
+    if target_mode == "internal":
+        return "internal_standard_control_relationship"
+    if target_mode == "external":
+        return "external_standard_control_relationship"
+    return "unsupported_relationship"
+
+
+def _word_embedded_control_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_WordEmbeddedControlReference, ...]:
+    """Retain direct WordprocessingML embedded-control anchors.
+
+    This narrow stored-markup inventory records each direct ``w:control`` child
+    of ``w:object`` or ``w:pict`` in a supported Word story, including duplicate
+    markers and markers in markup-compatibility branches. The standard assigns
+    those two parent positions distinct embedded-control representations. The
+    full direct marker remains privately fingerprinted so control names, shape
+    identifiers, and relationship metadata never reach output while same-count
+    rewrites stay review-visible. It does not select a rendering branch,
+    associate a marker with a visual shape, instantiate or load a control,
+    inspect a persistence payload, or claim that a client will honor one.
+
+    The ``r:id`` relationship is optional: an omitted ID indicates that the
+    control has no property bag when instantiated, so a direct marker without
+    it remains stored evidence in its own public class. A resolved standard
+    control relationship is classified by its stored target mode. The standard
+    requires that persistence-part relationship to be internal; an external
+    mode remains separately reviewable nonconforming evidence. Generic embedded
+    control relationship/payload totals, ActiveX-binary relationships, VML
+    image data and shapes, ``w:objectLink`` and ``w:objectEmbed`` markup, fields,
+    and arbitrary ``w:control`` elements outside these direct parent positions
+    stay outside this boundary.
+    """
+
+    references: list[_WordEmbeddedControlReference] = []
+    for parent in root.iter():
+        if _is_word_element(parent, "object"):
+            parent_kind = "object"
+        elif _is_word_element(parent, "pict"):
+            parent_kind = "pict"
+        else:
+            continue
+        for element in parent:
+            if not _is_word_element(element, "control"):
+                continue
+            relationship_id = _relationship_id_value(element)
+            relationship_classification = (
+                "without_relationship_id"
+                if relationship_id is None
+                else _control_relationship_classification(
+                    relationships.get(relationship_id)
+                )
+            )
+            references.append(
+                _WordEmbeddedControlReference(
+                    story_part=story_part,
+                    markup_signature=_fingerprint_element(element, relationships),
+                    parent_kind=parent_kind,
+                    relationship_classification=relationship_classification,
+                )
+            )
+    return tuple(references)
+
+
+def _word_embedded_control_inventory(
+    references: tuple[_WordEmbeddedControlReference, ...],
+) -> WordEmbeddedControlInventory:
+    """Aggregate Word embedded-control anchors without emitting metadata."""
+
+    parent_counts = {"object": 0, "pict": 0}
+    relationship_counts = {
+        "internal_standard_control_relationship": 0,
+        "external_standard_control_relationship": 0,
+        "unsupported_relationship": 0,
+        "without_relationship_id": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        parent_counts[reference.parent_kind] += 1
+        relationship_counts[reference.relationship_classification] += 1
+        records.append(
+            (
+                "word_embedded_control",
+                reference.story_part,
+                reference.markup_signature,
+                reference.parent_kind,
+                reference.relationship_classification,
+            )
+        )
+
+    return WordEmbeddedControlInventory(
+        embedded_control_count=len(references),
+        embedded_control_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        object_parent_embedded_control_count=parent_counts["object"],
+        pict_parent_embedded_control_count=parent_counts["pict"],
+        internal_standard_control_relationship_embedded_control_count=(
+            relationship_counts["internal_standard_control_relationship"]
+        ),
+        external_standard_control_relationship_embedded_control_count=(
+            relationship_counts["external_standard_control_relationship"]
+        ),
+        unsupported_relationship_embedded_control_count=(
+            relationship_counts["unsupported_relationship"]
+        ),
+        without_relationship_id_embedded_control_count=(
             relationship_counts["without_relationship_id"]
         ),
         signature=_digest_records(records),

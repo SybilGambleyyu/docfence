@@ -99,6 +99,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_word_object_link_section(document.get("word_object_links", {})))
     lines.extend(
+        _word_embedded_control_section(document.get("word_embedded_controls", {}))
+    )
+    lines.extend(
         _word_permission_range_section(document.get("word_permission_ranges", {}))
     )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
@@ -146,6 +149,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_vml_image_hyperlink_comparison(before, after))
     lines.extend(_word_vml_linked_ole_object_comparison(before, after))
     lines.extend(_word_object_link_comparison(before, after))
+    lines.extend(_word_embedded_control_comparison(before, after))
     lines.extend(_word_permission_range_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
@@ -376,6 +380,12 @@ def _word_object_link_section(value: object) -> list[str]:
     )
 
 
+def _word_embedded_control_section(value: object) -> list[str]:
+    return _inventory_section(
+        "WordprocessingML embedded-control-anchor inventory", value
+    )
+
+
 def _word_permission_range_section(value: object) -> list[str]:
     return _inventory_section("Word editable-range permission inventory", value)
 
@@ -592,6 +602,16 @@ def _word_object_link_comparison(
         "WordprocessingML linked-object-property inventory",
         before.get("word_object_links", {}),
         after.get("word_object_links", {}),
+    )
+
+
+def _word_embedded_control_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "WordprocessingML embedded-control-anchor inventory",
+        before.get("word_embedded_controls", {}),
+        after.get("word_embedded_controls", {}),
     )
 
 

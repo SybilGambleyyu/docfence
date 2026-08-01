@@ -86,6 +86,8 @@ starter policy.
 | `no_word_vml_linked_ole_object_changes` | `DFP062` | VML linked-OLE-object inventory differs | Comparison |
 | `require_no_word_object_links` | `DFP063` | Candidate has direct WordprocessingML linked-object-property markup | Candidate |
 | `no_word_object_link_changes` | `DFP064` | WordprocessingML linked-object-property inventory differs | Comparison |
+| `require_no_word_embedded_controls` | `DFP065` | Candidate has direct WordprocessingML embedded-control anchors | Candidate |
+| `no_word_embedded_control_changes` | `DFP066` | WordprocessingML embedded-control-anchor inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -150,6 +152,8 @@ intentionally retains direct legacy VML image-data hyperlink markup.
 intentionally retains direct legacy VML linked-OLE markup.
 `no_word_object_link_changes` provides the equivalent gate when it
 intentionally retains direct WordprocessingML linked-object-property markup.
+`no_word_embedded_control_changes` provides the equivalent gate when it
+intentionally retains direct WordprocessingML embedded-control anchors.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -174,6 +178,10 @@ control payload evidence. It recognizes the standard `oleObject`, `package`,
 stored in the conventional `word/embeddings/` and `word/activeX/` folders. The
 comparison rule fingerprints those recognized relationship semantics and the
 payload bytes privately, so relationship-ID renumbering alone remains quiet.
+That broader boundary still captures orphaned relationships and payloads.
+`require_no_word_embedded_controls` is deliberately narrower: it inventories
+only direct `w:control` anchors and complements, rather than replaces, this
+package-level gate.
 
 `require_no_alternative_format_imports` fails when a candidate has an `aFChunk`
 relationship, its resolved internal payload, or a direct Word `w:altChunk`
@@ -872,6 +880,41 @@ that must carry no such markup. `no_word_object_link_changes` compares the
 private inventory signature for a controlled baseline. Neither rule resolves,
 retrieves, opens, updates, activates, evaluates, renders, or executes an OLE
 object, or establishes that Word will honor it.
+
+## WordprocessingML embedded-control-anchor scope
+
+Direct WordprocessingML `w:control` markers are counted only when they are
+direct children of `w:object` or `w:pict` in a supported Word story. The public
+inventory reports those two direct parent positions separately; arbitrary
+`w:control` elements elsewhere are not treated as anchors. This is separate
+from `w:objectLink`, `w:objectEmbed`, legacy Office VML linked-OLE markup, VML
+image data and shapes, fields, ActiveX-binary relationships, and generic
+embedded OLE/package/control relationship or payload totals. DocFence retains
+duplicates and markers in Markup Compatibility branches, but does not select a
+client-rendered branch, associate a marker with a visual control, or deduplicate
+an object.
+
+`r:id` is optional. An anchor without one remains a separate stored-evidence
+class; when it exists, only a standard control relationship is recognized. An
+internal target mode receives the internal-standard class. An external target
+mode is shown separately because the OOXML Embedded Control Persistence Part
+requires an internal target; any other resolved type or mode is unsupported
+evidence. These classifications report stored relationship semantics, not
+whether a control is installed, enabled, loaded, safe, or honored by Word.
+
+Public output exposes only aggregate anchor/story, direct-parent, and
+relationship-classification counts. Control names and shape identifiers,
+relationship IDs and targets, markup, story paths, and fingerprints never
+appear in reports. The full direct marker is privately fingerprinted, so
+same-count name, shape, or target rewrites remain visible while a
+relationship-ID renumbering with unchanged semantics remains quiet.
+
+`require_no_word_embedded_controls` fails whenever a candidate contains a
+stored direct WordprocessingML embedded-control anchor. Use it for a handoff
+that must carry no such markup. `no_word_embedded_control_changes` compares
+the private inventory signature for a controlled baseline. Neither rule
+resolves, retrieves, opens, instantiates, loads, activates, evaluates, renders,
+or executes a control, or establishes that Word will honor it.
 
 ## External Word document dependency scope
 
