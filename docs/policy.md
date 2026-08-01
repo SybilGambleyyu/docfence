@@ -74,6 +74,8 @@ starter policy.
 | `no_word_hyperlink_markup_changes` | `DFP050` | WordprocessingML hyperlink-markup inventory differs | Comparison |
 | `require_no_word_drawing_hyperlinks` | `DFP051` | Candidate has direct DrawingML hyperlink-action markup | Candidate |
 | `no_word_drawing_hyperlink_changes` | `DFP052` | DrawingML hyperlink-action inventory differs | Comparison |
+| `require_no_word_vml_hyperlinks` | `DFP053` | Candidate has direct legacy VML shape-link markup | Candidate |
+| `no_word_vml_hyperlink_changes` | `DFP054` | VML hyperlink-markup inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -126,6 +128,8 @@ intentionally retains stored `HYPERLINK` field references.
 intentionally retains direct WordprocessingML hyperlink markup.
 `no_word_drawing_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct DrawingML hyperlink-action markup.
+`no_word_vml_hyperlink_changes` provides the equivalent gate when it
+intentionally retains direct legacy VML shape-link markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -657,6 +661,35 @@ attribute rewrites remain visible, while relationship-ID renumbering with
 unchanged semantics remains quiet. Neither rule resolves, retrieves, follows,
 validates, evaluates, renders, or executes an action, nor does either establish
 that a target is reachable, safe, or honored by a Word client.
+
+## Legacy VML shape-link scope
+
+Direct legacy VML `href` attributes form a fourth stored link surface, separate
+from `HYPERLINK` field codes, direct WordprocessingML `w:hyperlink` markup,
+DrawingML action markup, and broad package relationship totals. The inventory
+scans supported Word stories for a direct unqualified `href` only on the
+documented VML shape-family elements: `arc`, `curve`, `image`, `line`, `oval`,
+`polyline`, `rect`, `roundrect`, `shape`, `group`, and `shapetype`. It counts a
+present attribute even when its value is empty, so malformed or inert-looking
+stored markup remains reviewable.
+
+Public output reports aggregate marker and story counts, separates concrete
+geometry, group, and shape-template markers, and reports only the presence of a
+direct `target` attribute. Raw `href` values, frame targets, titles, alternate
+text, shape IDs, story paths, and fingerprints never appear in reports. The
+private signature retains the complete direct element, so same-count `href`,
+target, or other markup rewrites remain visible.
+
+The inventory does not calculate an effective link inherited from a group or
+shape template, select a Markup Compatibility branch, inspect arbitrary VML
+elements, resolve, retrieve, follow, validate, evaluate, render, or execute an
+action. It is stored-markup evidence only, not proof that Word or another
+client will render, honor, safely reach, or follow a target.
+
+`require_no_word_vml_hyperlinks` fails whenever a candidate contains a
+supported direct VML shape-link marker. Use it for a handoff that must carry no
+such legacy markup. `no_word_vml_hyperlink_changes` compares the private
+inventory signature for a controlled baseline.
 
 ## External Word document dependency scope
 

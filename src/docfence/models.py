@@ -435,6 +435,41 @@ class WordDrawingHyperlinkInventory:
 
 
 @dataclass(frozen=True)
+class WordVmlHyperlinkInventory:
+    """Direct legacy VML ``href`` markup in Word stories, aggregate only.
+
+    VML href values, frame targets, titles, alternate text, shape identifiers,
+    story paths, and fingerprints can reveal document context. They remain in
+    the private signature; public output reports only marker category and
+    target-attribute-presence evidence.
+    """
+
+    vml_hyperlink_element_count: int
+    vml_hyperlink_story_count: int
+    concrete_shape_vml_hyperlink_count: int
+    group_vml_hyperlink_count: int
+    shape_type_vml_hyperlink_count: int
+    target_attribute_vml_hyperlink_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "vml_hyperlink_element_count": self.vml_hyperlink_element_count,
+            "vml_hyperlink_story_count": self.vml_hyperlink_story_count,
+            "concrete_shape_vml_hyperlink_count": (
+                self.concrete_shape_vml_hyperlink_count
+            ),
+            "group_vml_hyperlink_count": self.group_vml_hyperlink_count,
+            "shape_type_vml_hyperlink_count": (
+                self.shape_type_vml_hyperlink_count
+            ),
+            "target_attribute_vml_hyperlink_count": (
+                self.target_attribute_vml_hyperlink_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -785,6 +820,7 @@ class DocumentSnapshot:
     word_hyperlink_fields: WordHyperlinkFieldInventory
     word_hyperlink_markup: WordHyperlinkMarkupInventory
     word_drawing_hyperlinks: WordDrawingHyperlinkInventory
+    word_vml_hyperlinks: WordVmlHyperlinkInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -885,6 +921,7 @@ class DocumentSnapshot:
             "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
             "word_hyperlink_markup": self.word_hyperlink_markup.public_dict(),
             "word_drawing_hyperlinks": self.word_drawing_hyperlinks.public_dict(),
+            "word_vml_hyperlinks": self.word_vml_hyperlinks.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

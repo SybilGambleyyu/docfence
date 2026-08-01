@@ -46,6 +46,7 @@ from docfence.models import (
     WordHyperlinkMarkupInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
+    WordVmlHyperlinkInventory,
 )
 
 
@@ -77,6 +78,7 @@ _DRAWING_NAMESPACES: Final = frozenset(
         "http://purl.oclc.org/ooxml/drawingml/main",
     }
 )
+_VML_NAMESPACE: Final = "urn:schemas-microsoft-com:vml"
 _REL_ATTRIBUTE_NAMESPACES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
@@ -136,6 +138,19 @@ _DRAWING_HYPERLINK_REFERENCE_KINDS: Final = {
     "hlinkClick": "click",
     "hlinkHover": "hover",
     "hlinkMouseOver": "mouse_over",
+}
+_VML_HYPERLINK_REFERENCE_KINDS: Final = {
+    "arc": "concrete_shape",
+    "curve": "concrete_shape",
+    "image": "concrete_shape",
+    "line": "concrete_shape",
+    "oval": "concrete_shape",
+    "polyline": "concrete_shape",
+    "rect": "concrete_shape",
+    "roundrect": "concrete_shape",
+    "shape": "concrete_shape",
+    "group": "group",
+    "shapetype": "shape_type",
 }
 _DOCUMENT_PROPERTY_RELATIONSHIP_TYPES: Final = {
     (
@@ -618,6 +633,16 @@ class _DrawingHyperlinkReference:
 
 
 @dataclass(frozen=True)
+class _VmlHyperlinkReference:
+    """One private direct legacy VML href marker in a Word story."""
+
+    story_part: str
+    markup_signature: str
+    kind: str
+    target_attribute_present: bool
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -773,6 +798,7 @@ def _load_package(
                 hyperlink_field_references,
                 hyperlink_markup_references,
                 drawing_hyperlink_references,
+                vml_hyperlink_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -797,6 +823,9 @@ def _load_package(
             )
             word_drawing_hyperlinks = _word_drawing_hyperlink_inventory(
                 drawing_hyperlink_references
+            )
+            word_vml_hyperlinks = _word_vml_hyperlink_inventory(
+                vml_hyperlink_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -886,6 +915,7 @@ def _load_package(
         word_hyperlink_fields=word_hyperlink_fields,
         word_hyperlink_markup=word_hyperlink_markup,
         word_drawing_hyperlinks=word_drawing_hyperlinks,
+        word_vml_hyperlinks=word_vml_hyperlinks,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3193,6 +3223,7 @@ def _story_snapshots(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_VmlHyperlinkReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3202,6 +3233,7 @@ def _story_snapshots(
     hyperlink_field_references: list[_HyperlinkFieldReference] = []
     hyperlink_markup_references: list[_HyperlinkMarkupReference] = []
     drawing_hyperlink_references: list[_DrawingHyperlinkReference] = []
+    vml_hyperlink_references: list[_VmlHyperlinkReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3214,6 +3246,7 @@ def _story_snapshots(
             story_hyperlink_field_references,
             story_hyperlink_markup_references,
             story_drawing_hyperlink_references,
+            story_vml_hyperlink_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3224,6 +3257,7 @@ def _story_snapshots(
         hyperlink_field_references.extend(story_hyperlink_field_references)
         hyperlink_markup_references.extend(story_hyperlink_markup_references)
         drawing_hyperlink_references.extend(story_drawing_hyperlink_references)
+        vml_hyperlink_references.extend(story_vml_hyperlink_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3242,6 +3276,7 @@ def _story_snapshots(
         tuple(hyperlink_field_references),
         tuple(hyperlink_markup_references),
         tuple(drawing_hyperlink_references),
+        tuple(vml_hyperlink_references),
         tuple(web_extension_control_references),
     )
 
@@ -3312,6 +3347,7 @@ def _snapshot_story(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_VmlHyperlinkReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3410,6 +3446,7 @@ def _snapshot_story(
         _hyperlink_field_references(field_instruction_references),
         _hyperlink_markup_references(root, part_key, relationships),
         _drawing_hyperlink_references(root, part_key, relationships),
+        _vml_hyperlink_references(root, part_key, relationships),
     )
 
 
@@ -4582,6 +4619,80 @@ def _word_drawing_hyperlink_inventory(
         ],
         action_attribute_drawing_hyperlink_count=action_attribute_count,
         invalid_url_attribute_drawing_hyperlink_count=invalid_url_attribute_count,
+        signature=_digest_records(records),
+    )
+
+
+def _vml_hyperlink_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_VmlHyperlinkReference, ...]:
+    """Retain direct legacy VML shape ``href`` markup without link material.
+
+    This is intentionally a narrow stored-markup inventory.  It examines only
+    the VML shape, group, and shape-template element kinds that define an
+    ``href`` surface, and counts a marker whenever its direct unqualified
+    attribute is present, including an empty value.  It neither computes an
+    effective inherited link nor selects a rendering branch, resolves a URL,
+    follows a target, or claims that a click action will execute.
+
+    Nested VML data and formatting elements are excluded even if a producer
+    happens to add an ``href``-named attribute there: this inventory is about
+    the documented direct shape-link surface, not arbitrary legacy markup.
+    """
+
+    references: list[_VmlHyperlinkReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace != _VML_NAMESPACE:
+            continue
+        kind = _VML_HYPERLINK_REFERENCE_KINDS.get(local_name)
+        if kind is None or _unqualified_attribute_value(element, "href") is None:
+            continue
+        references.append(
+            _VmlHyperlinkReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                kind=kind,
+                target_attribute_present=(
+                    _unqualified_attribute_value(element, "target") is not None
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _word_vml_hyperlink_inventory(
+    references: tuple[_VmlHyperlinkReference, ...],
+) -> WordVmlHyperlinkInventory:
+    """Aggregate direct VML shape-link markers without emitting raw markup."""
+
+    kind_counts = {"concrete_shape": 0, "group": 0, "shape_type": 0}
+    records: list[tuple[str, ...]] = []
+    target_attribute_count = 0
+    for reference in references:
+        kind_counts[reference.kind] += 1
+        target_attribute_count += int(reference.target_attribute_present)
+        records.append(
+            (
+                "word_vml_hyperlink",
+                reference.story_part,
+                reference.markup_signature,
+                reference.kind,
+                str(reference.target_attribute_present),
+            )
+        )
+
+    return WordVmlHyperlinkInventory(
+        vml_hyperlink_element_count=len(references),
+        vml_hyperlink_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        concrete_shape_vml_hyperlink_count=kind_counts["concrete_shape"],
+        group_vml_hyperlink_count=kind_counts["group"],
+        shape_type_vml_hyperlink_count=kind_counts["shape_type"],
+        target_attribute_vml_hyperlink_count=target_attribute_count,
         signature=_digest_records(records),
     )
 

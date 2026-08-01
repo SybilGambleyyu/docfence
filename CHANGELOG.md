@@ -2,6 +2,33 @@
 
 All notable changes are documented here.
 
+## 0.20.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct legacy VML shape-link
+  `href` markup in supported Word stories. It is separate from `HYPERLINK`
+  fields, direct `w:hyperlink` markup, DrawingML hyperlink actions, and broad
+  package relationship totals because a VML geometry element stores its target
+  directly.
+- Added `DFP053` to require a handoff with no supported direct VML shape-link
+  markup and `DFP054` to protect an approved marker baseline.
+- Reports now expose only aggregate marker/story, concrete-shape/group/
+  shape-template, and direct-`target`-attribute-presence counts. VML `href`
+  values, frame targets, titles, alternate text, shape identifiers, story
+  paths, and fingerprints remain private.
+- Supports direct unqualified `href` attributes on VML `arc`, `curve`, `image`,
+  `line`, `oval`, `polyline`, `rect`, `roundrect`, `shape`, `group`, and
+  `shapetype` elements, including an empty direct `href` as stored evidence. It
+  does not inspect arbitrary VML elements, calculate
+  inherited group/template links, select a Markup Compatibility branch, or
+  claim a client renders or honors a target.
+- Private inventory signatures catch same-count `href`, frame-target, and other
+  direct-markup changes. The implementation does not resolve, retrieve,
+  follow, validate, evaluate, render, or execute an action.
+- Added regression coverage for every supported VML geometry kind, body/header
+  stories, privacy redaction, policy/SARIF output, separation from relationship
+  totals, fields, `w:hyperlink`, and DrawingML inventories, and same-count
+  `href` and target changes.
+
 ## 0.19.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct DrawingML

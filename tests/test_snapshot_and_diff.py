@@ -109,6 +109,7 @@ _STRICT_HYPERLINK_RELATIONSHIP_TYPE = (
 )
 _DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
 _STRICT_DRAWING_NAMESPACE = "http://purl.oclc.org/ooxml/drawingml/main"
+_VML_NAMESPACE = "urn:schemas-microsoft-com:vml"
 _WORDPROCESSING_DRAWING_NAMESPACE = (
     "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 )
@@ -3136,6 +3137,124 @@ rules:
         assert marker not in rendered
 
 
+def test_word_vml_hyperlink_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    href_changed = tmp_path / "href-changed.docx"
+    target_changed = tmp_path / "target-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_vml_hyperlink_document(before, include_markup=False)
+    _write_vml_hyperlink_document(after)
+    _write_vml_hyperlink_document(
+        href_changed,
+        primary_href="https://VML_CHANGED_HREF_DO_NOT_LEAK.invalid/path",
+    )
+    _write_vml_hyperlink_document(
+        target_changed,
+        primary_target="VML_CHANGED_TARGET_FRAME_DO_NOT_LEAK",
+    )
+
+    expected_inventory = {
+        "vml_hyperlink_element_count": 11,
+        "vml_hyperlink_story_count": 2,
+        "concrete_shape_vml_hyperlink_count": 9,
+        "group_vml_hyperlink_count": 1,
+        "shape_type_vml_hyperlink_count": 1,
+        "target_attribute_vml_hyperlink_count": 2,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    href_changed_snapshot = load_snapshot(href_changed)
+    target_changed_snapshot = load_snapshot(target_changed)
+    assert after_snapshot.public_dict()["word_vml_hyperlinks"] == expected_inventory
+    assert before_snapshot.public_dict()["word_vml_hyperlinks"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert after_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 0,
+        "external_relationship_count": 0,
+    }
+    for inventory_name in (
+        "word_hyperlink_fields",
+        "word_hyperlink_markup",
+        "word_drawing_hyperlinks",
+    ):
+        assert not any(after_snapshot.public_dict()[inventory_name].values())
+
+    report = diff_documents(before, after)
+    assert "word_vml_hyperlink_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_vml_hyperlink_inventory_changed" in {
+        change.kind for change in diff_documents(after, href_changed).changes
+    }
+    assert "word_vml_hyperlink_inventory_changed" in {
+        change.kind for change in diff_documents(after, target_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_vml_hyperlinks: true
+  no_word_vml_hyperlink_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP053",
+        "DFP054",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, href_changed), policy
+        ).findings
+    } == {"DFP053", "DFP054"}
+
+    gated = apply_policy(report, policy)
+    href_changed_gated = apply_policy(diff_documents(after, href_changed), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(href_changed_snapshot, "json"),
+            render_report(href_changed_gated, "sarif"),
+            render_profile(target_changed_snapshot, "markdown"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_VML_HYPERLINK_INVENTORY_CHANGED",
+        "DFP053",
+        "DFP054",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VML_PRIMARY_HREF_DO_NOT_LEAK",
+        "VML_CHANGED_HREF_DO_NOT_LEAK",
+        "VML_PRIMARY_TARGET_FRAME_DO_NOT_LEAK",
+        "VML_CHANGED_TARGET_FRAME_DO_NOT_LEAK",
+        "VML_PRIMARY_TITLE_DO_NOT_LEAK",
+        "VML_PRIMARY_ALT_DO_NOT_LEAK",
+        "VML_PRIMARY_SHAPE_ID_DO_NOT_LEAK",
+        "VML_ROUNDRECT_HREF_DO_NOT_LEAK",
+        "VML_RECT_HREF_DO_NOT_LEAK",
+        "VML_GROUP_HREF_DO_NOT_LEAK",
+        "VML_GROUP_TARGET_FRAME_DO_NOT_LEAK",
+        "VML_OVAL_HREF_DO_NOT_LEAK",
+        "VML_CURVE_HREF_DO_NOT_LEAK",
+        "VML_POLYLINE_HREF_DO_NOT_LEAK",
+        "VML_IMAGE_HREF_DO_NOT_LEAK",
+        "VML_SHAPETYPE_HREF_DO_NOT_LEAK",
+        "VML_HEADER_LINE_HREF_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     noncanonical = tmp_path / "noncanonical.docx"
     strict_relationship = tmp_path / "strict-relationship.docx"
@@ -5204,6 +5323,85 @@ def _write_drawing_hyperlink_document(
             f"{header_relationship_entries}</Relationships>"
         ).encode()
 
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_vml_hyperlink_document(
+    path,
+    *,
+    include_markup: bool = True,
+    primary_href: str = "https://VML_PRIMARY_HREF_DO_NOT_LEAK.invalid/path",
+    primary_target: str = "VML_PRIMARY_TARGET_FRAME_DO_NOT_LEAK",
+) -> None:
+    """Write direct VML shape-link markers across body and header stories."""
+
+    body_markup = ""
+    header_markup = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                "<w:r><w:pict>"
+                '<v:shape id="VML_PRIMARY_SHAPE_ID_DO_NOT_LEAK" '
+                f'href="{primary_href}" target="{primary_target}" '
+                'title="VML_PRIMARY_TITLE_DO_NOT_LEAK" '
+                'alt="VML_PRIMARY_ALT_DO_NOT_LEAK"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:roundrect href="https://VML_ROUNDRECT_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:rect href="https://VML_RECT_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:group href="https://VML_GROUP_HREF_DO_NOT_LEAK.invalid" '
+                'target="VML_GROUP_TARGET_FRAME_DO_NOT_LEAK">'
+                '<v:oval href="https://VML_OVAL_HREF_DO_NOT_LEAK.invalid"/>'
+                "</v:group></w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:arc href=""/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:curve href="https://VML_CURVE_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:polyline href="https://VML_POLYLINE_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:image href="https://VML_IMAGE_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+                "<w:r><w:pict>"
+                '<v:shapetype href="https://VML_SHAPETYPE_HREF_DO_NOT_LEAK.invalid"/>'
+                "</w:pict></w:r>",
+            )
+        )
+        header_markup = (
+            "<w:r><w:pict>"
+            '<v:line href="https://VML_HEADER_LINE_HREF_DO_NOT_LEAK.invalid"/>'
+            "</w:pict></w:r>"
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}" xmlns:v="{_VML_NAMESPACE}">'
+            f"<w:body><w:p>{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{W}" xmlns:v="{_VML_NAMESPACE}">'
+            f"<w:p>{header_markup}"
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)

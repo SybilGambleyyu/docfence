@@ -64,6 +64,8 @@ _RULES: Final = {
     "no_word_hyperlink_markup_changes": "DFP050",
     "require_no_word_drawing_hyperlinks": "DFP051",
     "no_word_drawing_hyperlink_changes": "DFP052",
+    "require_no_word_vml_hyperlinks": "DFP053",
+    "no_word_vml_hyperlink_changes": "DFP054",
 }
 
 
@@ -375,6 +377,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_vml_hyperlink_changes") and (
+        before.word_vml_hyperlinks.signature != after.word_vml_hyperlinks.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_vml_hyperlink_changes",
+                "Stored VML hyperlink markup inventory changed.",
+                {
+                    "before": before.word_vml_hyperlinks.public_dict(),
+                    "after": after.word_vml_hyperlinks.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -653,6 +668,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_drawing_hyperlinks",
                 "Candidate contains stored DrawingML hyperlink-action markup.",
                 after.word_drawing_hyperlinks.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_vml_hyperlinks") and any(
+        after.word_vml_hyperlinks.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_vml_hyperlinks",
+                "Candidate contains stored VML hyperlink markup.",
+                after.word_vml_hyperlinks.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

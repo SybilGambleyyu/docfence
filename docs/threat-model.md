@@ -42,6 +42,8 @@ material too.
 Direct WordprocessingML hyperlink targets, local anchors, locations, tooltips,
 frame names, history values, display text, relationship IDs, and story-part
 paths are sensitive package material too.
+Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
+identifiers, and story-part paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -206,6 +208,18 @@ frame names, history settings, relationship IDs, paths, and fingerprints remain
 private. A same-count target or attribute rewrite remains review-visible in the
 private signature; an ID rewrite with identical semantics does not add report
 churn.
+
+Direct legacy VML shape `href` markup receives a separate private-digest
+treatment from field instructions, `w:hyperlink` markup, DrawingML actions,
+and broad relationship totals. DocFence scans direct unqualified `href`
+attributes on the documented VML `arc`, `curve`, `image`, `line`, `oval`,
+`polyline`, `rect`, `roundrect`, `shape`, `group`, and `shapetype` elements in
+supported Word stories. It reports only aggregate marker/story, concrete-shape,
+group, shape-template, and direct-`target`-attribute-presence counts. Raw URLs,
+frame targets, titles, alternate text, shape IDs, paths, and fingerprints remain
+private. The full direct element is privately fingerprinted so same-count
+attribute rewrites remain review-visible. This does not calculate an inherited
+or rendered link, inspect arbitrary VML elements, or follow an `href`.
 
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
@@ -386,6 +400,12 @@ safe, permitted, or honored, or an `action` executes. DocFence does not select
 Markup Compatibility branches, associate markers with rendered objects,
 deduplicate a visual link, resolve, retrieve, follow, validate, evaluate,
 render, or execute an action.
+Direct legacy VML shape-link counts are likewise stored-state evidence, not
+proof that a client inherits a group/template link, renders a shape, honors an
+`href`, reaches or safely follows a target, or opens a frame. DocFence does not
+select a Markup Compatibility branch, calculate effective VML inheritance,
+inspect arbitrary VML attributes, resolve, retrieve, follow, validate,
+evaluate, render, or execute an `href` action.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

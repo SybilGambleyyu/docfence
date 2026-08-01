@@ -7,8 +7,8 @@ surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 `HYPERLINK` field references, direct `w:hyperlink` markup, DrawingML
-click/hover/mouse-over hyperlink-action markup, external relationships, custom
-XML, macros,
+click/hover/mouse-over hyperlink-action markup, legacy VML shape `href`
+markup, external relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
@@ -48,6 +48,8 @@ private too.
 DrawingML hyperlink-action targets, invalid URLs, actions, tooltips, frame
 names, history settings, relationship IDs, and story-part paths are private
 too.
+Legacy VML shape-link URLs, target frames, titles, alternate text, shape
+identifiers, and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -78,7 +80,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.19 focuses on Office Open XML Word documents and templates and
+Version 0.20 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -89,6 +91,7 @@ deliberately keeps a small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, `HYPERLINK` field-reference, direct `w:hyperlink` markup,
   DrawingML click/hover/mouse-over hyperlink-action markup,
+  legacy VML shape/group/shape-template `href` markup,
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
@@ -333,6 +336,27 @@ approved marker baseline. This inventory never resolves, retrieves, follows,
 validates, evaluates, or renders an action, and no count establishes that a
 target is reachable, safe, or honored by a Word client.
 
+Legacy VML shape markup is a fourth direct link surface: a `v:shape`,
+`v:roundrect`, `v:group`, or related VML geometry element can carry an
+unqualified `href` directly, without a relationship, `w:hyperlink`,
+`HYPERLINK` field, or DrawingML action. DocFence scans direct `href` attributes
+only on documented VML geometry elements in supported Word stories: `arc`,
+`curve`, `image`, `line`, `oval`, `polyline`, `rect`, `roundrect`, `shape`,
+`group`, and `shapetype`. It reports aggregate element/story, concrete-shape,
+group, shape-template, and `target`-attribute-presence counts. An empty direct
+`href` remains stored-markup evidence.
+
+This is deliberately a legacy-markup inventory, not an effective-link engine.
+It does not infer a link inherited from a group or shape template, inspect
+arbitrary VML attributes, select a Markup Compatibility branch, resolve,
+retrieve, follow, validate, evaluate, render, or execute an action. URLs,
+frame targets, titles, alternate text, IDs, story paths, and fingerprints stay
+private. Its private signature catches same-count `href` or markup rewrites.
+`require_no_word_vml_hyperlinks` fails for every supported direct VML marker,
+while `no_word_vml_hyperlink_changes` protects an approved marker baseline; no
+count establishes that a target is reachable, safe, or honored by a Word
+client.
+
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
 counts stored `w:mailMerge` configuration, external data and header source
@@ -462,6 +486,8 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_word_document_variable_fields: true
   require_no_word_hyperlink_fields: true
   require_no_word_hyperlink_markup: true
+  require_no_word_drawing_hyperlinks: true
+  require_no_word_vml_hyperlinks: true
   require_no_external_document_dependencies: true
 ```
 
@@ -487,6 +513,8 @@ later mutation:
   no_word_document_variable_field_changes: true
   no_word_hyperlink_field_changes: true
   no_word_hyperlink_markup_changes: true
+  no_word_drawing_hyperlink_changes: true
+  no_word_vml_hyperlink_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -658,6 +686,13 @@ attributes; the corresponding [`a:hlinkHover` definition](https://c-rex.net/samp
 and Open XML SDK [`a:hlinkMouseOver` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.hyperlinkonmouseover?view=openxml-3.0.1)
 complete the stored action family. DocFence counts direct stored markers only,
 keeps all values private, and makes no client-execution or target-safety claim.
+The legacy VML boundary follows Microsoft's [`HRef` shape
+attribute](https://learn.microsoft.com/en-us/windows/win32/vml/href-attribute--shape--vml),
+which defines the URL used when a shape is clicked, and the W3C's
+[VML note](https://www.w3.org/TR/NOTE-VML), which documents `href` and
+`target` on the VML shape-family vocabulary. DocFence limits itself to those
+direct stored shape/group/shape-template attributes in Word stories and does
+not infer an effective rendered or inherited link.
 The editable-range boundary follows the Open XML SDK's
 [`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
 and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),

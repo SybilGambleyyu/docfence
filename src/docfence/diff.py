@@ -534,6 +534,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.word_vml_hyperlinks.signature != after.word_vml_hyperlinks.signature:
+        changes.append(
+            Change(
+                kind="word_vml_hyperlink_inventory_changed",
+                message="Stored VML hyperlink markup inventory changed.",
+                details={
+                    "before": before.word_vml_hyperlinks.public_dict(),
+                    "after": after.word_vml_hyperlinks.public_dict(),
+                },
+            )
+        )
     if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
