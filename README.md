@@ -10,6 +10,7 @@ external relationships, custom XML, macros, core/extended/custom document
 properties, mail-merge configuration and recipient-data state, data-bound
 content controls and their referenced custom XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
+document-task workflow state, task-pane Office web-extension configuration,
 embedded OLE/package/control
 payloads, OOXML alternative-format imports, headers, footers, notes, document
 settings, and otherwise unclassified package payloads.
@@ -19,6 +20,9 @@ source material, or writes a redline. By default, reports contain counts,
 story categories, and change categories—not document text, reviewer
 names, comments, URLs, relationship targets, field instructions, custom XML,
 macro bytes, or modern-comment contact records and identifiers.
+It also never emits document-task identities, user records, titles, dates, or
+comment anchor IDs; Office web-extension IDs, stores, properties, bindings, or
+part paths stay private as well.
 
 ```bash
 python -m pip install docfence
@@ -47,7 +51,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.9 focuses on Office Open XML Word documents and templates and
+Version 0.10 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -60,6 +64,8 @@ deliberately keeps a small, inspectable contract:
   custom-XML, macro,
   core/extended/custom document-property, mail-merge, content-control
   data-binding, modern-comment metadata,
+  document-task workflow state, task-pane Office web-extension configuration
+  and content-control binding markers,
   attached-template/master-subdocument/frameset-source external document
   dependency, embedded OLE/package/control, alternative-format-import,
   and Track Changes inventories;
@@ -158,6 +164,30 @@ reaction details, part paths, and private fingerprints never leave the process.
 The inventory does not render comments, resolve a person, synchronize with a
 cloud service, infer notification behavior, or modify comment state.
 
+Document tasks are likewise stored review/workflow state, not live task
+objects. DocFence discovers the Office document-tasks part through its standard
+content type, relationship type, or conventional `word/tasks` / `word/tasks.xml`
+path, validates
+its `Tasks` root, and reports aggregate task, history-event, user-reference,
+comment-anchor, and event-category counts. Task IDs, event IDs and dates,
+user identities, task titles, schedules, progress, priorities, and comment IDs
+are privately fingerprinted only. It does not assign, synchronize, notify,
+complete, create, or otherwise operate on a task.
+
+Task-pane Office web-extension state is a separate inventory. DocFence
+recognizes task-pane and web-extension parts through their standard content
+types, relationship types, and conventional `word/webextensions/` paths;
+validates each root; and requires a task pane's direct web-extension reference
+to resolve through the expected internal relationship. It reports only
+aggregate task-pane, visible/locked-pane, extension-part, store-reference,
+property, binding, enabled auto-show-property, and Word content-control binding
+counts. It accepts the established `webextension` task-pane reference spelling
+alongside `webextensionref`. A `w15:webExtensionCreated` marker takes precedence
+over `w15:webExtensionLinked` for the content-control count. DocFence does not
+install, execute, retrieve, authenticate, validate a manifest for, or claim
+that Word will open an Office add-in. An enabled
+`Office.AutoShowTaskpaneWithDocument` property is stored-state evidence only.
+
 External Word document dependencies are recorded separately from the generic
 external-relationship count. DocFence recognizes an attached template in a
 Document Settings part, `w:subDoc` anchors in the main document, and
@@ -203,6 +233,8 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
+  require_no_document_tasks: true
+  require_no_taskpane_web_extensions: true
   require_no_external_document_dependencies: true
 ```
 
@@ -218,6 +250,8 @@ later mutation:
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
+  no_document_task_changes: true
+  no_taskpane_web_extension_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -238,6 +272,11 @@ external template/subdocument/frame-source targets, and all fingerprints.
 Modern-comment author/contact/provider identifiers, paragraph and durable IDs,
 timestamps, thread associations, and reaction identities receive the same
 private treatment.
+Document-task IDs, event IDs and times, user identities, titles, dates,
+progress, priorities, and comment anchors are private too. So are task-pane
+layout details and Office web-extension IDs, stores, reference versions,
+property names and values, binding identifiers and application references,
+content-control markers, and part paths.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -307,6 +346,16 @@ shows that reactions can carry user and time metadata. The Open XML SDK's
 [Wordprocessing document types](https://github.com/dotnet/Open-XML-SDK/blob/main/src/DocumentFormat.OpenXml/WordprocessingDocumentType.cs)
 also enumerate document, template, macro-enabled document, and macro-enabled
 template packages.
+The document-task boundary follows Microsoft's [document-task OOXML
+contract](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-otaskxml/652d0608-31b8-4e90-a83a-98d6957b7fed).
+The task-pane boundary follows the [Office web-extension OOXML
+contract](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-owexml/29f59f30-b835-461a-bd8a-ca400a7bc717)
+and Word's [`RemoveDocInfoType`](https://learn.microsoft.com/en-us/javascript/api/word/word.removedocinfotype?view=word-js-preview),
+which lists both document tasks and task-pane web extensions as removable
+document information. Microsoft's [task-pane auto-open
+guidance](https://learn.microsoft.com/en-us/office/dev/add-ins/develop/automatically-open-a-task-pane-with-a-document)
+explains the stored auto-show setting; DocFence reports that setting without
+predicting runtime behavior.
 
 ## Development
 

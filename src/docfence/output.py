@@ -58,6 +58,12 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(
         _modern_comment_metadata_section(document.get("modern_comment_metadata", {}))
     )
+    lines.extend(_document_task_section(document.get("document_tasks", {})))
+    lines.extend(
+        _taskpane_web_extension_section(
+            document.get("taskpane_web_extensions", {})
+        )
+    )
     lines.extend(
         _external_document_dependency_section(
             document.get("external_document_dependencies", {})
@@ -81,6 +87,8 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
+    lines.extend(_document_task_comparison(before, after))
+    lines.extend(_taskpane_web_extension_comparison(before, after))
     lines.extend(_external_document_dependency_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
@@ -262,6 +270,14 @@ def _modern_comment_metadata_section(value: object) -> list[str]:
     return _inventory_section("Modern Word comment metadata inventory", value)
 
 
+def _document_task_section(value: object) -> list[str]:
+    return _inventory_section("Word document task inventory", value)
+
+
+def _taskpane_web_extension_section(value: object) -> list[str]:
+    return _inventory_section("Task-pane Office web extension inventory", value)
+
+
 def _external_document_dependency_section(value: object) -> list[str]:
     return _inventory_section("External Word document dependency inventory", value)
 
@@ -340,6 +356,26 @@ def _modern_comment_metadata_comparison(
         "Modern Word comment metadata inventory",
         before.get("modern_comment_metadata", {}),
         after.get("modern_comment_metadata", {}),
+    )
+
+
+def _document_task_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Word document task inventory",
+        before.get("document_tasks", {}),
+        after.get("document_tasks", {}),
+    )
+
+
+def _taskpane_web_extension_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Task-pane Office web extension inventory",
+        before.get("taskpane_web_extensions", {}),
+        after.get("taskpane_web_extensions", {}),
     )
 
 

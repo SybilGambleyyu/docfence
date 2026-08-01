@@ -475,6 +475,31 @@ def _append_package_changes(
                 },
             )
         )
+    if before.document_tasks.signature != after.document_tasks.signature:
+        changes.append(
+            Change(
+                kind="document_task_inventory_changed",
+                message="Stored Word document task inventory changed.",
+                details={
+                    "before": before.document_tasks.public_dict(),
+                    "after": after.document_tasks.public_dict(),
+                },
+            )
+        )
+    if (
+        before.taskpane_web_extensions.signature
+        != after.taskpane_web_extensions.signature
+    ):
+        changes.append(
+            Change(
+                kind="taskpane_web_extension_inventory_changed",
+                message="Stored task-pane Office web extension inventory changed.",
+                details={
+                    "before": before.taskpane_web_extensions.public_dict(),
+                    "after": after.taskpane_web_extensions.public_dict(),
+                },
+            )
+        )
     if (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature

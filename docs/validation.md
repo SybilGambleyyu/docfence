@@ -1,13 +1,15 @@
 # Validation notes
 
-DocFence 0.9 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.10 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
 
 - stored paragraph/table changes are summarized without source text;
 - revision markup, comments, modern comment contact/thread/identifier/reaction
-  metadata, direct `w:vanish` runs, direct hidden paragraph
+  metadata, document tasks, task-pane Office web-extension configuration and
+  Word content-control web-extension markers, direct `w:vanish` runs, and
+  direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
   declarations, fields, content controls, Track Changes, external
   relationships, custom XML, macros, mail-merge configuration, source/header
@@ -37,6 +39,19 @@ following properties:
 - modern-comment metadata changes with the same public counts—including a
   paragraph/durable identifier-only rewrite—produce a private-inventory change,
   while a relationship-ID renumbering alone remains quiet;
+- document-task parts are discovered through standard relationships, content
+  types, and conventional paths (including extensionless paths); public
+  task/history/user/comment-anchor/event counts remain aggregate-only;
+  identifier- or value-only task rewrites remain visible privately while
+  relationship-ID renumbering alone remains quiet;
+- task-pane and web-extension parts are discovered through standard
+  relationships, content types, and conventional paths (including an
+  extensionless task-pane path); both `webextensionref` and established
+  `webextension` direct task-pane references are accepted; malformed roots,
+  external recognized relationships, and missing direct references fail closed;
+- same-count Office web-extension store/property/binding rewrites produce a
+  private-inventory change; enabled `webExtensionCreated` takes precedence over
+  `webExtensionLinked` when counting document-bound content controls;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -50,6 +65,9 @@ following properties:
   external-source field paths, connections, queries, application/item names,
   modern-comment authors, providers, user IDs, paragraph/durable IDs, dates,
   thread state, reaction identities,
+  document-task IDs, event times, users, titles, schedules, priorities,
+  progress, comment anchors, Office web-extension IDs, stores, properties,
+  bindings, content-control markers, and pane values,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -59,8 +77,10 @@ following properties:
   roots, malformed recognized mail-merge relationship references, and malformed
   recognized data-binding custom-XML-properties relationships, and malformed
   recognized external-document dependency relationship/anchor state, malformed
-  modern-comment metadata roots, and external modern-comment metadata
-  relationships are rejected before reporting.
+  modern-comment metadata roots, external modern-comment metadata
+  relationships, document-task roots/relationships, and task-pane or
+  web-extension roots, relationships, and direct task-pane references are
+  rejected before reporting.
 
 The release check is:
 
@@ -113,5 +133,5 @@ recipient. It does not assert that a recognized external-source field will
 update, reach a target, use a particular argument as a source, or be accepted
 by Word; it records the bounded stored field-family evidence only. The
 style/default layer is a stored declaration inventory, not a renderer. Those
-limits are explicit in the 0.9 contract; see the
+limits are explicit in the 0.10 contract; see the
 [threat model](threat-model.md).

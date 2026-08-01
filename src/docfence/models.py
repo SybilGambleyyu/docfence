@@ -238,6 +238,82 @@ class ModernCommentMetadataInventory:
 
 
 @dataclass(frozen=True)
+class DocumentTaskInventory:
+    """Stored Word document tasks, exposed only as aggregate workflow counts."""
+
+    document_task_part_count: int
+    task_count: int
+    task_history_event_count: int
+    task_user_reference_count: int
+    task_comment_anchor_count: int
+    assignment_event_count: int
+    unassignment_event_count: int
+    creation_event_count: int
+    title_change_event_count: int
+    schedule_change_event_count: int
+    progress_change_event_count: int
+    priority_change_event_count: int
+    deletion_event_count: int
+    restoration_event_count: int
+    unassign_all_event_count: int
+    undo_event_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "document_task_part_count": self.document_task_part_count,
+            "task_count": self.task_count,
+            "task_history_event_count": self.task_history_event_count,
+            "task_user_reference_count": self.task_user_reference_count,
+            "task_comment_anchor_count": self.task_comment_anchor_count,
+            "assignment_event_count": self.assignment_event_count,
+            "unassignment_event_count": self.unassignment_event_count,
+            "creation_event_count": self.creation_event_count,
+            "title_change_event_count": self.title_change_event_count,
+            "schedule_change_event_count": self.schedule_change_event_count,
+            "progress_change_event_count": self.progress_change_event_count,
+            "priority_change_event_count": self.priority_change_event_count,
+            "deletion_event_count": self.deletion_event_count,
+            "restoration_event_count": self.restoration_event_count,
+            "unassign_all_event_count": self.unassign_all_event_count,
+            "undo_event_count": self.undo_event_count,
+        }
+
+
+@dataclass(frozen=True)
+class TaskpaneWebExtensionInventory:
+    """Stored task-pane Office add-in configuration, kept aggregate-only."""
+
+    taskpane_part_count: int
+    taskpane_count: int
+    visible_taskpane_count: int
+    locked_taskpane_count: int
+    web_extension_part_count: int
+    web_extension_reference_count: int
+    web_extension_property_count: int
+    web_extension_binding_count: int
+    auto_show_taskpane_setting_count: int
+    web_extension_bound_content_control_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "taskpane_part_count": self.taskpane_part_count,
+            "taskpane_count": self.taskpane_count,
+            "visible_taskpane_count": self.visible_taskpane_count,
+            "locked_taskpane_count": self.locked_taskpane_count,
+            "web_extension_part_count": self.web_extension_part_count,
+            "web_extension_reference_count": self.web_extension_reference_count,
+            "web_extension_property_count": self.web_extension_property_count,
+            "web_extension_binding_count": self.web_extension_binding_count,
+            "auto_show_taskpane_setting_count": self.auto_show_taskpane_setting_count,
+            "web_extension_bound_content_control_count": (
+                self.web_extension_bound_content_control_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class ExternalDocumentDependencyInventory:
     """Stored references to external Word document packages."""
 
@@ -332,6 +408,8 @@ class DocumentSnapshot:
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
+    document_tasks: DocumentTaskInventory
+    taskpane_web_extensions: TaskpaneWebExtensionInventory
     external_document_dependencies: ExternalDocumentDependencyInventory
     track_revisions_enabled: bool
     comment_count: int
@@ -415,6 +493,8 @@ class DocumentSnapshot:
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),
+            "document_tasks": self.document_tasks.public_dict(),
+            "taskpane_web_extensions": self.taskpane_web_extensions.public_dict(),
             "external_document_dependencies": (
                 self.external_document_dependencies.public_dict()
             ),

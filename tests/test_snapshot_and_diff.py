@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import zipfile
 from dataclasses import replace
 
@@ -156,6 +157,29 @@ _COMMENTS_IDS_RELATIONSHIP_TYPE = (
 _COMMENTS_EXTENSIBLE_RELATIONSHIP_TYPE = (
     "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible"
 )
+_DOCUMENT_TASK_NAMESPACE = (
+    "http://schemas.microsoft.com/office/tasks/2019/documenttasks"
+)
+_DOCUMENT_TASK_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2019/05/relationships/documenttasks"
+)
+_DOCUMENT_TASK_CONTENT_TYPE = "application/vnd.ms-office.documenttasks+xml"
+_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE = (
+    "http://schemas.microsoft.com/office/webextensions/taskpanes/2010/11"
+)
+_TASKPANE_WEB_EXTENSION_NAMESPACE = (
+    "http://schemas.microsoft.com/office/webextensions/webextension/2010/11"
+)
+_TASKPANE_WEB_EXTENSION_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes"
+)
+_WEB_EXTENSION_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2011/relationships/webextension"
+)
+_TASKPANE_WEB_EXTENSION_CONTENT_TYPE = (
+    "application/vnd.ms-office.webextensiontaskpanes+xml"
+)
+_WEB_EXTENSION_CONTENT_TYPE = "application/vnd.ms-office.webextension+xml"
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -1283,6 +1307,283 @@ def test_modern_comment_metadata_discovers_noncanonical_parts_and_rejects_invali
         load_snapshot(external_relationship)
 
 
+def test_document_tasks_and_taskpane_web_extensions_are_private_and_semantic(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    task_payload_changed = tmp_path / "task-payload-changed.docx"
+    web_extension_payload_changed = tmp_path / "web-extension-payload-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_document_task_and_web_extension_document(
+        before,
+        include_document_tasks=False,
+        include_taskpane_web_extensions=False,
+    )
+    _write_document_task_and_web_extension_document(after)
+    _write_document_task_and_web_extension_document(
+        task_payload_changed,
+        task_marker="DOCUMENT_TASK_PAYLOAD_CHANGED_DO_NOT_LEAK",
+    )
+    _write_document_task_and_web_extension_document(
+        web_extension_payload_changed,
+        web_extension_marker="WEB_EXTENSION_PAYLOAD_CHANGED_DO_NOT_LEAK",
+    )
+    _write_document_task_and_web_extension_document(
+        renumbered,
+        relationship_id_suffix="9",
+    )
+
+    expected_tasks = {
+        "document_task_part_count": 1,
+        "task_count": 1,
+        "task_history_event_count": 11,
+        "task_user_reference_count": 13,
+        "task_comment_anchor_count": 2,
+        "assignment_event_count": 1,
+        "unassignment_event_count": 1,
+        "creation_event_count": 1,
+        "title_change_event_count": 1,
+        "schedule_change_event_count": 1,
+        "progress_change_event_count": 1,
+        "priority_change_event_count": 1,
+        "deletion_event_count": 1,
+        "restoration_event_count": 1,
+        "unassign_all_event_count": 1,
+        "undo_event_count": 1,
+    }
+    expected_web_extensions = {
+        "taskpane_part_count": 1,
+        "taskpane_count": 2,
+        "visible_taskpane_count": 1,
+        "locked_taskpane_count": 1,
+        "web_extension_part_count": 2,
+        "web_extension_reference_count": 3,
+        "web_extension_property_count": 3,
+        "web_extension_binding_count": 3,
+        "auto_show_taskpane_setting_count": 1,
+        "web_extension_bound_content_control_count": 2,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert after_snapshot.public_dict()["document_tasks"] == expected_tasks
+    assert after_snapshot.public_dict()["taskpane_web_extensions"] == (
+        expected_web_extensions
+    )
+    assert before_snapshot.public_dict()["document_tasks"] == {
+        key: 0 for key in expected_tasks
+    }
+    assert before_snapshot.public_dict()["taskpane_web_extensions"] == {
+        key: 0 for key in expected_web_extensions
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert {
+        "document_task_inventory_changed",
+        "taskpane_web_extension_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    assert {
+        change.kind for change in diff_documents(after, task_payload_changed).changes
+    } == {"document_task_inventory_changed"}
+    assert {
+        change.kind
+        for change in diff_documents(after, web_extension_payload_changed).changes
+    } == {"taskpane_web_extension_inventory_changed"}
+    assert diff_documents(after, renumbered).changes == ()
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_document_tasks: true
+  no_document_task_changes: true
+  require_no_taskpane_web_extensions: true
+  no_taskpane_web_extension_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP031",
+        "DFP032",
+        "DFP033",
+        "DFP034",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, task_payload_changed), policy
+        ).findings
+    } == {"DFP031", "DFP032", "DFP033"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, web_extension_payload_changed), policy
+        ).findings
+    } == {"DFP031", "DFP033", "DFP034"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP031", "DFP033"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_DOCUMENT_TASK_INVENTORY_CHANGED",
+        "DFC_TASKPANE_WEB_EXTENSION_INVENTORY_CHANGED",
+        "DFP031",
+        "DFP032",
+        "DFP033",
+        "DFP034",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "DOCUMENT_TASK_WORKFLOW_USER_DO_NOT_LEAK",
+        "DOCUMENT_TASK_WORKFLOW_TITLE_DO_NOT_LEAK",
+        "DOCUMENT_TASK_PAYLOAD_CHANGED_DO_NOT_LEAK",
+        "TASKPANE_WEB_EXTENSION_STORE_DO_NOT_LEAK",
+        "WEB_EXTENSION_PAYLOAD_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_document_tasks_and_taskpane_web_extensions_discover_parts_and_reject_invalid(
+    tmp_path,
+) -> None:
+    relationship_only = tmp_path / "relationship-only.docx"
+    content_type_only = tmp_path / "content-type-only.docx"
+    conventional_unlinked = tmp_path / "conventional-unlinked.docx"
+    wrong_task_root = tmp_path / "wrong-task-root.docx"
+    wrong_taskpane_root = tmp_path / "wrong-taskpane-root.docx"
+    wrong_web_extension_root = tmp_path / "wrong-web-extension-root.docx"
+    external_task_relationship = tmp_path / "external-task-relationship.docx"
+    external_taskpane_relationship = tmp_path / "external-taskpane-relationship.docx"
+    external_web_extension_relationship = tmp_path / "external-web-extension.docx"
+    invalid_taskpane_reference = tmp_path / "invalid-taskpane-reference.docx"
+    noncanonical_part_names = (
+        "word/review/task-data.xml",
+        "word/review/taskpane-data.xml",
+        "word/review/extension-primary.xml",
+        "word/review/extension-secondary.xml",
+    )
+    _write_document_task_and_web_extension_document(
+        relationship_only,
+        part_names=noncanonical_part_names,
+        include_feature_content_types=False,
+    )
+    _write_document_task_and_web_extension_document(
+        content_type_only,
+        part_names=noncanonical_part_names,
+        include_feature_relationships=False,
+    )
+    _write_document_task_and_web_extension_document(
+        conventional_unlinked,
+        part_names=(
+            "word/tasks",
+            "word/webextensions/taskpanes",
+            "word/webextensions/webextension",
+            "word/webextensions/webextension2.xml",
+        ),
+        include_feature_relationships=False,
+        include_feature_content_types=False,
+    )
+    _write_document_task_and_web_extension_document(
+        wrong_task_root,
+        wrong_document_task_root=True,
+    )
+    _write_document_task_and_web_extension_document(
+        wrong_taskpane_root,
+        wrong_taskpane_root=True,
+    )
+    _write_document_task_and_web_extension_document(
+        wrong_web_extension_root,
+        wrong_web_extension_root=True,
+    )
+    _write_document_task_and_web_extension_document(
+        external_task_relationship,
+        document_task_target_mode="External",
+    )
+    _write_document_task_and_web_extension_document(
+        external_taskpane_relationship,
+        taskpane_target_mode="External",
+    )
+    _write_document_task_and_web_extension_document(
+        external_web_extension_relationship,
+        web_extension_target_mode="External",
+    )
+    _write_document_task_and_web_extension_document(
+        invalid_taskpane_reference,
+        invalid_taskpane_reference=True,
+    )
+
+    relationship_snapshot = load_snapshot(relationship_only)
+    assert relationship_snapshot.document_tasks.task_count == 1
+    assert relationship_snapshot.taskpane_web_extensions.taskpane_count == 2
+    assert relationship_snapshot.taskpane_web_extensions.web_extension_part_count == 2
+    content_type_snapshot = load_snapshot(content_type_only)
+    assert content_type_snapshot.document_tasks.document_task_part_count == 1
+    assert content_type_snapshot.taskpane_web_extensions.taskpane_part_count == 1
+    assert content_type_snapshot.taskpane_web_extensions.taskpane_count == 0
+    assert content_type_snapshot.taskpane_web_extensions.web_extension_part_count == 2
+    conventional_snapshot = load_snapshot(conventional_unlinked)
+    assert conventional_snapshot.document_tasks.task_count == 1
+    assert conventional_snapshot.taskpane_web_extensions.taskpane_part_count == 1
+    assert conventional_snapshot.taskpane_web_extensions.web_extension_part_count == 2
+
+    for document in (
+        wrong_task_root,
+        wrong_taskpane_root,
+        wrong_web_extension_root,
+        external_task_relationship,
+        external_taskpane_relationship,
+        external_web_extension_relationship,
+        invalid_taskpane_reference,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
+def test_web_extension_content_control_markers_follow_created_precedence(
+    tmp_path,
+) -> None:
+    created_false = tmp_path / "created-false.docx"
+    created_true = tmp_path / "created-true.docx"
+    _write_document_task_and_web_extension_document(
+        created_false,
+        web_extension_created_value="false",
+    )
+    _write_document_task_and_web_extension_document(
+        created_true,
+        web_extension_created_value="true",
+    )
+
+    assert (
+        load_snapshot(created_false)
+        .taskpane_web_extensions.web_extension_bound_content_control_count
+        == 2
+    )
+    assert (
+        load_snapshot(created_true)
+        .taskpane_web_extensions.web_extension_bound_content_control_count
+        == 3
+    )
+    assert "taskpane_web_extension_inventory_changed" in {
+        change.kind for change in diff_documents(created_false, created_true).changes
+    }
+
+
 def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
     template = tmp_path / "review-template.dotx"
     macro_template = tmp_path / "review-template.dotm"
@@ -2016,6 +2317,342 @@ def _write_modern_comment_metadata_document(
         )
     if macro_payload is not None:
         entries["word/vbaProject.bin"] = macro_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_document_task_and_web_extension_document(
+    path,
+    *,
+    include_document_tasks: bool = True,
+    include_taskpane_web_extensions: bool = True,
+    task_marker: str = "DOCUMENT_TASK_WORKFLOW",
+    web_extension_marker: str = "TASKPANE_WEB_EXTENSION",
+    relationship_id_suffix: str = "1",
+    part_names: tuple[str, str, str, str] | None = None,
+    include_feature_relationships: bool = True,
+    include_feature_content_types: bool = True,
+    include_taskpane_references: bool | None = None,
+    document_task_target_mode: str = "Internal",
+    taskpane_target_mode: str = "Internal",
+    web_extension_target_mode: str = "Internal",
+    wrong_document_task_root: bool = False,
+    wrong_taskpane_root: bool = False,
+    wrong_web_extension_root: bool = False,
+    invalid_taskpane_reference: bool = False,
+    web_extension_created_value: str = "false",
+) -> None:
+    """Write a small package with document-task and task-pane add-in state."""
+
+    (
+        document_task_part_name,
+        taskpane_part_name,
+        primary_web_extension_part_name,
+        secondary_web_extension_part_name,
+    ) = part_names or (
+        "word/tasks.xml",
+        "word/webextensions/taskpanes.xml",
+        "word/webextensions/webextension1.xml",
+        "word/webextensions/webextension2.xml",
+    )
+    if include_taskpane_references is None:
+        include_taskpane_references = include_feature_relationships
+
+    def relationship_target(
+        source_part: str, target_part: str, target_mode: str, family: str
+    ) -> str:
+        if target_mode == "Internal":
+            return posixpath.relpath(target_part, start=source_part.rpartition("/")[0])
+        return f"https://example.invalid/{family}"
+
+    def relationship_markup(
+        relationship_id: str,
+        relationship_type: str,
+        source_part: str,
+        target_part: str,
+        target_mode: str,
+        family: str,
+    ) -> str:
+        target = relationship_target(source_part, target_part, target_mode, family)
+        target_mode_attribute = (
+            "" if target_mode == "Internal" else f' TargetMode="{target_mode}"'
+        )
+        return (
+            f'<Relationship Id="{relationship_id}" Type="{relationship_type}" '
+            f'Target="{target}"{target_mode_attribute}/>'
+        )
+
+    document_relationships: list[str] = []
+    if include_feature_relationships and include_document_tasks:
+        document_relationships.append(
+            relationship_markup(
+                f"rIdDocumentTasks{relationship_id_suffix}",
+                _DOCUMENT_TASK_RELATIONSHIP_TYPE,
+                "word/document.xml",
+                document_task_part_name,
+                document_task_target_mode,
+                "document-tasks",
+            )
+        )
+    if include_feature_relationships and include_taskpane_web_extensions:
+        document_relationships.append(
+            relationship_markup(
+                f"rIdTaskpanes{relationship_id_suffix}",
+                _TASKPANE_WEB_EXTENSION_RELATIONSHIP_TYPE,
+                "word/document.xml",
+                taskpane_part_name,
+                taskpane_target_mode,
+                "taskpanes",
+            )
+        )
+
+    primary_web_extension_relationship_id = (
+        f"rIdWebExtensionPrimary{relationship_id_suffix}"
+    )
+    secondary_web_extension_relationship_id = (
+        f"rIdWebExtensionSecondary{relationship_id_suffix}"
+    )
+    taskpane_relationships: list[str] = []
+    if include_feature_relationships and include_taskpane_web_extensions:
+        taskpane_relationships.extend(
+            (
+                relationship_markup(
+                    primary_web_extension_relationship_id,
+                    _WEB_EXTENSION_RELATIONSHIP_TYPE,
+                    taskpane_part_name,
+                    primary_web_extension_part_name,
+                    web_extension_target_mode,
+                    "webextension-primary",
+                ),
+                relationship_markup(
+                    secondary_web_extension_relationship_id,
+                    _WEB_EXTENSION_RELATIONSHIP_TYPE,
+                    taskpane_part_name,
+                    secondary_web_extension_part_name,
+                    web_extension_target_mode,
+                    "webextension-secondary",
+                ),
+            )
+        )
+
+    feature_overrides: list[str] = []
+    if include_feature_content_types and include_document_tasks:
+        feature_overrides.append(
+            f'<Override PartName="/{document_task_part_name}" '
+            f'ContentType="{_DOCUMENT_TASK_CONTENT_TYPE}"/>'
+        )
+    if include_feature_content_types and include_taskpane_web_extensions:
+        feature_overrides.extend(
+            (
+                f'<Override PartName="/{taskpane_part_name}" '
+                f'ContentType="{_TASKPANE_WEB_EXTENSION_CONTENT_TYPE}"/>',
+                f'<Override PartName="/{primary_web_extension_part_name}" '
+                f'ContentType="{_WEB_EXTENSION_CONTENT_TYPE}"/>',
+                f'<Override PartName="/{secondary_web_extension_part_name}" '
+                f'ContentType="{_WEB_EXTENSION_CONTENT_TYPE}"/>',
+            )
+        )
+
+    content_controls = ""
+    if include_taskpane_web_extensions:
+        content_controls = f'''<w:sdt><w:sdtPr><w:id w:val="101"/>
+  <w15:webExtensionLinked/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>
+  LINKED_CONTROL_DO_NOT_LEAK</w:t></w:r></w:p></w:sdtContent></w:sdt>
+<w:sdt><w:sdtPr><w:id w:val="102"/>
+  <w15:webExtensionCreated w:val="{web_extension_created_value}"/>
+  <w15:webExtensionLinked/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>
+  CREATED_PRECEDENCE_CONTROL_DO_NOT_LEAK</w:t></w:r></w:p></w:sdtContent></w:sdt>
+<w:sdt><w:sdtPr><w:id w:val="103"/>
+  <w15:webExtensionCreated/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>
+  CREATED_CONTROL_DO_NOT_LEAK</w:t></w:r></w:p></w:sdtContent></w:sdt>'''
+
+    def task_user(element_name: str, role: str) -> str:
+        return (
+            f'<t:{element_name}\n'
+            f' userId="{task_marker}_{role}_DO_NOT_LEAK"\n'
+            f' userName="{task_marker}_{role}_NAME_DO_NOT_LEAK"\n'
+            f' userProvider="{task_marker}_PROVIDER_DO_NOT_LEAK"/>'
+        )
+
+    def task_event(
+        number: int,
+        action: str,
+        *,
+        anchor: bool = False,
+    ) -> str:
+        children = [task_user("Attribution", "USER")]
+        if anchor:
+            children.append(
+                f'<t:Anchor><t:Comment\n'
+                f' id="{task_marker}_EVENT_COMMENT_DO_NOT_LEAK"/>'
+                "</t:Anchor>"
+            )
+        children.append(action)
+        return (
+            f'<t:Event\n'
+            f' id="{{00000000-0000-0000-0000-{number:012d}}}"\n'
+            f' time="2026-08-01T{number - 1:02d}:00:00Z">'
+            f'{"".join(children)}</t:Event>'
+        )
+
+    task_events = "".join(
+        (
+            task_event(1, "<t:Create/>", anchor=True),
+            task_event(2, task_user("Assign", "ASSIGNEE")),
+            task_event(3, task_user("Unassign", "ASSIGNEE")),
+            task_event(
+                4,
+                f'<t:SetTitle\n title="{task_marker}_TITLE_DO_NOT_LEAK"/>',
+            ),
+            task_event(
+                5,
+                '<t:Schedule\n startDate="2026-08-02T00:00:00Z"\n'
+                ' dueDate="2026-08-03T00:00:00Z"/>',
+            ),
+            task_event(6, '<t:Progress\n percentComplete="50"/>'),
+            task_event(7, '<t:Priority\n value="5"/>'),
+            task_event(8, "<t:Delete/>"),
+            task_event(9, "<t:Undelete/>"),
+            task_event(10, "<t:UnassignAll/>"),
+            task_event(
+                11,
+                '<t:Undo\n id="{00000000-0000-0000-0000-000000000010}"/>',
+            ),
+        )
+    )
+    document_task_root_name = "notTasks" if wrong_document_task_root else "Tasks"
+    document_task_xml = (
+        f'<t:{document_task_root_name}\n'
+        f' xmlns:t="{_DOCUMENT_TASK_NAMESPACE}">\n'
+        '<t:Task id="{C1F1012D-3D7D-4C88-A44C-9DEB23456789}">\n'
+        "<t:Anchor><t:Comment\n"
+        f' id="{task_marker}_COMMENT_DO_NOT_LEAK"/></t:Anchor>\n'
+        f"<t:History>{task_events}</t:History>\n"
+        f"</t:Task></t:{document_task_root_name}>"
+    )
+
+    taskpane_root_name = "notTaskpanes" if wrong_taskpane_root else "taskpanes"
+    primary_reference_id = (
+        "rIdMissing"
+        if invalid_taskpane_reference
+        else primary_web_extension_relationship_id
+    )
+    taskpane_markup = ""
+    if include_taskpane_references:
+        taskpane_markup = (
+            '<wetp:taskpane\n dockstate="right"\n visibility="1"\n'
+            ' width="360"\n row="0"\n locked="true">\n'
+            f'<wetp:webextensionref r:id="{primary_reference_id}"/>\n'
+            "</wetp:taskpane>\n"
+            '<wetp:taskpane\n dockstate="left"\n visibility="0"\n'
+            ' width="240"\n row="1"\n locked="false">\n'
+            f'<wetp:webextension r:id="{secondary_web_extension_relationship_id}"/>\n'
+            "</wetp:taskpane>"
+        )
+    taskpane_xml = (
+        f'<wetp:{taskpane_root_name}\n'
+        f' xmlns:wetp="{_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE}"\n'
+        f' xmlns:r="{R}">{taskpane_markup}</wetp:{taskpane_root_name}>'
+    )
+
+    def web_reference(identifier: str, version: str) -> str:
+        return (
+            "<we:reference\n"
+            f' id="{web_extension_marker}_{identifier}_DO_NOT_LEAK"\n'
+            f' version="{version}"\n'
+            f' store="{web_extension_marker}_STORE_DO_NOT_LEAK"\n'
+            ' storeType="omex"/>'
+        )
+
+    def web_property(name: str, value: str) -> str:
+        return f'<we:property\n name="{name}"\n value="{value}"/>'
+
+    def web_binding(identifier: str, binding_type: str) -> str:
+        return (
+            "<we:binding\n"
+            f' id="{web_extension_marker}_{identifier}_DO_NOT_LEAK"\n'
+            f' type="{binding_type}"\n'
+            f' appref="{web_extension_marker}_APPREF_DO_NOT_LEAK"/>'
+        )
+
+    web_extension_root_name = (
+        "notWebextension" if wrong_web_extension_root else "webextension"
+    )
+    primary_property_name = f"{web_extension_marker}_PROPERTY_DO_NOT_LEAK"
+    primary_property_value = f"{web_extension_marker}_VALUE_DO_NOT_LEAK"
+    secondary_property_name = f"{web_extension_marker}_SECOND_PROPERTY_DO_NOT_LEAK"
+    secondary_property_value = f"{web_extension_marker}_SECOND_VALUE_DO_NOT_LEAK"
+    primary_web_extension_xml = (
+        f'<we:{web_extension_root_name}\n'
+        f' xmlns:we="{_TASKPANE_WEB_EXTENSION_NAMESPACE}"\n'
+        f' id="{web_extension_marker}_PRIMARY_DO_NOT_LEAK">\n'
+        f"{web_reference('REFERENCE', '1.0')}\n"
+        "<we:alternateReferences>\n"
+        f"{web_reference('ALTERNATE', '1.1')}\n"
+        "</we:alternateReferences>\n"
+        "<we:properties>\n"
+        f"{web_property('Office.AutoShowTaskpaneWithDocument', 'true')}\n"
+        f"{web_property(primary_property_name, primary_property_value)}\n"
+        "</we:properties>\n"
+        "<we:bindings>\n"
+        f"{web_binding('BINDING_A', 'text')}\n"
+        f"{web_binding('BINDING_B', 'table')}\n"
+        "</we:bindings>\n"
+        f"</we:{web_extension_root_name}>"
+    )
+    secondary_web_extension_xml = (
+        f'<we:{web_extension_root_name}\n'
+        f' xmlns:we="{_TASKPANE_WEB_EXTENSION_NAMESPACE}"\n'
+        f' id="{web_extension_marker}_SECONDARY_DO_NOT_LEAK">\n'
+        f"{web_reference('SECOND_REFERENCE', '1.0')}\n"
+        "<we:properties>\n"
+        f"{web_property(secondary_property_name, secondary_property_value)}\n"
+        "</we:properties>\n"
+        "<we:bindings>\n"
+        f"{web_binding('BINDING_C', 'matrix')}\n"
+        "</we:bindings>\n"
+        f"</we:{web_extension_root_name}>"
+    )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            f'{"".join(feature_overrides)}</Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}" xmlns:w15="{_WORD_2012_NAMESPACE}"><w:body>'
+            f"{content_controls}<w:p><w:r><w:t>BODY_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if document_relationships:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'{"".join(document_relationships)}'
+            "</Relationships>"
+        ).encode()
+    if include_document_tasks:
+        entries[document_task_part_name] = document_task_xml.encode()
+    if include_taskpane_web_extensions:
+        entries[taskpane_part_name] = taskpane_xml.encode()
+        entries[primary_web_extension_part_name] = primary_web_extension_xml.encode()
+        entries[secondary_web_extension_part_name] = (
+            secondary_web_extension_xml.encode()
+        )
+    if taskpane_relationships:
+        taskpane_directory, _, taskpane_filename = taskpane_part_name.rpartition("/")
+        entries[
+            f"{taskpane_directory}/_rels/{taskpane_filename}.rels"
+        ] = (
+            f'<Relationships xmlns="{PR}">'
+            f'{"".join(taskpane_relationships)}'
+            "</Relationships>"
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

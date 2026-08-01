@@ -52,6 +52,10 @@ starter policy.
 | `no_external_field_changes` | `DFP028` | External-source Word field inventory differs | Comparison |
 | `require_no_modern_comment_metadata` | `DFP029` | Candidate has stored modern Word comment contact, threading, identifier, or reaction metadata | Candidate |
 | `no_modern_comment_metadata_changes` | `DFP030` | Modern Word comment metadata inventory differs | Comparison |
+| `require_no_document_tasks` | `DFP031` | Candidate has stored Word document-task workflow state | Candidate |
+| `no_document_task_changes` | `DFP032` | Word document-task inventory differs | Comparison |
+| `require_no_taskpane_web_extensions` | `DFP033` | Candidate has stored task-pane Office web-extension state | Candidate |
+| `no_taskpane_web_extension_changes` | `DFP034` | Task-pane Office web-extension inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -83,6 +87,9 @@ subdocument, or frameset source. `no_external_field_changes` does the same for
 a controlled template that deliberately retains known external-source Word
 fields. `no_modern_comment_metadata_changes` does the same for a controlled
 template that intentionally retains modern comment review state.
+`no_document_task_changes` and `no_taskpane_web_extension_changes` provide
+the equivalent controlled-baseline gates for stored workflow and document-borne
+add-in state.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -261,6 +268,60 @@ state. `no_modern_comment_metadata_changes` instead protects an approved
 baseline. Neither rule renders a thread, resolves an account, contacts a
 service, evaluates a notification, interprets extension payloads, or changes a
 comment.
+
+## Word document-task scope
+
+Document tasks are stored workflow state in the Office document-tasks part;
+they are not live task-service objects. DocFence discovers the standard part by
+content type, relationship type, or conventional `word/tasks` / `word/tasks.xml`
+path and validates the documented `Tasks` root. A recognized document-task
+relationship must be internal and resolve to a stored package member; malformed
+recognized state fails closed.
+
+Public output contains only aggregate task-part, task, history-event,
+user-reference, comment-anchor, assignment, unassignment, creation, title,
+schedule, progress, priority, deletion, restoration, unassign-all, and undo
+event counts. Task and event IDs, times, task titles, user IDs/names/providers,
+dates, progress, priorities, and comment IDs remain inside private signatures.
+An identifier-only or same-count task mutation remains visible to the
+comparison rule without exposing the changed value. Relationship-ID renumbering
+alone remains quiet.
+
+`require_no_document_tasks` fails whenever any document-task public count is
+nonzero, including an empty recognized task part. Use it for a handoff that must
+not retain document task state. `no_document_task_changes` protects a known
+baseline instead. Neither rule assigns, completes, creates, synchronizes,
+notifies, or otherwise performs a task action.
+
+## Task-pane Office web-extension scope
+
+DocFence treats document-borne task-pane Office web-extension configuration as
+stored state, not executable software. It discovers standard task-pane and
+web-extension parts by content type, relationship type, and conventional
+`word/webextensions/` paths; validates the `taskpanes` and `webextension`
+roots; and requires every direct task-pane `webextensionref` or established
+`webextension` reference to resolve through the expected internal
+web-extension relationship. A malformed recognized relationship or direct
+reference fails closed. A recognized web-extension part can still be counted
+when it is not attached to a current task pane.
+
+Public output reports only task-pane-part, task-pane, visible-pane,
+locked-pane, web-extension-part, store-reference, property, binding, enabled
+`Office.AutoShowTaskpaneWithDocument` property, and enabled Word content-control
+binding-marker counts. Extension IDs, stores, versions, property names and
+values, binding IDs/application references, pane dimensions, relationship IDs,
+content-control marker values, and part paths are private. The comparison
+signature keeps that material private, so a same-count configuration mutation
+is visible but a relationship-ID renumbering alone remains quiet.
+
+For a `w:sdtPr`, enabled `w15:webExtensionCreated` takes precedence over
+enabled `w15:webExtensionLinked` when DocFence counts a bound content control.
+An auto-show count is evidence of a stored enabled property only; it is not a
+claim that Word will install, load, display, or auto-open an add-in.
+`require_no_taskpane_web_extensions` fails when any public count is nonzero;
+`no_taskpane_web_extension_changes` protects an approved baseline. These rules
+do not install or execute an add-in, retrieve a manifest, access a store,
+authenticate, resolve a binding, or assess add-in safety.
 
 ## External Word document dependency scope
 

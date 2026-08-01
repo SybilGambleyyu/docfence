@@ -2,6 +2,32 @@
 
 All notable changes are documented here.
 
+## 0.10.0 — 2026-08-01
+
+- Added first-class, privacy-safe inventories for Word document tasks and
+  document-borne task-pane Office web-extension state.
+- Added `DFP031` / `DFP032` to prohibit document-task state or protect an
+  approved task baseline, and `DFP033` / `DFP034` to prohibit task-pane
+  web-extension state or protect an approved add-in baseline.
+- Reports now expose aggregate task/history/user-reference/comment-anchor/event
+  counts, plus aggregate task-pane, extension, reference, property, binding,
+  auto-show, and Word content-control binding-marker counts. IDs, identities,
+  titles, dates, stores, properties, bindings, pane settings, and paths remain
+  private.
+- Detects recognized parts through standard content types, relationship types,
+  and conventional extensionful/extensionless Word paths. Validates each root,
+  requires direct task-pane web-extension references to resolve through the
+  expected internal relationship, and fails closed on malformed recognized
+  state.
+- Privately fingerprints document-task and Office web-extension payload state
+  so same-count changes remain review-visible. Relationship-ID renumbering alone
+  remains quiet. Supports both `webextensionref` and the established
+  `webextension` task-pane reference spelling; `webExtensionCreated` takes
+  precedence over `webExtensionLinked` for bound Word content controls.
+- Added regression coverage for semantic changes, policy/SARIF output,
+  redaction, noncanonical and unlinked conventional paths, extensionless paths,
+  invalid roots/references, external relationships, and relationship-ID churn.
+
 ## 0.9.0 — 2026-08-01
 
 - Added first-class bounded scanning for Word `.dotx` and `.dotm` template

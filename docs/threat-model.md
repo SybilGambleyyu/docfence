@@ -21,6 +21,11 @@ associations, reaction users, and reaction timestamps are sensitive package
 material under the same rule. The report may be stored in CI artifacts, pasted
 into an issue, or uploaded to a SARIF consumer, so it is intentionally
 restricted to counts, fixed categories, booleans, and generic story kinds.
+Document-task IDs, event IDs/times, users, titles, schedules, progress,
+priorities, and comment anchors are sensitive under the same rule. So are
+task-pane layout values and Office web-extension IDs, store/reference data,
+property names and values, binding IDs/application references, content-control
+marker values, and part paths.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -123,6 +128,20 @@ identifier rewrite remains review-visible. A recognized metadata relationship
 must be internal and resolve to a validated package member. DocFence does not
 render, resolve, synchronize, notify, or modify comments or reaction state.
 
+Document-task and task-pane Office web-extension state receive the same
+private-digest treatment. Recognized document-task parts must have the
+documented `Tasks` root. Recognized task-pane and web-extension parts must have
+their documented roots; a task pane's direct web-extension reference must name
+the expected internal relationship and a stored target. Recognized external,
+unavailable, or malformed relationships fail closed. Public output contains
+only aggregate workflow and configuration counts, never values from an event,
+task user, add-in store reference, property, binding, pane layout, or
+content-control marker. Relationship IDs are normalized to their private relationship
+semantics, so ID renumbering alone remains quiet while a same-count stored
+configuration change remains review-visible. DocFence does not install,
+execute, retrieve, authenticate to, or assess the safety of an add-in; it does
+not contact a task service or perform a task action.
+
 External Word document dependencies receive the same private-digest treatment.
 DocFence recognizes attached-template relationships from discovered Document
 Settings parts, subdocument relationships from the main document, and frame
@@ -180,7 +199,13 @@ template, master-document, or frameset behavior. Modern-comment metadata counts
 are also stored-state evidence: they do not prove that a comment is visible,
 resolved in a service, associated with a live account, or that a reaction will
 be shown. DocFence does not interpret unknown comment extensions or synchronize
-comment state with Word or a cloud service.
+comment state with Word or a cloud service. Document-task counts are not proof
+that a task is assigned, actionable, synchronized, visible, or connected to a
+service. Task-pane web-extension counts are not proof that an add-in is
+installed, valid, loaded, displayed, safe, or able to auto-open. An enabled
+`Office.AutoShowTaskpaneWithDocument` property is recorded as stored state, not
+as a prediction of runtime behavior. Content-control markers are not resolved
+to a specific extension or rendered control.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

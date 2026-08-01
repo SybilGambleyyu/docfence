@@ -25,6 +25,7 @@ from docfence.models import (
     DataBindingInventory,
     DocumentPropertyInventory,
     DocumentSnapshot,
+    DocumentTaskInventory,
     EmbeddedObjectInventory,
     ExternalDocumentDependencyInventory,
     ExternalFieldInventory,
@@ -34,6 +35,7 @@ from docfence.models import (
     RevisionInventory,
     StorySnapshot,
     StyleInventory,
+    TaskpaneWebExtensionInventory,
 )
 
 
@@ -339,6 +341,61 @@ _MODERN_COMMENT_ROOTS: Final = {
 _MODERN_COMMENT_REACTIONS_NAMESPACE: Final = (
     "http://schemas.microsoft.com/office/comments/2020/reactions"
 )
+_DOCUMENT_TASK_NAMESPACE: Final = (
+    "http://schemas.microsoft.com/office/tasks/2019/documenttasks"
+)
+_DOCUMENT_TASK_CONTENT_TYPE: Final = "application/vnd.ms-office.documenttasks+xml"
+_DOCUMENT_TASK_RELATIONSHIP_TYPES: Final = frozenset(
+    {"http://schemas.microsoft.com/office/2019/05/relationships/documenttasks"}
+)
+_DOCUMENT_TASK_FALLBACK_PARTS: Final = frozenset({"word/tasks.xml", "word/tasks"})
+_DOCUMENT_TASK_EVENT_COUNT_KEYS: Final = {
+    "Assign": "assignment",
+    "Unassign": "unassignment",
+    "Create": "creation",
+    "SetTitle": "title_change",
+    "Schedule": "schedule_change",
+    "Progress": "progress_change",
+    "Priority": "priority_change",
+    "Delete": "deletion",
+    "Undelete": "restoration",
+    "UnassignAll": "unassign_all",
+    "Undo": "undo",
+}
+_DOCUMENT_TASK_USER_REFERENCE_NAMES: Final = frozenset(
+    {"Attribution", "Assign", "Unassign"}
+)
+_TASKPANE_WEB_EXTENSION_PART_CONTENT_TYPES: Final = {
+    "application/vnd.ms-office.webextensiontaskpanes+xml": "taskpanes",
+    "application/vnd.ms-office.webextension+xml": "web_extension",
+}
+_TASKPANE_WEB_EXTENSION_PART_RELATIONSHIP_TYPES: Final = {
+    (
+        "http://schemas.microsoft.com/office/2011/relationships/"
+        "webextensiontaskpanes"
+    ): "taskpanes",
+    "http://schemas.microsoft.com/office/2011/relationships/webextension": (
+        "web_extension"
+    ),
+}
+_TASKPANE_WEB_EXTENSION_FALLBACK_PARTS: Final = {
+    "word/webextensions/taskpanes.xml": "taskpanes",
+    "word/webextensions/taskpanes": "taskpanes",
+}
+_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE: Final = (
+    "http://schemas.microsoft.com/office/webextensions/taskpanes/2010/11"
+)
+_TASKPANE_WEB_EXTENSION_NAMESPACE: Final = (
+    "http://schemas.microsoft.com/office/webextensions/webextension/2010/11"
+)
+_WORD_2012_NAMESPACE: Final = "http://schemas.microsoft.com/office/word/2012/wordml"
+_TASKPANE_REFERENCE_TAGS: Final = frozenset(
+    {
+        (_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE, "webextensionref"),
+        (_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE, "webextension"),
+    }
+)
+_AUTO_SHOW_TASKPANE_PROPERTY_NAME: Final = "Office.AutoShowTaskpaneWithDocument"
 
 
 @dataclass(frozen=True)
@@ -367,6 +424,15 @@ class _ExternalFieldReference:
     story_part: str
     category: str
     instruction_signature: str
+
+
+@dataclass(frozen=True)
+class _WebExtensionControlReference:
+    """One private marker for a Word content control bound to an add-in."""
+
+    story_part: str
+    marker_kind: str
+    signature: str
 
 
 @dataclass
@@ -455,6 +521,7 @@ def _load_package(
                 comment_count,
                 data_binding_references,
                 external_field_references,
+                web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
             )
@@ -472,6 +539,23 @@ def _load_package(
                     members,
                     content_types,
                     relationship_maps,
+                    limits,
+                )
+            )
+            document_tasks, document_task_parts = _document_task_inventory(
+                archive,
+                members,
+                content_types,
+                relationship_maps,
+                limits,
+            )
+            taskpane_web_extensions, taskpane_web_extension_parts = (
+                _taskpane_web_extension_inventory(
+                    archive,
+                    members,
+                    content_types,
+                    relationship_maps,
+                    web_extension_control_references,
                     limits,
                 )
             )
@@ -501,6 +585,8 @@ def _load_package(
                     | document_property_parts
                     | mail_merge_parts
                     | modern_comment_metadata_parts
+                    | document_task_parts
+                    | taskpane_web_extension_parts
                     | external_document_dependency_parts
                 ),
                 limits,
@@ -531,6 +617,8 @@ def _load_package(
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
+        document_tasks=document_tasks,
+        taskpane_web_extensions=taskpane_web_extensions,
         external_document_dependencies=external_document_dependencies,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
@@ -1644,6 +1732,391 @@ def _validate_modern_comment_metadata_root(root: ET.Element, kind: str) -> None:
         raise DocumentFormatError("modern comment metadata part is invalid")
 
 
+def _document_task_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[DocumentTaskInventory, frozenset[str]]:
+    """Inventory Word document tasks without releasing task or user material."""
+
+    part_names: set[str] = {
+        part_name for part_name in _DOCUMENT_TASK_FALLBACK_PARTS if part_name in members
+    }
+    records: list[tuple[str, ...]] = []
+    for part_name, content_type in content_types.items():
+        if content_type.casefold() == _DOCUMENT_TASK_CONTENT_TYPE:
+            part_names.add(part_name)
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            if (
+                relationship.relationship_type.casefold()
+                not in _DOCUMENT_TASK_RELATIONSHIP_TYPES
+            ):
+                continue
+            if relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError("document task relationships are invalid")
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError("document task relationships are invalid")
+            part_names.add(target)
+            records.append(
+                (
+                    "document_task_relationship",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    counts = {
+        "document_task_part": 0,
+        "task": 0,
+        "task_history_event": 0,
+        "task_user_reference": 0,
+        "task_comment_anchor": 0,
+        "assignment": 0,
+        "unassignment": 0,
+        "creation": 0,
+        "title_change": 0,
+        "schedule_change": 0,
+        "progress_change": 0,
+        "priority_change": 0,
+        "deletion": 0,
+        "restoration": 0,
+        "unassign_all": 0,
+        "undo": 0,
+    }
+    for part_name in sorted(part_names):
+        root = _read_xml(archive, members[part_name], limits)
+        _validate_document_task_root(root)
+        relationships = relationship_maps.get(part_name, {})
+        records.append(
+            (
+                "document_task_part",
+                part_name,
+                _fingerprint_element(
+                    root,
+                    relationships,
+                    preserve_volatile_attributes=True,
+                ),
+            )
+        )
+        counts["document_task_part"] += 1
+        tasks = [
+            child
+            for child in root
+            if _is_element_in_namespace(child, _DOCUMENT_TASK_NAMESPACE, "Task")
+        ]
+        counts["task"] += len(tasks)
+        counts["task_comment_anchor"] += sum(
+            1
+            for element in root.iter()
+            if _is_element_in_namespace(element, _DOCUMENT_TASK_NAMESPACE, "Comment")
+        )
+        for task in tasks:
+            for history in task:
+                if not _is_element_in_namespace(
+                    history, _DOCUMENT_TASK_NAMESPACE, "History"
+                ):
+                    continue
+                for event in history:
+                    if not _is_element_in_namespace(
+                        event, _DOCUMENT_TASK_NAMESPACE, "Event"
+                    ):
+                        continue
+                    counts["task_history_event"] += 1
+                    for event_child in event:
+                        namespace, local_name = _qualified_name(event_child.tag)
+                        if namespace != _DOCUMENT_TASK_NAMESPACE:
+                            continue
+                        if local_name in _DOCUMENT_TASK_USER_REFERENCE_NAMES:
+                            counts["task_user_reference"] += 1
+                        event_count_key = _DOCUMENT_TASK_EVENT_COUNT_KEYS.get(
+                            local_name
+                        )
+                        if event_count_key is not None:
+                            counts[event_count_key] += 1
+
+    return (
+        DocumentTaskInventory(
+            document_task_part_count=counts["document_task_part"],
+            task_count=counts["task"],
+            task_history_event_count=counts["task_history_event"],
+            task_user_reference_count=counts["task_user_reference"],
+            task_comment_anchor_count=counts["task_comment_anchor"],
+            assignment_event_count=counts["assignment"],
+            unassignment_event_count=counts["unassignment"],
+            creation_event_count=counts["creation"],
+            title_change_event_count=counts["title_change"],
+            schedule_change_event_count=counts["schedule_change"],
+            progress_change_event_count=counts["progress_change"],
+            priority_change_event_count=counts["priority_change"],
+            deletion_event_count=counts["deletion"],
+            restoration_event_count=counts["restoration"],
+            unassign_all_event_count=counts["unassign_all"],
+            undo_event_count=counts["undo"],
+            signature=_digest_records(records),
+        ),
+        frozenset(part_names),
+    )
+
+
+def _validate_document_task_root(root: ET.Element) -> None:
+    if _qualified_name(root.tag) != (_DOCUMENT_TASK_NAMESPACE, "Tasks"):
+        raise DocumentFormatError("document task part is invalid")
+
+
+def _taskpane_web_extension_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    control_references: tuple[_WebExtensionControlReference, ...],
+    limits: PackageLimits,
+) -> tuple[TaskpaneWebExtensionInventory, frozenset[str]]:
+    """Inventory document-borne task-pane Office add-in state safely.
+
+    The stored references, property values, bindings, and part paths are kept
+    exclusively in private fingerprints.  Public output is limited to counts
+    that let a reviewer decide whether this document carries add-in state.
+    """
+
+    part_kinds: dict[str, str] = {}
+    records: list[tuple[str, ...]] = []
+
+    def add_part(kind: str, part_name: str) -> None:
+        existing_kind = part_kinds.get(part_name)
+        if existing_kind is not None and existing_kind != kind:
+            raise DocumentFormatError("task-pane web extension parts are inconsistent")
+        part_kinds[part_name] = kind
+
+    for part_name, kind in _TASKPANE_WEB_EXTENSION_FALLBACK_PARTS.items():
+        if part_name in members:
+            add_part(kind, part_name)
+    for part_name in members:
+        if _is_conventional_web_extension_part_name(part_name):
+            add_part("web_extension", part_name)
+    for part_name, content_type in content_types.items():
+        kind = _TASKPANE_WEB_EXTENSION_PART_CONTENT_TYPES.get(content_type.casefold())
+        if kind is not None:
+            add_part(kind, part_name)
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            kind = _TASKPANE_WEB_EXTENSION_PART_RELATIONSHIP_TYPES.get(
+                relationship.relationship_type.casefold()
+            )
+            if kind is None:
+                continue
+            if relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError(
+                    "task-pane web extension relationships are invalid"
+                )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError(
+                    "task-pane web extension relationships are invalid"
+                )
+            add_part(kind, target)
+            records.append(
+                (
+                    "taskpane_web_extension_relationship",
+                    kind,
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    counts = {
+        "taskpane_part": 0,
+        "taskpane": 0,
+        "visible_taskpane": 0,
+        "locked_taskpane": 0,
+        "web_extension_part": 0,
+        "web_extension_reference": 0,
+        "web_extension_property": 0,
+        "web_extension_binding": 0,
+        "auto_show_taskpane_setting": 0,
+    }
+    taskpane_part_names = sorted(
+        part_name for part_name, kind in part_kinds.items() if kind == "taskpanes"
+    )
+    for part_name in taskpane_part_names:
+        root = _read_xml(archive, members[part_name], limits)
+        _validate_taskpane_web_extension_root(root, "taskpanes")
+        relationships = relationship_maps.get(part_name, {})
+        records.append(
+            (
+                "taskpane_web_extension_part",
+                "taskpanes",
+                part_name,
+                _fingerprint_element(
+                    root,
+                    relationships,
+                    preserve_volatile_attributes=True,
+                ),
+            )
+        )
+        counts["taskpane_part"] += 1
+        taskpanes = [
+            child
+            for child in root
+            if _is_element_in_namespace(
+                child, _TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE, "taskpane"
+            )
+        ]
+        counts["taskpane"] += len(taskpanes)
+        for taskpane in taskpanes:
+            if _unqualified_attribute_is_enabled(taskpane, "visibility"):
+                counts["visible_taskpane"] += 1
+            if _unqualified_attribute_is_enabled(taskpane, "locked"):
+                counts["locked_taskpane"] += 1
+            references = [
+                child
+                for child in taskpane
+                if _qualified_name(child.tag) in _TASKPANE_REFERENCE_TAGS
+            ]
+            if len(references) != 1:
+                raise DocumentFormatError("task-pane web extension markup is invalid")
+            relationship_id = _relationship_id_value(references[0])
+            relationship = (
+                relationships.get(relationship_id)
+                if relationship_id is not None
+                else None
+            )
+            if (
+                relationship is None
+                or relationship.relationship_type.casefold()
+                != "http://schemas.microsoft.com/office/2011/relationships/webextension"
+                or relationship.target_mode.casefold() != "internal"
+            ):
+                raise DocumentFormatError("task-pane web extension markup is invalid")
+            target = _internal_relationship_target(part_name, relationship, members)
+            if target is None:
+                raise DocumentFormatError("task-pane web extension markup is invalid")
+            add_part("web_extension", target)
+            records.append(
+                (
+                    "taskpane_web_extension_reference",
+                    part_name,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    web_extension_part_names = sorted(
+        part_name
+        for part_name, kind in part_kinds.items()
+        if kind == "web_extension"
+    )
+    for part_name in web_extension_part_names:
+        root = _read_xml(archive, members[part_name], limits)
+        _validate_taskpane_web_extension_root(root, "web_extension")
+        records.append(
+            (
+                "taskpane_web_extension_part",
+                "web_extension",
+                part_name,
+                _fingerprint_element(
+                    root,
+                    relationship_maps.get(part_name, {}),
+                    preserve_volatile_attributes=True,
+                ),
+            )
+        )
+        counts["web_extension_part"] += 1
+        for child in root:
+            namespace, local_name = _qualified_name(child.tag)
+            if namespace != _TASKPANE_WEB_EXTENSION_NAMESPACE:
+                continue
+            if local_name == "reference":
+                counts["web_extension_reference"] += 1
+            elif local_name == "alternateReferences":
+                counts["web_extension_reference"] += sum(
+                    1
+                    for reference in child
+                    if _is_element_in_namespace(
+                        reference, _TASKPANE_WEB_EXTENSION_NAMESPACE, "reference"
+                    )
+                )
+            elif local_name == "properties":
+                properties = [
+                    property_element
+                    for property_element in child
+                    if _is_element_in_namespace(
+                        property_element, _TASKPANE_WEB_EXTENSION_NAMESPACE, "property"
+                    )
+                ]
+                counts["web_extension_property"] += len(properties)
+                counts["auto_show_taskpane_setting"] += sum(
+                    1
+                    for property_element in properties
+                    if _unqualified_attribute_value(property_element, "name")
+                    == _AUTO_SHOW_TASKPANE_PROPERTY_NAME
+                    and _unqualified_attribute_is_enabled(property_element, "value")
+                )
+            elif local_name == "bindings":
+                counts["web_extension_binding"] += sum(
+                    1
+                    for binding in child
+                    if _is_element_in_namespace(
+                        binding, _TASKPANE_WEB_EXTENSION_NAMESPACE, "binding"
+                    )
+                )
+
+    records.extend(
+        (
+            "web_extension_bound_content_control",
+            reference.story_part,
+            reference.marker_kind,
+            reference.signature,
+        )
+        for reference in control_references
+    )
+    return (
+        TaskpaneWebExtensionInventory(
+            taskpane_part_count=counts["taskpane_part"],
+            taskpane_count=counts["taskpane"],
+            visible_taskpane_count=counts["visible_taskpane"],
+            locked_taskpane_count=counts["locked_taskpane"],
+            web_extension_part_count=counts["web_extension_part"],
+            web_extension_reference_count=counts["web_extension_reference"],
+            web_extension_property_count=counts["web_extension_property"],
+            web_extension_binding_count=counts["web_extension_binding"],
+            auto_show_taskpane_setting_count=counts["auto_show_taskpane_setting"],
+            web_extension_bound_content_control_count=len(control_references),
+            signature=_digest_records(records),
+        ),
+        frozenset(part_kinds),
+    )
+
+
+def _is_conventional_web_extension_part_name(part_name: str) -> bool:
+    return (
+        part_name
+        in {"word/webextensions/webextension", "word/webextensions/webextension.xml"}
+        or (
+            part_name.startswith("word/webextensions/webextension")
+            and part_name.endswith(".xml")
+        )
+    ) and "/_rels/" not in part_name
+
+
+def _validate_taskpane_web_extension_root(root: ET.Element, kind: str) -> None:
+    expected = (
+        (_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE, "taskpanes")
+        if kind == "taskpanes"
+        else (_TASKPANE_WEB_EXTENSION_NAMESPACE, "webextension")
+    )
+    if _qualified_name(root.tag) != expected:
+        raise DocumentFormatError("task-pane web extension part is invalid")
+
+
 def _is_element_in_namespace(
     element: ET.Element, namespace: str, local_name: str
 ) -> bool:
@@ -1671,6 +2144,19 @@ def _namespaced_attribute_value(
         if _qualified_name(attribute) == (namespace, local_name):
             return value
     return None
+
+
+def _unqualified_attribute_value(element: ET.Element, local_name: str) -> str | None:
+    for attribute, value in element.attrib.items():
+        attribute_namespace, attribute_local_name = _qualified_name(attribute)
+        if attribute_namespace == "" and attribute_local_name == local_name:
+            return value
+    return None
+
+
+def _unqualified_attribute_is_enabled(element: ET.Element, local_name: str) -> bool:
+    value = _unqualified_attribute_value(element, local_name)
+    return value is not None and value.strip().casefold() not in _FALSE_VALUES
 
 
 def _custom_xml_store_items(
@@ -1850,10 +2336,12 @@ def _story_snapshots(
     int,
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
+    tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
     data_binding_references: list[_DataBindingReference] = []
     external_field_references: list[_ExternalFieldReference] = []
+    web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
         root = _read_xml(archive, members[part_key], limits)
@@ -1865,6 +2353,11 @@ def _story_snapshots(
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
         external_field_references.extend(story_external_field_references)
+        web_extension_control_references.extend(
+            _web_extension_control_references(
+                root, part_key, relationship_maps.get(part_key, {})
+            )
+        )
         if kind == "comment":
             comment_count += _count_word_elements(root, "comment")
     if not any(story.kind == "body" for story in stories):
@@ -1874,6 +2367,7 @@ def _story_snapshots(
         comment_count,
         tuple(data_binding_references),
         tuple(external_field_references),
+        tuple(web_extension_control_references),
     )
 
 
@@ -2126,6 +2620,69 @@ def _data_binding_references(
                     signature=_fingerprint_element(child, relationships),
                 )
             )
+    return tuple(references)
+
+
+def _web_extension_control_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_WebExtensionControlReference, ...]:
+    """Find enabled Word content-control markers bound to web extensions.
+
+    Word gives ``webExtensionCreated`` precedence over ``webExtensionLinked``
+    when both appear in the same ``w:sdtPr``.  The marker values and every
+    other property remain private inside a digest; this inventory publishes a
+    count of enabled, document-borne bindings only.
+    """
+
+    references: list[_WebExtensionControlReference] = []
+    for properties in root.iter():
+        if not _is_word_element(properties, "sdtPr"):
+            continue
+        created_markers = [
+            child
+            for child in properties
+            if _is_element_in_namespace(
+                child, _WORD_2012_NAMESPACE, "webExtensionCreated"
+            )
+        ]
+        linked_markers = [
+            child
+            for child in properties
+            if _is_element_in_namespace(
+                child, _WORD_2012_NAMESPACE, "webExtensionLinked"
+            )
+        ]
+        if created_markers:
+            marker_kind = "created"
+            selected_markers = created_markers
+        elif linked_markers:
+            marker_kind = "linked"
+            selected_markers = linked_markers
+        else:
+            continue
+        if not any(_is_enabled(marker) for marker in selected_markers):
+            continue
+        references.append(
+            _WebExtensionControlReference(
+                story_part=story_part,
+                marker_kind=marker_kind,
+                signature=_digest_records(
+                    [
+                        (
+                            "web_extension_control_marker",
+                            _fingerprint_element(
+                                marker,
+                                relationships,
+                                preserve_volatile_attributes=True,
+                            ),
+                        )
+                        for marker in selected_markers
+                    ]
+                ),
+            )
+        )
     return tuple(references)
 
 

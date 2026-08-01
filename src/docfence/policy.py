@@ -42,6 +42,10 @@ _RULES: Final = {
     "no_external_field_changes": "DFP028",
     "require_no_modern_comment_metadata": "DFP029",
     "no_modern_comment_metadata_changes": "DFP030",
+    "require_no_document_tasks": "DFP031",
+    "no_document_task_changes": "DFP032",
+    "require_no_taskpane_web_extensions": "DFP033",
+    "no_taskpane_web_extension_changes": "DFP034",
 }
 
 
@@ -282,6 +286,33 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_document_task_changes") and (
+        before.document_tasks.signature != after.document_tasks.signature
+    ):
+        findings.append(
+            _finding(
+                "no_document_task_changes",
+                "Word document task inventory changed.",
+                {
+                    "before": before.document_tasks.public_dict(),
+                    "after": after.document_tasks.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_taskpane_web_extension_changes") and (
+        before.taskpane_web_extensions.signature
+        != after.taskpane_web_extensions.signature
+    ):
+        findings.append(
+            _finding(
+                "no_taskpane_web_extension_changes",
+                "Task-pane Office web extension inventory changed.",
+                {
+                    "before": before.taskpane_web_extensions.public_dict(),
+                    "after": after.taskpane_web_extensions.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_external_document_dependency_changes") and (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature
@@ -430,6 +461,26 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_modern_comment_metadata",
                 "Candidate contains stored modern Word comment metadata.",
                 after.modern_comment_metadata.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_document_tasks") and any(
+        after.document_tasks.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_document_tasks",
+                "Candidate contains stored Word document tasks.",
+                after.document_tasks.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_taskpane_web_extensions") and any(
+        after.taskpane_web_extensions.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_taskpane_web_extensions",
+                "Candidate contains stored task-pane Office web extension state.",
+                after.taskpane_web_extensions.public_dict(),
             )
         )
     if policy.enabled("require_no_external_document_dependencies") and any(
