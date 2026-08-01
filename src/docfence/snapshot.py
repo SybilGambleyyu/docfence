@@ -29,6 +29,7 @@ from docfence.models import (
     ExternalDocumentDependencyInventory,
     ExternalFieldInventory,
     MailMergeInventory,
+    ModernCommentMetadataInventory,
     RelationshipInventory,
     RevisionInventory,
     StorySnapshot,
@@ -265,6 +266,79 @@ _CURRENT_FIELD_INSTRUCTION_VARIANTS: Final = frozenset({"current"})
 _DELETED_FIELD_INSTRUCTION_VARIANTS: Final = frozenset({"deleted"})
 _CURRENT_FIELD_REVISION_TAGS: Final = frozenset({"ins", "moveTo"})
 _DELETED_FIELD_REVISION_TAGS: Final = frozenset({"del", "moveFrom"})
+_SUPPORTED_MAIN_DOCUMENT_CONTENT_TYPE_SUFFIXES: Final = frozenset(
+    {
+        "wordprocessingml.document.main+xml",
+        "word.document.macroenabled.main+xml",
+        "wordprocessingml.template.main+xml",
+        "word.template.macroenabledtemplate.main+xml",
+    }
+)
+_MODERN_COMMENT_PART_CONTENT_TYPES: Final = {
+    (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml"
+    ): "people",
+    (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml."
+        "commentsextended+xml"
+    ): "comments_extended",
+    (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsids+xml"
+    ): "comments_ids",
+    (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml."
+        "commentsextensible+xml"
+    ): "comments_extensible",
+}
+_MODERN_COMMENT_PART_RELATIONSHIP_TYPES: Final = {
+    "http://schemas.microsoft.com/office/2011/relationships/people": "people",
+    (
+        "http://schemas.microsoft.com/office/2011/relationships/commentsextended"
+    ): "comments_extended",
+    (
+        "http://schemas.microsoft.com/office/2016/09/relationships/commentsids"
+    ): "comments_ids",
+    (
+        "http://schemas.microsoft.com/office/2018/08/relationships/commentsextensible"
+    ): "comments_extensible",
+}
+_MODERN_COMMENT_FALLBACK_PARTS: Final = {
+    "word/people.xml": "people",
+    "word/commentsExtended.xml": "comments_extended",
+    "word/commentsIds.xml": "comments_ids",
+    "word/commentsExtensible.xml": "comments_extensible",
+}
+_MODERN_COMMENT_ROOTS: Final = {
+    "people": (
+        frozenset(
+            {
+                "http://schemas.microsoft.com/office/word/2010/11/wordml",
+                "http://schemas.microsoft.com/office/word/2012/wordml",
+            }
+        ),
+        "people",
+    ),
+    ("comments_extended"): (
+        frozenset(
+            {
+                "http://schemas.microsoft.com/office/word/2010/11/wordml",
+                "http://schemas.microsoft.com/office/word/2012/wordml",
+            }
+        ),
+        "commentsEx",
+    ),
+    ("comments_ids"): (
+        frozenset({"http://schemas.microsoft.com/office/word/2016/wordml/cid"}),
+        "commentsIds",
+    ),
+    ("comments_extensible"): (
+        frozenset({"http://schemas.microsoft.com/office/word/2018/wordml/cex"}),
+        "commentsExtensible",
+    ),
+}
+_MODERN_COMMENT_REACTIONS_NAMESPACE: Final = (
+    "http://schemas.microsoft.com/office/comments/2020/reactions"
+)
 
 
 @dataclass(frozen=True)
@@ -307,7 +381,7 @@ class _ComplexFieldState:
 def load_snapshot(
     document: str | Path, *, limits: PackageLimits = DEFAULT_LIMITS
 ) -> DocumentSnapshot:
-    """Return a bounded private snapshot of a `.docx` or `.docm` file.
+    """Return a bounded private snapshot of a Word OOXML document or template.
 
     No document code, fields, links, or external relationships are executed or
     followed. Expected failure messages intentionally omit filenames and package
@@ -319,8 +393,10 @@ def load_snapshot(
         suffix = path.suffix.casefold()
     except (TypeError, ValueError):
         raise DocumentFormatError("document path is invalid") from None
-    if suffix not in {".docx", ".docm"}:
-        raise DocumentFormatError("only DOCX and DOCM packages are supported")
+    if suffix not in {".docx", ".docm", ".dotx", ".dotm"}:
+        raise DocumentFormatError(
+            "only DOCX, DOCM, DOTX, and DOTM packages are supported"
+        )
 
     try:
         if path.is_symlink() or not path.is_file():
@@ -390,6 +466,15 @@ def _load_package(
                 limits,
             )
             external_fields = _external_field_inventory(external_field_references)
+            modern_comment_metadata, modern_comment_metadata_parts = (
+                _modern_comment_metadata_inventory(
+                    archive,
+                    members,
+                    content_types,
+                    relationship_maps,
+                    limits,
+                )
+            )
             (
                 external_document_dependencies,
                 external_document_dependency_parts,
@@ -415,6 +500,7 @@ def _load_package(
                     | alternative_format_import_parts
                     | document_property_parts
                     | mail_merge_parts
+                    | modern_comment_metadata_parts
                     | external_document_dependency_parts
                 ),
                 limits,
@@ -444,6 +530,7 @@ def _load_package(
         mail_merge=mail_merge,
         data_bindings=data_bindings,
         external_fields=external_fields,
+        modern_comment_metadata=modern_comment_metadata,
         external_document_dependencies=external_document_dependencies,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
@@ -611,9 +698,9 @@ def _content_type_overrides(
 
 def _validate_main_document(content_types: dict[str, str]) -> None:
     content_type = content_types.get("word/document.xml", "").casefold()
-    if not (
-        content_type.endswith("wordprocessingml.document.main+xml")
-        or content_type.endswith("word.document.macroenabled.main+xml")
+    if not any(
+        content_type.endswith(suffix)
+        for suffix in _SUPPORTED_MAIN_DOCUMENT_CONTENT_TYPE_SUFFIXES
     ):
         raise DocumentFormatError("package main document content type is unsupported")
 
@@ -1378,6 +1465,212 @@ def _external_field_inventory(
         referenced_document_field_count=counts["referenced_document"],
         signature=_digest_records(records),
     )
+
+
+def _modern_comment_metadata_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[ModernCommentMetadataInventory, frozenset[str]]:
+    """Inventory modern Word comment metadata without exposing identities.
+
+    Microsoft Word stores contact records, comment threading/resolution state,
+    durable identifiers, and reaction metadata outside the ordinary comments
+    story.  Every recognized part is root-validated and privately fingerprinted
+    with its identifiers intact; public callers receive aggregate counts only.
+    """
+
+    part_kinds: dict[str, str] = {}
+    records: list[tuple[str, ...]] = []
+
+    def add_part(kind: str, part_name: str) -> None:
+        existing_kind = part_kinds.get(part_name)
+        if existing_kind is not None and existing_kind != kind:
+            raise DocumentFormatError("modern comment metadata parts are inconsistent")
+        part_kinds[part_name] = kind
+
+    for part_name, kind in _MODERN_COMMENT_FALLBACK_PARTS.items():
+        if part_name in members:
+            add_part(kind, part_name)
+
+    for part_name, content_type in content_types.items():
+        kind = _MODERN_COMMENT_PART_CONTENT_TYPES.get(content_type.casefold())
+        if kind is not None:
+            add_part(kind, part_name)
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            kind = _MODERN_COMMENT_PART_RELATIONSHIP_TYPES.get(
+                relationship.relationship_type.casefold()
+            )
+            if kind is None:
+                continue
+            if relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError(
+                    "modern comment metadata relationships are invalid"
+                )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError(
+                    "modern comment metadata relationships are invalid"
+                )
+            add_part(kind, target)
+            records.append(
+                (
+                    "modern_comment_metadata_relationship",
+                    kind,
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    counts = {
+        "people_part": 0,
+        "person": 0,
+        "presence_info": 0,
+        "comments_extended_part": 0,
+        "comment_extension": 0,
+        "threaded_comment": 0,
+        "resolved_comment": 0,
+        "comments_id_part": 0,
+        "comment_id": 0,
+        "comments_extensible_part": 0,
+        "comment_extensible": 0,
+        "reaction": 0,
+        "reaction_user": 0,
+    }
+
+    for part_name, kind in sorted(part_kinds.items()):
+        root = _read_xml(archive, members[part_name], limits)
+        _validate_modern_comment_metadata_root(root, kind)
+        records.append(
+            (
+                "modern_comment_metadata_part",
+                kind,
+                part_name,
+                _fingerprint_element(
+                    root,
+                    relationship_maps.get(part_name, {}),
+                    preserve_volatile_attributes=True,
+                ),
+            )
+        )
+
+        namespace, _ = _qualified_name(root.tag)
+        if kind == "people":
+            counts["people_part"] += 1
+            people = [
+                child
+                for child in root
+                if _is_element_in_namespace(child, namespace, "person")
+            ]
+            counts["person"] += len(people)
+            counts["presence_info"] += sum(
+                1
+                for person in people
+                for child in person
+                if _is_element_in_namespace(child, namespace, "presenceInfo")
+            )
+        elif kind == "comments_extended":
+            counts["comments_extended_part"] += 1
+            comment_extensions = [
+                child
+                for child in root
+                if _is_element_in_namespace(child, namespace, "commentEx")
+            ]
+            counts["comment_extension"] += len(comment_extensions)
+            for comment_extension in comment_extensions:
+                if _has_nonempty_namespaced_attribute(
+                    comment_extension, namespace, "paraIdParent"
+                ):
+                    counts["threaded_comment"] += 1
+                if _namespaced_attribute_is_enabled(
+                    comment_extension, namespace, "done"
+                ):
+                    counts["resolved_comment"] += 1
+        elif kind == "comments_ids":
+            counts["comments_id_part"] += 1
+            counts["comment_id"] += sum(
+                1
+                for child in root
+                if _is_element_in_namespace(child, namespace, "commentId")
+            )
+        else:
+            counts["comments_extensible_part"] += 1
+            counts["comment_extensible"] += sum(
+                1
+                for child in root
+                if _is_element_in_namespace(child, namespace, "commentExtensible")
+            )
+            for element in root.iter():
+                if _is_element_in_namespace(
+                    element, _MODERN_COMMENT_REACTIONS_NAMESPACE, "reaction"
+                ):
+                    counts["reaction"] += 1
+                elif _is_element_in_namespace(
+                    element, _MODERN_COMMENT_REACTIONS_NAMESPACE, "user"
+                ):
+                    counts["reaction_user"] += 1
+
+    return (
+        ModernCommentMetadataInventory(
+            people_part_count=counts["people_part"],
+            person_count=counts["person"],
+            presence_info_count=counts["presence_info"],
+            comments_extended_part_count=counts["comments_extended_part"],
+            comment_extension_count=counts["comment_extension"],
+            threaded_comment_count=counts["threaded_comment"],
+            resolved_comment_count=counts["resolved_comment"],
+            comments_id_part_count=counts["comments_id_part"],
+            comment_id_count=counts["comment_id"],
+            comments_extensible_part_count=counts["comments_extensible_part"],
+            comment_extensible_count=counts["comment_extensible"],
+            reaction_count=counts["reaction"],
+            reaction_user_count=counts["reaction_user"],
+            signature=_digest_records(records),
+        ),
+        frozenset(part_kinds),
+    )
+
+
+def _validate_modern_comment_metadata_root(root: ET.Element, kind: str) -> None:
+    expected_namespaces, expected_local_name = _MODERN_COMMENT_ROOTS[kind]
+    namespace, local_name = _qualified_name(root.tag)
+    if namespace not in expected_namespaces or local_name != expected_local_name:
+        raise DocumentFormatError("modern comment metadata part is invalid")
+
+
+def _is_element_in_namespace(
+    element: ET.Element, namespace: str, local_name: str
+) -> bool:
+    return _qualified_name(element.tag) == (namespace, local_name)
+
+
+def _has_nonempty_namespaced_attribute(
+    element: ET.Element, namespace: str, local_name: str
+) -> bool:
+    value = _namespaced_attribute_value(element, namespace, local_name)
+    return bool(value and value.strip())
+
+
+def _namespaced_attribute_is_enabled(
+    element: ET.Element, namespace: str, local_name: str
+) -> bool:
+    value = _namespaced_attribute_value(element, namespace, local_name)
+    return value is not None and value.strip().casefold() not in _FALSE_VALUES
+
+
+def _namespaced_attribute_value(
+    element: ET.Element, namespace: str, local_name: str
+) -> str | None:
+    for attribute, value in element.attrib.items():
+        if _qualified_name(attribute) == (namespace, local_name):
+            return value
+    return None
 
 
 def _custom_xml_store_items(
@@ -2194,8 +2487,14 @@ def _fingerprint_element(
     relationships: dict[str, _Relationship],
     *,
     ignore_rsids: bool = False,
+    preserve_volatile_attributes: bool = False,
 ) -> str:
-    canonical = _canonical_element(element, relationships, ignore_rsids=ignore_rsids)
+    canonical = _canonical_element(
+        element,
+        relationships,
+        ignore_rsids=ignore_rsids,
+        preserve_volatile_attributes=preserve_volatile_attributes,
+    )
     encoded = json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode(
         "utf-8"
     )
@@ -2207,11 +2506,17 @@ def _canonical_element(
     relationships: dict[str, _Relationship],
     *,
     ignore_rsids: bool,
+    preserve_volatile_attributes: bool,
 ) -> list[object]:
     namespace, local_name = _qualified_name(element.tag)
     attributes: list[tuple[str, object]] = []
     for attribute, value in sorted(element.attrib.items()):
-        if _ignore_attribute(namespace, local_name, attribute):
+        if _ignore_attribute(
+            namespace,
+            local_name,
+            attribute,
+            preserve_volatile_attributes=preserve_volatile_attributes,
+        ):
             continue
         attribute_namespace, _ = _qualified_name(attribute)
         if attribute_namespace in _REL_ATTRIBUTE_NAMESPACES:
@@ -2230,7 +2535,12 @@ def _canonical_element(
         if ignore_rsids and _is_word_element(child, "rsids"):
             continue
         children.append(
-            _canonical_element(child, relationships, ignore_rsids=ignore_rsids)
+            _canonical_element(
+                child,
+                relationships,
+                ignore_rsids=ignore_rsids,
+                preserve_volatile_attributes=preserve_volatile_attributes,
+            )
         )
     return [
         element.tag,
@@ -2245,6 +2555,8 @@ def _ignore_attribute(
     element_namespace: str,
     element_local_name: str,
     attribute: str,
+    *,
+    preserve_volatile_attributes: bool,
 ) -> bool:
     attribute_namespace, attribute_local_name = _qualified_name(attribute)
     if (
@@ -2252,7 +2564,10 @@ def _ignore_attribute(
         and attribute_local_name.casefold().startswith("rsid")
     ):
         return True
-    if attribute_local_name in _VOLATILE_ATTRIBUTE_NAMES:
+    if (
+        not preserve_volatile_attributes
+        and attribute_local_name in _VOLATILE_ATTRIBUTE_NAMES
+    ):
         return True
     return (
         element_namespace in _WORD_NAMESPACES

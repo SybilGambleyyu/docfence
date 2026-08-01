@@ -40,6 +40,8 @@ _RULES: Final = {
     "no_external_document_dependency_changes": "DFP026",
     "require_no_external_fields": "DFP027",
     "no_external_field_changes": "DFP028",
+    "require_no_modern_comment_metadata": "DFP029",
+    "no_modern_comment_metadata_changes": "DFP030",
 }
 
 
@@ -266,6 +268,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_modern_comment_metadata_changes") and (
+        before.modern_comment_metadata.signature
+        != after.modern_comment_metadata.signature
+    ):
+        findings.append(
+            _finding(
+                "no_modern_comment_metadata_changes",
+                "Modern Word comment metadata inventory changed.",
+                {
+                    "before": before.modern_comment_metadata.public_dict(),
+                    "after": after.modern_comment_metadata.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_external_document_dependency_changes") and (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature
@@ -404,6 +420,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_external_fields",
                 "Candidate contains stored external-source Word field instructions.",
                 after.external_fields.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_modern_comment_metadata") and any(
+        after.modern_comment_metadata.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_modern_comment_metadata",
+                "Candidate contains stored modern Word comment metadata.",
+                after.modern_comment_metadata.public_dict(),
             )
         )
     if policy.enabled("require_no_external_document_dependencies") and any(

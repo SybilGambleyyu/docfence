@@ -462,6 +462,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.modern_comment_metadata.signature
+        != after.modern_comment_metadata.signature
+    ):
+        changes.append(
+            Change(
+                kind="modern_comment_metadata_inventory_changed",
+                message="Stored modern Word comment metadata inventory changed.",
+                details={
+                    "before": before.modern_comment_metadata.public_dict(),
+                    "after": after.modern_comment_metadata.public_dict(),
+                },
+            )
+        )
+    if (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature
     ):

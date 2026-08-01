@@ -201,6 +201,43 @@ class ExternalFieldInventory:
 
 
 @dataclass(frozen=True)
+class ModernCommentMetadataInventory:
+    """Stored modern Word comment metadata, exposed only as aggregate counts."""
+
+    people_part_count: int
+    person_count: int
+    presence_info_count: int
+    comments_extended_part_count: int
+    comment_extension_count: int
+    threaded_comment_count: int
+    resolved_comment_count: int
+    comments_id_part_count: int
+    comment_id_count: int
+    comments_extensible_part_count: int
+    comment_extensible_count: int
+    reaction_count: int
+    reaction_user_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "people_part_count": self.people_part_count,
+            "person_count": self.person_count,
+            "presence_info_count": self.presence_info_count,
+            "comments_extended_part_count": self.comments_extended_part_count,
+            "comment_extension_count": self.comment_extension_count,
+            "threaded_comment_count": self.threaded_comment_count,
+            "resolved_comment_count": self.resolved_comment_count,
+            "comments_id_part_count": self.comments_id_part_count,
+            "comment_id_count": self.comment_id_count,
+            "comments_extensible_part_count": self.comments_extensible_part_count,
+            "comment_extensible_count": self.comment_extensible_count,
+            "reaction_count": self.reaction_count,
+            "reaction_user_count": self.reaction_user_count,
+        }
+
+
+@dataclass(frozen=True)
 class ExternalDocumentDependencyInventory:
     """Stored references to external Word document packages."""
 
@@ -281,7 +318,7 @@ class RelationshipInventory:
 
 @dataclass(frozen=True)
 class DocumentSnapshot:
-    """One bounded private DOCX/DOCM snapshot."""
+    """One bounded private Word OOXML document or template snapshot."""
 
     format: str
     package_member_count: int
@@ -294,6 +331,7 @@ class DocumentSnapshot:
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
+    modern_comment_metadata: ModernCommentMetadataInventory
     external_document_dependencies: ExternalDocumentDependencyInventory
     track_revisions_enabled: bool
     comment_count: int
@@ -376,6 +414,7 @@ class DocumentSnapshot:
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
+            "modern_comment_metadata": self.modern_comment_metadata.public_dict(),
             "external_document_dependencies": (
                 self.external_document_dependencies.public_dict()
             ),

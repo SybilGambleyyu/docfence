@@ -49,7 +49,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="docfence",
-        description="Local-first, privacy-safe DOCX/DOCM change assurance.",
+        description="Local-first, privacy-safe Word OOXML change assurance.",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"

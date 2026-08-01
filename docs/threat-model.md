@@ -15,10 +15,12 @@ queries, field mappings, recipient data, data-binding XPath expressions,
 namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
 values, external-source field paths, connections, queries, application/item
 references, external template/subdocument/frame-source targets, and frame names
-must not become DocFence report content. The report may be stored in CI
-artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
-intentionally restricted to counts, fixed categories, booleans, and generic
-story kinds.
+must not become DocFence report content. Modern-comment author names, contact
+providers and user IDs, comment paragraph and durable IDs, timestamps, thread
+associations, reaction users, and reaction timestamps are sensitive package
+material under the same rule. The report may be stored in CI artifacts, pasted
+into an issue, or uploaded to a SARIF consumer, so it is intentionally
+restricted to counts, fixed categories, booleans, and generic story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -29,8 +31,8 @@ container with the Python standard library.
 ## Package and parser defenses
 
 Before parsing, the reader rejects a source path that is not a regular file or
-is a symlink. It reads only `.docx` and `.docm` paths and applies these default
-limits:
+is a symlink. It reads only `.docx`, `.docm`, `.dotx`, and `.dotm` paths and
+applies these default limits:
 
 | Boundary | Default |
 | --- | ---: |
@@ -110,6 +112,17 @@ rather than being combined with the current `w:instrText` sequence. Instruction
 text outside a complete field or an unclosed complex field is not classified as
 an external source.
 
+Modern Word comment metadata receives the same private-digest treatment. The
+recognized `people`, `commentsExtended`, `commentsIds`, and
+`commentsExtensible` parts are root-validated before their content is reduced to
+private signatures. Public output contains aggregate counts only. In
+particular, it never emits author/contact/provider data, paragraph or durable
+IDs, dates, extension values, reaction values, or part paths. The private
+signature deliberately retains comment identifiers so a same-count thread or
+identifier rewrite remains review-visible. A recognized metadata relationship
+must be internal and resolve to a validated package member. DocFence does not
+render, resolve, synchronize, notify, or modify comments or reaction state.
+
 External Word document dependencies receive the same private-digest treatment.
 DocFence recognizes attached-template relationships from discovered Document
 Settings parts, subdocument relationships from the main document, and frame
@@ -163,7 +176,11 @@ subdocument, and frameset counts are likewise stored-state evidence, not proof
 that Word will retrieve a target, that an external document exists, or that any
 external content is safe. DocFence does not validate a target's scheme, follow
 a redirected resource, determine its effective contents, or emulate Word's
-template, master-document, or frameset behavior.
+template, master-document, or frameset behavior. Modern-comment metadata counts
+are also stored-state evidence: they do not prove that a comment is visible,
+resolved in a service, associated with a live account, or that a reaction will
+be shown. DocFence does not interpret unknown comment extensions or synchronize
+comment state with Word or a cloud service.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

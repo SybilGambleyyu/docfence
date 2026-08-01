@@ -125,6 +125,37 @@ _DOCUMENT_PROPERTIES_VT_NAMESPACE = (
 _STRICT_DOCUMENT_PROPERTIES_VT_NAMESPACE = (
     "http://purl.oclc.org/ooxml/officeDocument/docPropsVTypes"
 )
+_DOTX_MAIN_TYPE = (
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"
+)
+_DOTM_MAIN_TYPE = "application/vnd.ms-word.template.macroEnabledTemplate.main+xml"
+_WORD_2010_11_NAMESPACE = "http://schemas.microsoft.com/office/word/2010/11/wordml"
+_WORD_2012_NAMESPACE = "http://schemas.microsoft.com/office/word/2012/wordml"
+_WORD_2016_COMMENT_IDS_NAMESPACE = (
+    "http://schemas.microsoft.com/office/word/2016/wordml/cid"
+)
+_WORD_2018_COMMENT_EXTENSIBLE_NAMESPACE = (
+    "http://schemas.microsoft.com/office/word/2018/wordml/cex"
+)
+_WORD_2018_NAMESPACE = "http://schemas.microsoft.com/office/word/2018/wordml"
+_COMMENT_REACTIONS_NAMESPACE = (
+    "http://schemas.microsoft.com/office/comments/2020/reactions"
+)
+_COMMENTS_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments"
+)
+_PEOPLE_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2011/relationships/people"
+)
+_COMMENTS_EXTENDED_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2011/relationships/commentsExtended"
+)
+_COMMENTS_IDS_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2016/09/relationships/commentsIds"
+)
+_COMMENTS_EXTENSIBLE_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -1070,6 +1101,210 @@ rules:
         assert marker not in rendered
 
 
+def test_modern_comment_metadata_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    payload_changed = tmp_path / "payload-changed.docx"
+    identifier_changed = tmp_path / "identifier-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_modern_comment_metadata_document(before, include_metadata=False)
+    _write_modern_comment_metadata_document(after)
+    _write_modern_comment_metadata_document(
+        payload_changed,
+        metadata_marker="MODERN_COMMENT_METADATA_CHANGED_DO_NOT_LEAK",
+    )
+    _write_modern_comment_metadata_document(
+        identifier_changed,
+        comment_identity_marker="MODERN_COMMENT_IDENTIFIERS_CHANGED_DO_NOT_LEAK",
+    )
+    _write_modern_comment_metadata_document(renumbered, relationship_id_suffix="9")
+
+    expected_inventory = {
+        "people_part_count": 1,
+        "person_count": 2,
+        "presence_info_count": 2,
+        "comments_extended_part_count": 1,
+        "comment_extension_count": 2,
+        "threaded_comment_count": 1,
+        "resolved_comment_count": 1,
+        "comments_id_part_count": 1,
+        "comment_id_count": 2,
+        "comments_extensible_part_count": 1,
+        "comment_extensible_count": 2,
+        "reaction_count": 2,
+        "reaction_user_count": 3,
+    }
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["modern_comment_metadata"] == expected_inventory
+    assert load_snapshot(before).public_dict()["modern_comment_metadata"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert snapshot.comment_count == load_snapshot(before).comment_count == 1
+    assert (
+        snapshot.unclassified_part_count
+        == load_snapshot(before).unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "modern_comment_metadata_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert {
+        change.kind for change in diff_documents(after, payload_changed).changes
+    } == {"modern_comment_metadata_inventory_changed"}
+    assert {
+        change.kind for change in diff_documents(after, identifier_changed).changes
+    } == {"modern_comment_metadata_inventory_changed"}
+    assert diff_documents(after, renumbered).changes == ()
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_modern_comment_metadata: true
+  no_modern_comment_metadata_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP029",
+        "DFP030",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, payload_changed), policy
+        ).findings
+    } == {"DFP029", "DFP030"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP029"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_MODERN_COMMENT_METADATA_INVENTORY_CHANGED",
+        "DFP029",
+        "DFP030",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "MODERN_COMMENT_AUTHOR_DO_NOT_LEAK",
+        "MODERN_COMMENT_PROVIDER_DO_NOT_LEAK",
+        "MODERN_COMMENT_USER_ID_DO_NOT_LEAK",
+        "MODERN_COMMENT_DURABLE_ID_DO_NOT_LEAK",
+        "MODERN_COMMENT_METADATA_CHANGED_DO_NOT_LEAK",
+        "MODERN_COMMENT_IDENTIFIERS_CHANGED_DO_NOT_LEAK",
+        "MODERN_COMMENT_REACTION_USER_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_modern_comment_metadata_discovers_noncanonical_parts_and_rejects_invalid_parts(
+    tmp_path,
+) -> None:
+    relationship_only = tmp_path / "relationship-only.docx"
+    content_type_only = tmp_path / "content-type-only.docx"
+    conventional_unlinked = tmp_path / "conventional-unlinked.docx"
+    legacy_office_15 = tmp_path / "legacy-office-15.docx"
+    wrong_root = tmp_path / "wrong-root.docx"
+    external_relationship = tmp_path / "external-relationship.docx"
+    part_names = {
+        "people": "word/reviewer-data/people-records.xml",
+        "comments_extended": "word/reviewer-data/comment-threads.xml",
+        "comments_ids": "word/reviewer-data/comment-identifiers.xml",
+        "comments_extensible": "word/reviewer-data/comment-reactions.xml",
+    }
+    _write_modern_comment_metadata_document(
+        relationship_only,
+        part_names=part_names,
+        include_metadata_content_types=False,
+    )
+    _write_modern_comment_metadata_document(
+        content_type_only,
+        part_names=part_names,
+        include_metadata_relationships=False,
+    )
+    _write_modern_comment_metadata_document(
+        conventional_unlinked,
+        include_metadata_relationships=False,
+        include_metadata_content_types=False,
+    )
+    _write_modern_comment_metadata_document(
+        legacy_office_15,
+        office_15_namespace=_WORD_2010_11_NAMESPACE,
+    )
+    _write_modern_comment_metadata_document(wrong_root, wrong_people_root=True)
+    _write_modern_comment_metadata_document(
+        external_relationship,
+        modern_relationship_target_mode="External",
+    )
+
+    expected_inventory = {
+        "people_part_count": 1,
+        "person_count": 2,
+        "presence_info_count": 2,
+        "comments_extended_part_count": 1,
+        "comment_extension_count": 2,
+        "threaded_comment_count": 1,
+        "resolved_comment_count": 1,
+        "comments_id_part_count": 1,
+        "comment_id_count": 2,
+        "comments_extensible_part_count": 1,
+        "comment_extensible_count": 2,
+        "reaction_count": 2,
+        "reaction_user_count": 3,
+    }
+    assert load_snapshot(relationship_only).public_dict()[
+        "modern_comment_metadata"
+    ] == (expected_inventory)
+    assert load_snapshot(content_type_only).public_dict()[
+        "modern_comment_metadata"
+    ] == (expected_inventory)
+    assert load_snapshot(conventional_unlinked).public_dict()[
+        "modern_comment_metadata"
+    ] == (expected_inventory)
+    assert load_snapshot(legacy_office_15).public_dict()["modern_comment_metadata"] == (
+        expected_inventory
+    )
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(wrong_root)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(external_relationship)
+
+
+def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
+    template = tmp_path / "review-template.dotx"
+    macro_template = tmp_path / "review-template.dotm"
+    _write_modern_comment_metadata_document(
+        template,
+        main_content_type=_DOTX_MAIN_TYPE,
+    )
+    _write_modern_comment_metadata_document(
+        macro_template,
+        main_content_type=_DOTM_MAIN_TYPE,
+        macro_payload=b"TEMPLATE_MACRO_DO_NOT_LEAK",
+    )
+
+    template_snapshot = load_snapshot(template)
+    macro_template_snapshot = load_snapshot(macro_template)
+    assert template_snapshot.format == "dotx"
+    assert macro_template_snapshot.format == "dotm"
+    assert template_snapshot.modern_comment_metadata.person_count == 2
+    assert macro_template_snapshot.modern_comment_metadata.comment_extension_count == 2
+    assert macro_template_snapshot.macro_present is True
+
+
 def test_external_field_inventory_handles_nested_and_resultless_complex_fields(
     tmp_path,
 ) -> None:
@@ -1559,6 +1794,228 @@ def _write_external_field_document(
         entries["word/header1.xml"] = (
             f'<w:hdr xmlns:w="{word_namespace}"><w:p>{header_field}</w:p></w:hdr>'
         ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_modern_comment_metadata_document(
+    path,
+    *,
+    include_metadata: bool = True,
+    metadata_marker: str = "MODERN_COMMENT",
+    comment_identity_marker: str | None = None,
+    relationship_id_suffix: str = "1",
+    part_names: dict[str, str] | None = None,
+    include_metadata_relationships: bool = True,
+    include_metadata_content_types: bool = True,
+    modern_relationship_target_mode: str = "Internal",
+    wrong_people_root: bool = False,
+    office_15_namespace: str = _WORD_2012_NAMESPACE,
+    main_content_type: str = DOCX_MAIN_TYPE,
+    macro_payload: bytes | None = None,
+) -> None:
+    """Write a small package with all four modern Word comment metadata parts."""
+
+    modern_part_names = part_names or {
+        "people": "word/people.xml",
+        "comments_extended": "word/commentsExtended.xml",
+        "comments_ids": "word/commentsIds.xml",
+        "comments_extensible": "word/commentsExtensible.xml",
+    }
+    modern_content_types = {
+        "people": (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml"
+        ),
+        "comments_extended": (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml."
+            "commentsExtended+xml"
+        ),
+        "comments_ids": (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml."
+            "commentsIds+xml"
+        ),
+        "comments_extensible": (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml."
+            "commentsExtensible+xml"
+        ),
+    }
+    modern_relationship_types = {
+        "people": _PEOPLE_RELATIONSHIP_TYPE,
+        "comments_extended": _COMMENTS_EXTENDED_RELATIONSHIP_TYPE,
+        "comments_ids": _COMMENTS_IDS_RELATIONSHIP_TYPE,
+        "comments_extensible": _COMMENTS_EXTENSIBLE_RELATIONSHIP_TYPE,
+    }
+    people_root_name = "notPeople" if wrong_people_root else "people"
+    identity_marker = comment_identity_marker or metadata_marker
+    primary_author = f"{metadata_marker}_AUTHOR_DO_NOT_LEAK"
+    primary_provider = f"{metadata_marker}_PROVIDER_DO_NOT_LEAK"
+    primary_user_id = f"{metadata_marker}_USER_ID_DO_NOT_LEAK"
+    secondary_author = f"{metadata_marker}_SECOND_AUTHOR_DO_NOT_LEAK"
+    secondary_provider = f"{metadata_marker}_SECOND_PROVIDER_DO_NOT_LEAK"
+    secondary_user_id = f"{metadata_marker}_SECOND_USER_ID_DO_NOT_LEAK"
+    primary_para_id = f"{identity_marker}_PARA_A_DO_NOT_LEAK"
+    secondary_para_id = f"{identity_marker}_PARA_B_DO_NOT_LEAK"
+    primary_durable_id = f"{identity_marker}_DURABLE_ID_DO_NOT_LEAK"
+    secondary_durable_id = f"{identity_marker}_SECOND_DURABLE_ID_DO_NOT_LEAK"
+    reaction_provider = f"{metadata_marker}_REACTION_PROVIDER_DO_NOT_LEAK"
+    reaction_users = (
+        f"{metadata_marker}_REACTION_USER_DO_NOT_LEAK",
+        f"{metadata_marker}_SECOND_REACTION_USER_DO_NOT_LEAK",
+        f"{metadata_marker}_THIRD_REACTION_USER_DO_NOT_LEAK",
+    )
+    reaction_names = (
+        f"{metadata_marker}_REACTION_NAME_DO_NOT_LEAK",
+        f"{metadata_marker}_SECOND_REACTION_NAME_DO_NOT_LEAK",
+        f"{metadata_marker}_THIRD_REACTION_NAME_DO_NOT_LEAK",
+    )
+    modern_payloads = {
+        "people": f'''<w15:{people_root_name}
+  xmlns:w15="{office_15_namespace}">
+  <w15:person w15:author="{primary_author}">
+    <w15:presenceInfo
+      w15:providerId="{primary_provider}"
+      w15:userId="{primary_user_id}"/>
+  </w15:person>
+  <w15:person w15:author="{secondary_author}">
+    <w15:presenceInfo
+      w15:providerId="{secondary_provider}"
+      w15:userId="{secondary_user_id}"/>
+  </w15:person>
+</w15:{people_root_name}>'''.encode(),
+        "comments_extended": f'''<w15:commentsEx
+  xmlns:w15="{office_15_namespace}">
+  <w15:commentEx w15:paraId="{primary_para_id}" w15:done="1"/>
+  <w15:commentEx
+    w15:paraId="{secondary_para_id}"
+    w15:paraIdParent="{primary_para_id}"
+    w15:done="0"/>
+</w15:commentsEx>'''.encode(),
+        "comments_ids": f'''<w16cid:commentsIds
+  xmlns:w16cid="{_WORD_2016_COMMENT_IDS_NAMESPACE}">
+  <w16cid:commentId
+    w16cid:paraId="{primary_para_id}"
+    w16cid:durableId="{primary_durable_id}"/>
+  <w16cid:commentId
+    w16cid:paraId="{secondary_para_id}"
+    w16cid:durableId="{secondary_durable_id}"/>
+</w16cid:commentsIds>'''.encode(),
+        "comments_extensible": f'''<w16cex:commentsExtensible
+  xmlns:w16cex="{_WORD_2018_COMMENT_EXTENSIBLE_NAMESPACE}"
+  xmlns:w16="{_WORD_2018_NAMESPACE}"
+  xmlns:cr="{_COMMENT_REACTIONS_NAMESPACE}">
+  <w16cex:commentExtensible
+    w16cex:durableId="{primary_durable_id}"
+    w16cex:dateUtc="2026-08-01T00:00:00Z">
+    <w16cex:extLst>
+      <w16:ext w16:uri="{{CE6994B0-6A32-4C9F-8C6B-6E91EDA988CE}}">
+        <cr:reactions>
+          <cr:reaction reactionType="1">
+            <cr:reactionInfo dateUtc="2026-08-01T00:00:00Z">
+              <cr:user
+                userId="{reaction_users[0]}"
+                userName="{reaction_names[0]}"
+                userProvider="{reaction_provider}"/>
+            </cr:reactionInfo>
+            <cr:reactionInfo dateUtc="2026-08-01T01:00:00Z">
+              <cr:user
+                userId="{reaction_users[1]}"
+                userName="{reaction_names[1]}"
+                userProvider="{reaction_provider}"/>
+            </cr:reactionInfo>
+          </cr:reaction>
+        </cr:reactions>
+      </w16:ext>
+    </w16cex:extLst>
+  </w16cex:commentExtensible>
+  <w16cex:commentExtensible
+    w16cex:durableId="{secondary_durable_id}"
+    w16cex:dateUtc="2026-08-01T02:00:00Z">
+    <w16cex:extLst>
+      <w16:ext w16:uri="{{CE6994B0-6A32-4C9F-8C6B-6E91EDA988CE}}">
+        <cr:reactions>
+          <cr:reaction reactionType="2">
+            <cr:reactionInfo dateUtc="2026-08-01T02:00:00Z">
+              <cr:user
+                userId="{reaction_users[2]}"
+                userName="{reaction_names[2]}"
+                userProvider="{reaction_provider}"/>
+            </cr:reactionInfo>
+          </cr:reaction>
+        </cr:reactions>
+      </w16:ext>
+    </w16cex:extLst>
+  </w16cex:commentExtensible>
+</w16cex:commentsExtensible>'''.encode(),
+    }
+
+    modern_overrides = (
+        "".join(
+            f'<Override PartName="/{modern_part_names[kind]}" '
+            f'ContentType="{modern_content_types[kind]}"/>'
+            for kind in sorted(modern_part_names)
+        )
+        if include_metadata and include_metadata_content_types
+        else ""
+    )
+    relationships = [
+        f'<Relationship Id="rIdComments{relationship_id_suffix}" '
+        f'Type="{_COMMENTS_RELATIONSHIP_TYPE}" Target="comments.xml"/>'
+    ]
+    if include_metadata and include_metadata_relationships:
+        target_mode = (
+            ' TargetMode="External"'
+            if modern_relationship_target_mode == "External"
+            else ""
+        )
+        relationships.extend(
+            f'<Relationship Id="rId{kind.title().replace("_", "")}'
+            f'{relationship_id_suffix}" '
+            f'Type="{modern_relationship_types[kind]}" '
+            f'Target="{modern_part_names[kind].removeprefix("word/")}"{target_mode}/>'
+            for kind in sorted(modern_part_names)
+        )
+
+    main_document_override = (
+        f'<Override PartName="/word/document.xml" ContentType="{main_content_type}"/>'
+    )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f"{main_document_override}"
+            '<Override PartName="/word/comments.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.'
+            'wordprocessingml.comments+xml"/>'
+            f"{modern_overrides}</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "BODY_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/comments.xml": (
+            f'<w:comments xmlns:w="{W}"><w:comment w:id="0" '
+            'w:author="CLASSIC_COMMENT_AUTHOR_DO_NOT_LEAK"><w:p><w:r><w:t>'
+            "CLASSIC_COMMENT_TEXT_DO_NOT_LEAK"
+            "</w:t></w:r></w:p></w:comment></w:comments>"
+        ).encode(),
+        "word/_rels/document.xml.rels": (
+            f'<Relationships xmlns="{PR}">{"".join(relationships)}</Relationships>'
+        ).encode(),
+    }
+    if include_metadata:
+        entries.update(
+            {
+                modern_part_names[kind]: modern_payloads[kind]
+                for kind in modern_part_names
+            }
+        )
+    if macro_payload is not None:
+        entries["word/vbaProject.bin"] = macro_payload
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

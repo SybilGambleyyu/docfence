@@ -56,6 +56,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
+        _modern_comment_metadata_section(document.get("modern_comment_metadata", {}))
+    )
+    lines.extend(
         _external_document_dependency_section(
             document.get("external_document_dependencies", {})
         )
@@ -77,6 +80,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
+    lines.extend(_modern_comment_metadata_comparison(before, after))
     lines.extend(_external_document_dependency_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
@@ -254,6 +258,10 @@ def _external_field_section(value: object) -> list[str]:
     return _inventory_section("External-source Word field inventory", value)
 
 
+def _modern_comment_metadata_section(value: object) -> list[str]:
+    return _inventory_section("Modern Word comment metadata inventory", value)
+
+
 def _external_document_dependency_section(value: object) -> list[str]:
     return _inventory_section("External Word document dependency inventory", value)
 
@@ -322,6 +330,16 @@ def _external_field_comparison(
         "External-source Word field inventory",
         before.get("external_fields", {}),
         after.get("external_fields", {}),
+    )
+
+
+def _modern_comment_metadata_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Modern Word comment metadata inventory",
+        before.get("modern_comment_metadata", {}),
+        after.get("modern_comment_metadata", {}),
     )
 
 

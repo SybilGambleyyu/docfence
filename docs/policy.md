@@ -50,6 +50,8 @@ starter policy.
 | `no_external_document_dependency_changes` | `DFP026` | External Word document dependency inventory differs | Comparison |
 | `require_no_external_fields` | `DFP027` | Candidate has a recognized external-source Word field instruction | Candidate |
 | `no_external_field_changes` | `DFP028` | External-source Word field inventory differs | Comparison |
+| `require_no_modern_comment_metadata` | `DFP029` | Candidate has stored modern Word comment contact, threading, identifier, or reaction metadata | Candidate |
+| `no_modern_comment_metadata_changes` | `DFP030` | Modern Word comment metadata inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -79,7 +81,9 @@ custom XML. `no_external_document_dependency_changes` does the same for a
 controlled template that deliberately retains an attached template, master
 subdocument, or frameset source. `no_external_field_changes` does the same for
 a controlled template that deliberately retains known external-source Word
-fields. `word/styles.xml` is handled by the dedicated style inventory instead.
+fields. `no_modern_comment_metadata_changes` does the same for a controlled
+template that intentionally retains modern comment review state.
+`word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
 
@@ -231,6 +235,32 @@ complex instruction across a different number of `instrText` runs remains
 quiet. These rules intentionally do not claim to inventory arbitrary field
 expressions or every field that might display a URL; generic external
 relationships remain a separate inventory.
+
+## Modern Word comment metadata scope
+
+Modern Word comments can retain review data in parts outside the ordinary
+comments story. DocFence inventories standard `people`, `commentsExtended`,
+`commentsIds`, and `commentsExtensible` parts found through their standard
+content types, relationship types, or conventional paths. It accepts the
+established Office 15 `2010/11` and current `2012` vocabulary for the people
+and comments-extended roots, while the identifier and extensible parts require
+their documented `2016` and `2018` vocabularies. Every recognized root is
+validated. A recognized metadata relationship must be internal and resolve to
+a stored member; malformed recognized state fails closed.
+
+Public output exposes only aggregate part, person, presence, comment-extension,
+threaded/reply, resolved, identifier-record, extensible-record, reaction, and
+reaction-user counts. The comparison signature retains author/contact/provider
+data, comment paragraph and durable IDs, timestamps, extensions, and reactions
+privately, so an identifier-only mutation remains visible without disclosing the
+identifier. Relationship-ID renumbering alone remains quiet.
+
+`require_no_modern_comment_metadata` fails when any public count is nonzero.
+Use it for a clean handoff that must contain no retained modern-comment review
+state. `no_modern_comment_metadata_changes` instead protects an approved
+baseline. Neither rule renders a thread, resolves an account, contacts a
+service, evaluates a notification, interprets extension payloads, or changes a
+comment.
 
 ## External Word document dependency scope
 

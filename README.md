@@ -1,14 +1,16 @@
 # DocFence
 
-DocFence is a local-first change-assurance CLI for Word `.docx` and `.docm`
-files. It turns an opaque document diff into a reviewable, privacy-safe account
-of stored content-block changes and the review surfaces that often stay hidden:
+DocFence is a local-first change-assurance CLI for Word `.docx`, `.docm`,
+`.dotx`, and `.dotm` files. It turns an opaque document diff into a
+reviewable, privacy-safe account of stored content-block changes and the review
+surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 external relationships, custom XML, macros, core/extended/custom document
 properties, mail-merge configuration and recipient-data state, data-bound
 content controls and their referenced custom XML state, external document
-dependencies, embedded OLE/package/control
+dependencies, modern comment contact/thread/identifier/reaction metadata,
+embedded OLE/package/control
 payloads, OOXML alternative-format imports, headers, footers, notes, document
 settings, and otherwise unclassified package payloads.
 
@@ -16,7 +18,7 @@ It never opens Word, executes macros, follows links, renders a document, uploads
 source material, or writes a redline. By default, reports contain counts,
 story categories, and change categories—not document text, reviewer
 names, comments, URLs, relationship targets, field instructions, custom XML,
-or macro bytes.
+macro bytes, or modern-comment contact records and identifiers.
 
 ```bash
 python -m pip install docfence
@@ -45,10 +47,10 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.8 focuses on Office Open XML Word documents and deliberately keeps a
-small, inspectable contract:
+Version 0.9 focuses on Office Open XML Word documents and templates and
+deliberately keeps a small, inspectable contract:
 
-- bounded `.docx` / `.docm` ZIP packages;
+- bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
 - body, header, footer, footnote, endnote, comment, and glossary stories;
 - paragraph/table block fingerprints that ignore Word's volatile `rsid`
   bookkeeping while retaining stored text and formatting semantics privately;
@@ -57,8 +59,9 @@ small, inspectable contract:
   field-code, external-source field, content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, mail-merge, content-control
-  data-binding, attached-template/master-subdocument/frameset-source external
-  document dependency, embedded OLE/package/control, alternative-format-import,
+  data-binding, modern-comment metadata,
+  attached-template/master-subdocument/frameset-source external document
+  dependency, embedded OLE/package/control, alternative-format-import,
   and Track Changes inventories;
 - `w:altChunk` anchors paired with an internal OOXML alternative-format-import
   relationship and its stored payload;
@@ -141,6 +144,20 @@ counted. The field keyword is a review signal, not a parser or evaluator:
 DocFence does not interpret its arguments, update the field, locate a source,
 run a query, start DDE, open an OLE object, or fetch any content.
 
+Modern Word comments can retain review metadata outside the ordinary
+`word/comments.xml` story. DocFence recognizes the standard `people`,
+`commentsExtended`, `commentsIds`, and `commentsExtensible` parts by their
+standard content types, relationship types, or conventional paths. It accepts
+the established Office 15 `2010/11` and current `2012` root vocabularies for
+people/thread metadata, validates every recognized root, and requires a
+recognized metadata relationship to be internal and resolve to a stored part.
+Reports contain aggregate part, contact-record, thread/reply, resolved-state,
+identifier-record, reaction, and reaction-user counts only. Author names,
+provider and user IDs, paragraph and durable IDs, dates, extension data,
+reaction details, part paths, and private fingerprints never leave the process.
+The inventory does not render comments, resolve a person, synchronize with a
+cloud service, infer notification behavior, or modify comment state.
+
 External Word document dependencies are recorded separately from the generic
 external-relationship count. DocFence recognizes an attached template in a
 Document Settings part, `w:subDoc` anchors in the main document, and
@@ -185,6 +202,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_mail_merge: true
   require_no_data_bindings: true
   require_no_external_fields: true
+  require_no_modern_comment_metadata: true
   require_no_external_document_dependencies: true
 ```
 
@@ -199,6 +217,7 @@ later mutation:
   no_mail_merge_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
+  no_modern_comment_metadata_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -216,6 +235,9 @@ XML values, document-property names and values, mail-merge configuration and
 recipient data, data-binding XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
 external template/subdocument/frame-source targets, and all fingerprints.
+Modern-comment author/contact/provider identifiers, paragraph and durable IDs,
+timestamps, thread associations, and reaction identities receive the same
+private treatment.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -273,6 +295,18 @@ template injection as an abuse of document template references. A reconstructed
 package from the open-source [XJTU thesis Office
 template](https://github.com/obster-y/XJTU-thesis-Office/tree/master/%E6%A8%A1%E6%9D%BF%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E-docx)
 was profiled as an attached-template compatibility smoke test.
+The modern-comment boundary follows Microsoft's [modern comments
+overview](https://support.microsoft.com/en-US/Word/using-modern-comments-in-word),
+the [people-part contract](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/f461e6b7-7a35-4bc4-8153-b60f5d925539),
+the [commentsExtended](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/31f689cd-4192-4c2d-8d2f-202b1f8f20e9),
+[commentsIds](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/22977b5a-5bb5-4f27-b7a1-c6d216c2bb94),
+and [commentsExtensible](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-docx/62c16828-8131-4d1f-99f8-afd7560a1c78)
+part contracts. Microsoft's [reaction extension
+example](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oreactxml/24d7d1f3-568d-4df9-89ef-42867776d742)
+shows that reactions can carry user and time metadata. The Open XML SDK's
+[Wordprocessing document types](https://github.com/dotnet/Open-XML-SDK/blob/main/src/DocumentFormat.OpenXml/WordprocessingDocumentType.cs)
+also enumerate document, template, macro-enabled document, and macro-enabled
+template packages.
 
 ## Development
 

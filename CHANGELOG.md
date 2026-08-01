@@ -2,6 +2,32 @@
 
 All notable changes are documented here.
 
+## 0.9.0 — 2026-08-01
+
+- Added first-class bounded scanning for Word `.dotx` and `.dotm` template
+  packages alongside `.docx` and `.docm` documents.
+- Added a separate privacy-safe inventory for modern Word comment metadata in
+  the standard `people`, `commentsExtended`, `commentsIds`, and
+  `commentsExtensible` parts. Public output contains aggregate contact, thread,
+  resolution, identifier-record, reaction, and reaction-user counts only.
+- Added `DFP029` to require that a candidate contain no modern-comment metadata
+  and `DFP030` to block a modern-comment metadata inventory change against a
+  controlled baseline.
+- Validates each recognized part root, accepts both established Office 15
+  `2010/11` and current `2012` people/comments-extended vocabularies, and
+  requires a recognized metadata relationship to be internal and resolve to a
+  stored part. Recognized metadata parts are removed from the generic opaque
+  payload inventory.
+- Privately fingerprints contact/provider data, paragraph and durable IDs,
+  timestamps, extensions, and reaction data while preserving those identifiers
+  for comparison. Relationship-ID renumbering remains quiet, but an
+  identifier-only rewrite is detected without disclosing it.
+- Added noncanonical-path, unlinked-conventional-path, legacy-vocabulary,
+  template-format, same-count mutation, malformed-root, external-relationship,
+  policy, SARIF, and redaction regression coverage. Profiled real modern
+  comment/template packages from the Open XML SDK and an independent
+  MIT-licensed Word template repository.
+
 ## 0.8.0 — 2026-08-01
 
 - Added a separate privacy-safe inventory for stored Word field instructions
