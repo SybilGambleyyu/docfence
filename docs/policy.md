@@ -64,6 +64,8 @@ starter policy.
 | `no_word_protection_changes` | `DFP040` | Word editing/write-protection inventory differs | Comparison |
 | `require_no_word_permission_ranges` | `DFP041` | Candidate has stored Word editable-range permission markup | Candidate |
 | `no_word_permission_range_changes` | `DFP042` | Word editable-range permission inventory differs | Comparison |
+| `require_no_word_document_variables` | `DFP043` | Candidate has stored Word document-variable state | Candidate |
+| `no_word_document_variable_changes` | `DFP044` | Word document-variable inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -106,6 +108,8 @@ a template that intentionally retains approved OPC package-signature material.
 template intentionally retains Word editing/write-protection state.
 `no_word_permission_range_changes` provides the equivalent gate when an
 approved template intentionally retains editable-range permission markup.
+`no_word_document_variable_changes` provides the equivalent gate when an
+approved document or template intentionally retains document-variable state.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -494,6 +498,39 @@ recognized range-permission marker, including an unmatched marker.
 protect a controlled baseline. Neither rule authenticates a person, resolves a
 group, proves that an editor is currently authorized, calculates editable
 content, or makes an encryption or security claim.
+
+## Word document-variable scope
+
+Word can retain arbitrary name/value state as direct `w:docVar` leaves inside a
+`w:docVars` container in a document Settings part. Word's automation APIs use
+this store for document or template state, and the values are normally invisible
+unless a matching `DOCVARIABLE` field is inserted. Since either name or value
+can be sensitive, DocFence never emits either, nor a Settings-part path or
+private fingerprint.
+
+The inventory discovers document Settings parts through the conventional
+`word/settings.xml` fallback and Transitional or Strict relationships from the
+main or glossary document. It accepts at most one direct `w:docVars` container
+per Settings part. A recognized container must have no attributes or nonblank
+text and may contain only direct Word-namespace `w:docVar` leaves. Each leaf
+must have only required Word-namespace `w:name` and `w:val` attributes; names
+must be 1–255 UTF-16 code units and values at most 65,280 UTF-16 code units,
+matching the Open XML SDK schema constraints. The OOXML schema permits an empty
+value, so it is counted rather than rejected even though normal Word automation
+writes do not use one.
+
+Public output contains only aggregate container, variable, and empty-value
+counts. Every full recognized container is privately fingerprinted, so a
+same-count name or value rewrite is visible to a comparison gate without
+placing either string in a report.
+
+`require_no_word_document_variables` fails whenever a candidate contains a
+recognized `w:docVars` container, including an empty one. Use it for a handoff
+that must carry no stored document-variable state.
+`no_word_document_variable_changes` protects an approved baseline instead.
+Neither rule evaluates a field, runs a macro, resolves a variable name,
+determines whether a Word client will display a value, or judges the safety or
+meaning of the stored state.
 
 ## External Word document dependency scope
 

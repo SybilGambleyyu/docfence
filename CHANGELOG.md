@@ -2,6 +2,25 @@
 
 All notable changes are documented here.
 
+## 0.15.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for stored Word document
+  variables in direct Settings-part `w:docVars` / `w:docVar` markup.
+- Added `DFP043` to require a handoff with no stored document-variable state
+  and `DFP044` to protect an approved document-variable baseline.
+- Reports now expose aggregate container, variable, and empty-value counts
+  only. Variable names, values, Settings-part paths, and fingerprints remain
+  private.
+- Discovers Settings through the conventional path and Transitional or Strict
+  relationships from main/glossary documents. It validates the standard
+  container/leaf shape, required `name`/`val` attributes, Word namespace,
+  SDK length limits, and at-most-one container per Settings part; malformed
+  recognized variable state fails closed.
+- Privately detects same-count name or value rewrites without evaluating a
+  `DOCVARIABLE` field, running a macro, or asserting that any automation state
+  will be used. Added regression coverage for privacy redaction, policy/SARIF
+  output, discovery modes, Strict OOXML, empty values, and malformed markup.
+
 ## 0.14.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for Word editable-range

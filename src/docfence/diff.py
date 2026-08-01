@@ -465,6 +465,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_document_variables.signature
+        != after.word_document_variables.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_document_variable_inventory_changed",
+                message="Stored Word document-variable inventory changed.",
+                details={
+                    "before": before.word_document_variables.public_dict(),
+                    "after": after.word_document_variables.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

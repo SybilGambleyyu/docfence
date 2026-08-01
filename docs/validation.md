@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.14 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.15 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -11,6 +11,7 @@ following properties:
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
+  Word Settings `w:docVars`/`w:docVar` state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -76,6 +77,13 @@ following properties:
   counts; same-count hash/verifier rewrites; JSON/Markdown/SARIF redaction;
   policy findings; duplicate leaves; malformed roots/leaves; unsupported
   attributes; invalid edit/boolean values; and external Settings relationships;
+- Word document-variable state is separately inventoried from generic
+  Settings-part changes. Tests cover conventional, Transitional, Strict, and
+  glossary-linked Settings discovery; aggregate container/variable/empty-value
+  counts; same-count name/value rewrites; JSON/Markdown/SARIF redaction; policy
+  findings; and malformed containers/leaves, attributes, required names/values,
+  SDK length limits, nonblank text, duplicate containers, and external Settings
+  relationships;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -105,6 +113,7 @@ following properties:
   URIs, signing times, comments, provider data, relationship IDs, and paths,
   Word protection hashes, salts, verifier values, cryptographic provider and
   algorithm fields, and Settings-part paths,
+  Word document-variable names, values, and Settings-part paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -126,7 +135,9 @@ following properties:
   certificate relationship topology are rejected before reporting. Malformed
   recognized Word protection element structure, attributes, edit values,
   booleans, duplicate leaves, and external Settings relationships are rejected
-  before reporting. Malformed recognized Word editable-range leaves, IDs,
+  before reporting. Malformed recognized Word document-variable containers,
+  leaves, attributes, lengths, and duplicate containers are rejected before
+  reporting. Malformed recognized Word editable-range leaves, IDs,
   attributes, groups, column selectors, placement values, and duplicate
   per-story boundaries are rejected before reporting.
 
@@ -206,5 +217,7 @@ construction or strength, recover or test a password, bypass a Word
 restriction, infer effective enforcement, or treat Word protection as
 encryption/security. It does not authenticate a stored editable-range editor,
 resolve a group, calculate an editable region, or infer effective range
-authorization. Those limits are explicit in the 0.14 contract; see the
+authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
+a document-variable name, or infer whether a stored variable is used or
+visible. Those limits are explicit in the 0.15 contract; see the
 [threat model](threat-model.md).

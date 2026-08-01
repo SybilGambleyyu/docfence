@@ -54,6 +54,8 @@ _RULES: Final = {
     "no_word_protection_changes": "DFP040",
     "require_no_word_permission_ranges": "DFP041",
     "no_word_permission_range_changes": "DFP042",
+    "require_no_word_document_variables": "DFP043",
+    "no_word_document_variable_changes": "DFP044",
 }
 
 
@@ -295,6 +297,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_document_variable_changes") and (
+        before.word_document_variables.signature
+        != after.word_document_variables.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_document_variable_changes",
+                "Stored Word document-variable inventory changed.",
+                {
+                    "before": before.word_document_variables.public_dict(),
+                    "after": after.word_document_variables.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -523,6 +539,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_permission_ranges",
                 "Candidate contains stored Word editable-range permission markup.",
                 after.word_permission_ranges.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_document_variables") and any(
+        after.word_document_variables.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_document_variables",
+                "Candidate contains stored Word document-variable state.",
+                after.word_document_variables.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

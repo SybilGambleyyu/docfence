@@ -2243,6 +2243,280 @@ def test_word_protection_discovery_and_invalid_markup(tmp_path) -> None:
             load_snapshot(document)
 
 
+def test_word_document_variable_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    value_changed = tmp_path / "value-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_word_protection_document(
+        before,
+        include_document_protection=False,
+        include_write_protection=False,
+    )
+    _write_word_protection_document(
+        after,
+        include_document_protection=False,
+        include_write_protection=False,
+        settings_extra_children=(
+            "<w:docVars>"
+            '<w:docVar w:name="VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="VARIABLE_VALUE_DO_NOT_LEAK"/>'
+            '<w:docVar w:name="SECOND_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="SECOND_VARIABLE_VALUE_DO_NOT_LEAK"/>'
+            '<w:docVar w:name="EMPTY_VARIABLE_NAME_DO_NOT_LEAK" w:val=""/>'
+            "</w:docVars>"
+        ),
+    )
+    _write_word_protection_document(
+        value_changed,
+        include_document_protection=False,
+        include_write_protection=False,
+        settings_extra_children=(
+            "<w:docVars>"
+            '<w:docVar w:name="VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="VARIABLE_VALUE_CHANGED_DO_NOT_LEAK"/>'
+            '<w:docVar w:name="SECOND_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="SECOND_VARIABLE_VALUE_DO_NOT_LEAK"/>'
+            '<w:docVar w:name="EMPTY_VARIABLE_NAME_DO_NOT_LEAK" w:val=""/>'
+            "</w:docVars>"
+        ),
+    )
+
+    expected_inventory = {
+        "document_variable_container_count": 1,
+        "document_variable_count": 3,
+        "empty_document_variable_value_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert (
+        after_snapshot.public_dict()["word_document_variables"] == expected_inventory
+    )
+    assert before_snapshot.public_dict()["word_document_variables"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "word_document_variable_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert {
+        change.kind for change in diff_documents(after, value_changed).changes
+    } == {"document_settings_changed", "word_document_variable_inventory_changed"}
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_document_variables: true
+  no_word_document_variable_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP043",
+        "DFP044",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, value_changed), policy
+        ).findings
+    } == {"DFP043", "DFP044"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_DOCUMENT_VARIABLE_INVENTORY_CHANGED",
+        "DFP043",
+        "DFP044",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VARIABLE_NAME_DO_NOT_LEAK",
+        "VARIABLE_VALUE_DO_NOT_LEAK",
+        "VARIABLE_VALUE_CHANGED_DO_NOT_LEAK",
+        "SECOND_VARIABLE_NAME_DO_NOT_LEAK",
+        "SECOND_VARIABLE_VALUE_DO_NOT_LEAK",
+        "EMPTY_VARIABLE_NAME_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
+    noncanonical = tmp_path / "noncanonical.docx"
+    strict_relationship = tmp_path / "strict-relationship.docx"
+    glossary_linked = tmp_path / "glossary-linked.docx"
+    empty_value = tmp_path / "empty-value.docx"
+    duplicate_containers = tmp_path / "duplicate-containers.docx"
+    container_attributes = tmp_path / "container-attributes.docx"
+    container_text = tmp_path / "container-text.docx"
+    unexpected_child = tmp_path / "unexpected-child.docx"
+    missing_name = tmp_path / "missing-name.docx"
+    missing_value = tmp_path / "missing-value.docx"
+    empty_name = tmp_path / "empty-name.docx"
+    long_name = tmp_path / "long-name.docx"
+    supplementary_long_name = tmp_path / "supplementary-long-name.docx"
+    long_value = tmp_path / "long-value.docx"
+    unsupported_attribute = tmp_path / "unsupported-attribute.docx"
+    nonleaf = tmp_path / "nonleaf.docx"
+    residual_text = tmp_path / "residual-text.docx"
+    invalid_settings_root = tmp_path / "invalid-settings-root.docx"
+    external_settings = tmp_path / "external-settings.docx"
+    valid_markup = (
+        "<w:docVars>"
+        '<w:docVar w:name="VARIABLE_NAME_DO_NOT_LEAK" '
+        'w:val="VARIABLE_VALUE_DO_NOT_LEAK"/>'
+        "</w:docVars>"
+    )
+
+    def write_document(path, markup: str, **settings_options) -> None:
+        _write_word_protection_document(
+            path,
+            include_document_protection=False,
+            include_write_protection=False,
+            settings_extra_children=markup,
+            **settings_options,
+        )
+
+    write_document(
+        noncanonical,
+        valid_markup,
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+    )
+    write_document(
+        strict_relationship,
+        valid_markup,
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+        settings_relationship_type=_STRICT_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE,
+        settings_word_namespace=_STRICT_WORD_NAMESPACE,
+    )
+    write_document(
+        glossary_linked,
+        valid_markup,
+        settings_part_name="word/glossary/private/settings.xml",
+        include_settings_relationship=True,
+        settings_relationship_source="word/glossary/document.xml",
+    )
+    write_document(
+        empty_value,
+        '<w:docVars><w:docVar w:name="empty" w:val=""/></w:docVars>',
+    )
+    write_document(duplicate_containers, valid_markup + valid_markup)
+    write_document(
+        container_attributes,
+        '<w:docVars w:futureDocumentVariable="1">'
+        '<w:docVar w:name="name" w:val="value"/></w:docVars>',
+    )
+    write_document(
+        container_text,
+        '<w:docVars>unexpected<w:docVar w:name="name" w:val="value"/>'
+        "</w:docVars>",
+    )
+    write_document(unexpected_child, "<w:docVars><w:unexpected/></w:docVars>")
+    write_document(
+        missing_name,
+        '<w:docVars><w:docVar w:val="value"/></w:docVars>',
+    )
+    write_document(
+        missing_value,
+        '<w:docVars><w:docVar w:name="name"/></w:docVars>',
+    )
+    write_document(
+        empty_name,
+        '<w:docVars><w:docVar w:name="" w:val="value"/></w:docVars>',
+    )
+    write_document(
+        long_name,
+        f'<w:docVars><w:docVar w:name="{"N" * 256}" w:val="value"/>'
+        "</w:docVars>",
+    )
+    write_document(
+        supplementary_long_name,
+        f'<w:docVars><w:docVar w:name="{"🙂" * 128}" w:val="value"/>'
+        "</w:docVars>",
+    )
+    write_document(
+        long_value,
+        f'<w:docVars><w:docVar w:name="name" w:val="{"V" * 65_281}"/>'
+        "</w:docVars>",
+    )
+    write_document(
+        unsupported_attribute,
+        '<w:docVars><w:docVar w:name="name" w:val="value" '
+        'w:futureDocumentVariable="1"/></w:docVars>',
+    )
+    write_document(
+        nonleaf,
+        '<w:docVars><w:docVar w:name="name" w:val="value">'
+        "<w:unexpected/></w:docVar></w:docVars>",
+    )
+    write_document(
+        residual_text,
+        '<w:docVars><w:docVar w:name="name" w:val="value"/>'
+        "unexpected</w:docVars>",
+    )
+    write_document(
+        invalid_settings_root,
+        valid_markup,
+        settings_root_name="notSettings",
+    )
+    write_document(
+        external_settings,
+        "",
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+        settings_target_mode="External",
+        include_settings_part=False,
+    )
+
+    for document in (noncanonical, strict_relationship, glossary_linked):
+        snapshot = load_snapshot(document)
+        assert snapshot.word_document_variables.document_variable_container_count == 1
+        assert snapshot.word_document_variables.document_variable_count == 1
+        assert snapshot.unclassified_part_count == 1
+    empty_snapshot = load_snapshot(empty_value)
+    assert empty_snapshot.word_document_variables.document_variable_count == 1
+    assert (
+        empty_snapshot.word_document_variables.empty_document_variable_value_count
+        == 1
+    )
+
+    for document in (
+        duplicate_containers,
+        container_attributes,
+        container_text,
+        unexpected_child,
+        missing_name,
+        missing_value,
+        empty_name,
+        long_name,
+        supplementary_long_name,
+        long_value,
+        unsupported_attribute,
+        nonleaf,
+        residual_text,
+        invalid_settings_root,
+        external_settings,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_word_permission_range_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -3641,6 +3915,7 @@ def _write_word_protection_document(
     write_recommended: str = "1",
     write_hash: str = "WRITE_PROTECTION_HASH_DO_NOT_LEAK",
     write_salt: str = "WRITE_PROTECTION_SALT_DO_NOT_LEAK",
+    settings_extra_children: str = "",
 ) -> None:
     """Write a structural Word protection fixture with opaque verifier markers."""
 
@@ -3671,6 +3946,7 @@ def _write_word_protection_document(
         settings_children += write_protection
         if duplicate_write_protection:
             settings_children += write_protection
+    settings_children += settings_extra_children
 
     entries: dict[str, bytes] = {
         "[Content_Types].xml": (

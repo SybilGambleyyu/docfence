@@ -227,6 +227,32 @@ class WordProtectionInventory:
 
 
 @dataclass(frozen=True)
+class WordDocumentVariableInventory:
+    """Stored Word document-variable state, aggregate only.
+
+    Variable names and values can preserve template or automation state. They
+    remain inside the private signature; public output reports only container
+    and value-state counts.
+    """
+
+    document_variable_container_count: int
+    document_variable_count: int
+    empty_document_variable_value_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "document_variable_container_count": (
+                self.document_variable_container_count
+            ),
+            "document_variable_count": self.document_variable_count,
+            "empty_document_variable_value_count": (
+                self.empty_document_variable_value_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -572,6 +598,7 @@ class DocumentSnapshot:
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
     word_protection: WordProtectionInventory
+    word_document_variables: WordDocumentVariableInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -663,6 +690,9 @@ class DocumentSnapshot:
                 self.package_digital_signatures.public_dict()
             ),
             "word_protection": self.word_protection.public_dict(),
+            "word_document_variables": (
+                self.word_document_variables.public_dict()
+            ),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

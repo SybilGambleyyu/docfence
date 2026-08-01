@@ -39,6 +39,7 @@ from docfence.models import (
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
+    WordDocumentVariableInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
 )
@@ -255,6 +256,9 @@ _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES: Final = frozenset(
 )
 _WORD_PROTECTION_TRUE_VALUES: Final = frozenset({"1", "true", "on"})
 _WORD_PROTECTION_FALSE_VALUES: Final = frozenset({"0", "false", "off"})
+_WORD_DOCUMENT_VARIABLE_ATTRIBUTE_NAMES: Final = frozenset({"name", "val"})
+_WORD_DOCUMENT_VARIABLE_NAME_MAX_UTF16_CODE_UNITS: Final = 255
+_WORD_DOCUMENT_VARIABLE_VALUE_MAX_UTF16_CODE_UNITS: Final = 65_280
 _WORD_PERMISSION_START_ATTRIBUTE_NAMES: Final = frozenset(
     {"id", "ed", "edGrp", "colFirst", "colLast", "displacedByCustomXml"}
 )
@@ -657,6 +661,13 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            word_document_variables = _word_document_variable_inventory(
+                archive,
+                members,
+                relationship_maps,
+                document_settings_parts,
+                limits,
+            )
             word_permission_ranges = _word_permission_range_inventory(
                 archive,
                 members,
@@ -768,6 +779,7 @@ def _load_package(
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
         word_protection=word_protection,
+        word_document_variables=word_document_variables,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3800,6 +3812,120 @@ def _word_protection_attribute_enabled(
         value is not None
         and value.strip().casefold() in _WORD_PROTECTION_TRUE_VALUES
     )
+
+
+def _word_document_variable_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> WordDocumentVariableInventory:
+    """Inventory persisted Word document variables without exposing contents.
+
+    ``w:docVars`` is a direct child of a Word Settings part and stores arbitrary
+    name/value pairs in ``w:docVar`` leaves. Names and values may hold template
+    or automation state, so every recognized container is privately
+    fingerprinted while only aggregate counts are emitted.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    document_variable_container_count = 0
+    document_variable_count = 0
+    empty_document_variable_value_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        containers = [
+            element for element in root if _is_word_element(element, "docVars")
+        ]
+        if len(containers) > 1:
+            raise DocumentFormatError("Word document variables are invalid")
+
+        relationships = relationship_maps.get(settings_part, {})
+        for container in containers:
+            variable_count, empty_value_count = (
+                _validate_word_document_variables_element(container)
+            )
+            document_variable_container_count += 1
+            document_variable_count += variable_count
+            empty_document_variable_value_count += empty_value_count
+            records.append(
+                (
+                    "word_document_variables",
+                    settings_part,
+                    _fingerprint_element(container, relationships),
+                )
+            )
+
+    return WordDocumentVariableInventory(
+        document_variable_container_count=document_variable_container_count,
+        document_variable_count=document_variable_count,
+        empty_document_variable_value_count=empty_document_variable_value_count,
+        signature=_digest_records(records),
+    )
+
+
+def _validate_word_document_variables_element(element: ET.Element) -> tuple[int, int]:
+    """Validate Word's direct document-variable container and leaves."""
+
+    if (
+        not _is_word_element(element, "docVars")
+        or element.attrib
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("Word document variables are invalid")
+
+    variable_count = 0
+    empty_value_count = 0
+    for child in element:
+        attributes = _validate_word_document_variable_element(child)
+        if (child.tail or "").strip():
+            raise DocumentFormatError("Word document variables are invalid")
+        variable_count += 1
+        if not attributes["val"]:
+            empty_value_count += 1
+    return variable_count, empty_value_count
+
+
+def _validate_word_document_variable_element(element: ET.Element) -> dict[str, str]:
+    if (
+        not _is_word_element(element, "docVar")
+        or list(element)
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("Word document variables are invalid")
+
+    attributes: dict[str, str] = {}
+    for attribute, value in element.attrib.items():
+        namespace, local_name = _qualified_name(attribute)
+        if (
+            namespace not in _WORD_NAMESPACES
+            or local_name not in _WORD_DOCUMENT_VARIABLE_ATTRIBUTE_NAMES
+            or local_name in attributes
+        ):
+            raise DocumentFormatError("Word document variables are invalid")
+        attributes[local_name] = value
+
+    if set(attributes) != _WORD_DOCUMENT_VARIABLE_ATTRIBUTE_NAMES:
+        raise DocumentFormatError("Word document variables are invalid")
+    if not 1 <= _utf16_code_unit_length(attributes["name"]) <= (
+        _WORD_DOCUMENT_VARIABLE_NAME_MAX_UTF16_CODE_UNITS
+    ):
+        raise DocumentFormatError("Word document variables are invalid")
+    if _utf16_code_unit_length(attributes["val"]) > (
+        _WORD_DOCUMENT_VARIABLE_VALUE_MAX_UTF16_CODE_UNITS
+    ):
+        raise DocumentFormatError("Word document variables are invalid")
+    return attributes
+
+
+def _utf16_code_unit_length(value: str) -> int:
+    """Match the Open XML SDK StringValue length convention."""
+
+    return len(value.encode("utf-16-le")) // 2
 
 
 def _word_permission_range_inventory(
