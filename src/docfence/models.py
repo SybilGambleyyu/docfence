@@ -508,6 +508,39 @@ class WordVmlHyperlinkInventory:
 
 
 @dataclass(frozen=True)
+class WordVmlExternalImageInventory:
+    """Direct legacy VML external-image markup in Word stories, aggregate only.
+
+    Image targets, relationship IDs, VML markup, story paths, and fingerprints
+    can reveal document context. Public output reports only stored direct-marker
+    and relationship classification counts; the private signature carries only
+    the reviewed relationship semantics, not other VML image-data attributes.
+    A stored marker is not evidence that a Word client will load, render,
+    update, or otherwise honor the referenced image.
+    """
+
+    vml_external_image_reference_count: int
+    vml_external_image_story_count: int
+    external_image_relationship_vml_external_image_count: int
+    unsupported_relationship_vml_external_image_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "vml_external_image_reference_count": (
+                self.vml_external_image_reference_count
+            ),
+            "vml_external_image_story_count": self.vml_external_image_story_count,
+            "external_image_relationship_vml_external_image_count": (
+                self.external_image_relationship_vml_external_image_count
+            ),
+            "unsupported_relationship_vml_external_image_count": (
+                self.unsupported_relationship_vml_external_image_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -860,6 +893,7 @@ class DocumentSnapshot:
     word_drawing_hyperlinks: WordDrawingHyperlinkInventory
     word_drawing_linked_pictures: WordDrawingLinkedPictureInventory
     word_vml_hyperlinks: WordVmlHyperlinkInventory
+    word_vml_external_images: WordVmlExternalImageInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -964,6 +998,9 @@ class DocumentSnapshot:
                 self.word_drawing_linked_pictures.public_dict()
             ),
             "word_vml_hyperlinks": self.word_vml_hyperlinks.public_dict(),
+            "word_vml_external_images": (
+                self.word_vml_external_images.public_dict()
+            ),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

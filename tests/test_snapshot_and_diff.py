@@ -3299,6 +3299,172 @@ rules:
         assert marker not in rendered
 
 
+def test_word_vml_external_image_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    changed = tmp_path / "changed.docx"
+    raw_source_changed = tmp_path / "raw-source-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    orphaned_relationship = tmp_path / "orphaned-relationship.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_vml_external_image_document(before, include_markup=False)
+    _write_vml_external_image_document(after)
+    _write_vml_external_image_document(
+        changed,
+        external_target=(
+            "file:///CHANGED_VML_EXTERNAL_IMAGE_TARGET_DO_NOT_LEAK.invalid/image.png"
+        ),
+    )
+    _write_vml_external_image_document(
+        raw_source_changed,
+        primary_src="VML_CHANGED_RAW_SRC_DO_NOT_LEAK.png",
+    )
+    _write_vml_external_image_document(
+        renumbered,
+        external_relationship_id="rIdRENUMBERED_VML_EXTERNAL_IMAGE_DO_NOT_LEAK",
+    )
+    _write_vml_external_image_document(
+        orphaned_relationship,
+        include_markup=False,
+        include_orphan_image_relationship=True,
+    )
+    _write_vml_external_image_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        relationship_attribute_namespace=_STRICT_RELATIONSHIP_NAMESPACE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+        image_relationship_type=_STRICT_IMAGE_RELATIONSHIP_TYPE,
+    )
+
+    expected_inventory = {
+        "vml_external_image_reference_count": 4,
+        "vml_external_image_story_count": 2,
+        "external_image_relationship_vml_external_image_count": 3,
+        "unsupported_relationship_vml_external_image_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    changed_snapshot = load_snapshot(changed)
+    raw_source_changed_snapshot = load_snapshot(raw_source_changed)
+    renumbered_snapshot = load_snapshot(renumbered)
+    assert (
+        after_snapshot.public_dict()["word_vml_external_images"]
+        == expected_inventory
+    )
+    assert after_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 6,
+        "external_relationship_count": 5,
+    }
+    assert before_snapshot.public_dict()["word_vml_external_images"] == {
+        key: 0 for key in expected_inventory
+    }
+    orphaned_snapshot = load_snapshot(orphaned_relationship)
+    assert orphaned_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 1,
+        "external_relationship_count": 1,
+    }
+    assert orphaned_snapshot.public_dict()["word_vml_external_images"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        load_snapshot(strict).public_dict()["word_vml_external_images"]
+        == expected_inventory
+    )
+    assert (
+        raw_source_changed_snapshot.word_vml_external_images.signature
+        == after_snapshot.word_vml_external_images.signature
+    )
+    assert (
+        renumbered_snapshot.word_vml_external_images.signature
+        == after_snapshot.word_vml_external_images.signature
+    )
+    for inventory_name in (
+        "word_hyperlink_fields",
+        "word_hyperlink_markup",
+        "word_drawing_hyperlinks",
+        "word_drawing_linked_pictures",
+        "word_vml_hyperlinks",
+    ):
+        assert not any(after_snapshot.public_dict()[inventory_name].values())
+
+    report = diff_documents(before, after)
+    assert "word_vml_external_image_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_vml_external_image_inventory_changed" in {
+        change.kind for change in diff_documents(after, changed).changes
+    }
+    assert "word_vml_external_image_inventory_changed" not in {
+        change.kind for change in diff_documents(after, raw_source_changed).changes
+    }
+    assert "word_vml_external_image_inventory_changed" not in {
+        change.kind for change in diff_documents(after, renumbered).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_vml_external_images: true
+  no_word_vml_external_image_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP057",
+        "DFP058",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, changed), policy).findings
+    } == {"DFP057", "DFP058"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, raw_source_changed), policy
+        ).findings
+    } == {"DFP057"}
+
+    gated = apply_policy(report, policy)
+    changed_gated = apply_policy(diff_documents(after, changed), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(changed_snapshot, "json"),
+            render_report(changed_gated, "sarif"),
+            render_profile(raw_source_changed_snapshot, "markdown"),
+            render_profile(renumbered_snapshot, "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_VML_EXTERNAL_IMAGE_INVENTORY_CHANGED",
+        "DFP057",
+        "DFP058",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VML_EXTERNAL_IMAGE_TARGET_DO_NOT_LEAK",
+        "CHANGED_VML_EXTERNAL_IMAGE_TARGET_DO_NOT_LEAK",
+        "VML_INTERNAL_IMAGE_TARGET_DO_NOT_LEAK",
+        "VML_UNSUPPORTED_IMAGE_TARGET_DO_NOT_LEAK",
+        "VML_PICT_IMAGE_TARGET_DO_NOT_LEAK",
+        "VML_HREF_TARGET_DO_NOT_LEAK",
+        "VML_HEADER_IMAGE_TARGET_DO_NOT_LEAK",
+        "VML_RAW_SRC_DO_NOT_LEAK",
+        "VML_CHANGED_RAW_SRC_DO_NOT_LEAK",
+        "VML_PICT_RAW_SRC_DO_NOT_LEAK",
+        "VML_OFFICE_RELID_DO_NOT_LEAK",
+        "rIdRENUMBERED_VML_EXTERNAL_IMAGE_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_vml_hyperlink_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -5614,6 +5780,132 @@ def _write_drawing_linked_picture_document(
             f'xmlns:a="{drawing_namespace}" '
             f'xmlns:wp="{_WORDPROCESSING_DRAWING_NAMESPACE}" '
             f'xmlns:pic="{_PICTURE_NAMESPACE}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
+    if relationship_entries:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{relationship_entries}</Relationships>"
+        ).encode()
+    if header_relationship_entries:
+        entries["word/_rels/header1.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{header_relationship_entries}</Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_vml_external_image_document(
+    path,
+    *,
+    include_markup: bool = True,
+    include_orphan_image_relationship: bool = False,
+    external_target: str = (
+        "file:///VML_EXTERNAL_IMAGE_TARGET_DO_NOT_LEAK.invalid/image.png"
+    ),
+    primary_src: str = "VML_RAW_SRC_DO_NOT_LEAK.png",
+    external_relationship_id: str = "rIdVmlExternalImage",
+    word_namespace: str = W,
+    relationship_attribute_namespace: str = R,
+    relationship_namespace: str = PR,
+    image_relationship_type: str = _IMAGE_RELATIONSHIP_TYPE,
+) -> None:
+    """Write direct VML image-data markers across body and header stories."""
+
+    body_markup = ""
+    header_markup = ""
+    relationship_entries = ""
+    header_relationship_entries = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                "<w:r><w:pict><v:shape>"
+                f'<v:imagedata r:id="{external_relationship_id}" '
+                f'src="{primary_src}" r:pict="rIdVmlPict" '
+                'r:href="rIdVmlHref" '
+                'o:relid="VML_OFFICE_RELID_DO_NOT_LEAK"/>'
+                "</v:shape></w:pict></w:r>",
+                "<w:r><w:pict><v:shape>"
+                '<v:imagedata r:id="rIdVmlInternal"/>'
+                "</v:shape></w:pict></w:r>",
+                "<w:r><w:pict><v:shape>"
+                '<v:imagedata r:id="rIdVmlUnsupported"/>'
+                "</v:shape></w:pict></w:r>",
+                "<w:r><w:pict><v:shape>"
+                f'<v:imagedata r:id="{external_relationship_id}"/>'
+                "</v:shape></w:pict></w:r>",
+                "<w:r><w:pict><v:shape>"
+                '<v:imagedata src="VML_PICT_RAW_SRC_DO_NOT_LEAK.png" '
+                'r:pict="rIdVmlPict" r:href="rIdVmlHref"/>'
+                "</v:shape></w:pict></w:r>",
+            )
+        )
+        header_markup = (
+            "<w:r><w:pict><v:shape>"
+            '<v:imagedata r:id="rIdVmlHeaderExternal"/>'
+            "</v:shape></w:pict></w:r>"
+        )
+        relationship_entries = "".join(
+            (
+                f'<Relationship Id="{external_relationship_id}" '
+                f'Type="{image_relationship_type}" Target="{external_target}" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdVmlInternal" '
+                f'Type="{image_relationship_type}" '
+                'Target="media/VML_INTERNAL_IMAGE_TARGET_DO_NOT_LEAK.png"/>',
+                '<Relationship Id="rIdVmlUnsupported" '
+                'Type="urn:docfence:unsupported-relationship" '
+                'Target="https://VML_UNSUPPORTED_IMAGE_TARGET_DO_NOT_LEAK.'
+                'invalid/image.png" TargetMode="External"/>',
+                '<Relationship Id="rIdVmlPict" '
+                f'Type="{image_relationship_type}" '
+                'Target="https://VML_PICT_IMAGE_TARGET_DO_NOT_LEAK.invalid/image.png" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdVmlHref" '
+                f'Type="{_HYPERLINK_RELATIONSHIP_TYPE}" '
+                'Target="https://VML_HREF_TARGET_DO_NOT_LEAK.invalid/path" '
+                'TargetMode="External"/>',
+            )
+        )
+        header_relationship_entries = (
+            '<Relationship Id="rIdVmlHeaderExternal" '
+            f'Type="{image_relationship_type}" '
+            'Target="https://VML_HEADER_IMAGE_TARGET_DO_NOT_LEAK.invalid/image.png" '
+            'TargetMode="External"/>'
+        )
+    elif include_orphan_image_relationship:
+        relationship_entries = (
+            '<Relationship Id="rIdVmlOrphan" '
+            f'Type="{image_relationship_type}" '
+            'Target="https://VML_ORPHAN_IMAGE_TARGET_DO_NOT_LEAK.invalid/image.png" '
+            'TargetMode="External"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            f'xmlns:v="{_VML_NAMESPACE}" '
+            'xmlns:o="urn:schemas-microsoft-com:office:office">'
+            f"<w:body><w:p>{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}" '
+            f'xmlns:v="{_VML_NAMESPACE}"><w:p>{header_markup}'
             "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
             "</w:p></w:hdr>"
         ).encode(),

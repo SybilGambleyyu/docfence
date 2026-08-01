@@ -560,6 +560,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_vml_external_images.signature
+        != after.word_vml_external_images.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_vml_external_image_inventory_changed",
+                message="Stored VML external-image inventory changed.",
+                details={
+                    "before": before.word_vml_external_images.public_dict(),
+                    "after": after.word_vml_external_images.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

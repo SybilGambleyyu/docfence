@@ -2,6 +2,31 @@
 
 All notable changes are documented here.
 
+## 0.22.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct legacy VML
+  `v:imagedata/@r:id` markers backed by externally stored relationships in
+  supported Word stories. It is separate from DrawingML linked pictures,
+  `HYPERLINK` fields, direct `w:hyperlink` markup, VML shape `href` markup, and
+  broad package relationship totals.
+- Added `DFP057` to require a handoff with no stored VML external-image marker
+  and `DFP058` to protect an approved external-image marker baseline.
+- Reports expose only aggregate marker/story and relationship classifications:
+  a standard image relationship with stored external target mode, or another
+  externally stored relationship type. Image targets, relationship IDs, VML
+  markup, story paths, and fingerprints remain private.
+- The boundary deliberately excludes ordinary internal image relationships,
+  orphaned image relationships, raw VML `src`, and VML `r:pict`, `r:href`, and
+  `o:relid` attributes. Its private signature tracks only the reviewed external
+  `r:id` relationship semantics, so a same-count external target rewrite stays
+  visible while excluded attributes and unchanged-semantics relationship-ID
+  renumbering do not create this inventory's churn.
+- Added regression coverage for external standard-image and unsupported
+  relationship classes, embedded-image and excluded-attribute separation,
+  duplicates, body/header stories, Strict encodings, orphan exclusion,
+  same-count target changes, excluded raw-`src` changes, relationship-ID
+  renumbering stability, privacy redaction, and policy/SARIF output.
+
 ## 0.21.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct DrawingML

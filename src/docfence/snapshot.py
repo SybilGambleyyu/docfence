@@ -47,6 +47,7 @@ from docfence.models import (
     WordHyperlinkMarkupInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
+    WordVmlExternalImageInventory,
     WordVmlHyperlinkInventory,
 )
 
@@ -659,6 +660,15 @@ class _VmlHyperlinkReference:
 
 
 @dataclass(frozen=True)
+class _VmlExternalImageReference:
+    """One private VML ``imagedata/@r:id`` external-image marker."""
+
+    story_part: str
+    marker_signature: str
+    classification: str
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -816,6 +826,7 @@ def _load_package(
                 drawing_hyperlink_references,
                 drawing_linked_picture_references,
                 vml_hyperlink_references,
+                vml_external_image_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -846,6 +857,9 @@ def _load_package(
             )
             word_vml_hyperlinks = _word_vml_hyperlink_inventory(
                 vml_hyperlink_references
+            )
+            word_vml_external_images = _word_vml_external_image_inventory(
+                vml_external_image_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -937,6 +951,7 @@ def _load_package(
         word_drawing_hyperlinks=word_drawing_hyperlinks,
         word_drawing_linked_pictures=word_drawing_linked_pictures,
         word_vml_hyperlinks=word_vml_hyperlinks,
+        word_vml_external_images=word_vml_external_images,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3246,6 +3261,7 @@ def _story_snapshots(
     tuple[_DrawingHyperlinkReference, ...],
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
+    tuple[_VmlExternalImageReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3257,6 +3273,7 @@ def _story_snapshots(
     drawing_hyperlink_references: list[_DrawingHyperlinkReference] = []
     drawing_linked_picture_references: list[_DrawingLinkedPictureReference] = []
     vml_hyperlink_references: list[_VmlHyperlinkReference] = []
+    vml_external_image_references: list[_VmlExternalImageReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3271,6 +3288,7 @@ def _story_snapshots(
             story_drawing_hyperlink_references,
             story_drawing_linked_picture_references,
             story_vml_hyperlink_references,
+            story_vml_external_image_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3285,6 +3303,7 @@ def _story_snapshots(
             story_drawing_linked_picture_references
         )
         vml_hyperlink_references.extend(story_vml_hyperlink_references)
+        vml_external_image_references.extend(story_vml_external_image_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3305,6 +3324,7 @@ def _story_snapshots(
         tuple(drawing_hyperlink_references),
         tuple(drawing_linked_picture_references),
         tuple(vml_hyperlink_references),
+        tuple(vml_external_image_references),
         tuple(web_extension_control_references),
     )
 
@@ -3377,6 +3397,7 @@ def _snapshot_story(
     tuple[_DrawingHyperlinkReference, ...],
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
+    tuple[_VmlExternalImageReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3477,6 +3498,7 @@ def _snapshot_story(
         _drawing_hyperlink_references(root, part_key, relationships),
         _drawing_linked_picture_references(root, part_key, relationships),
         _vml_hyperlink_references(root, part_key, relationships),
+        _vml_external_image_references(root, part_key, relationships),
     )
 
 
@@ -4828,6 +4850,114 @@ def _word_vml_hyperlink_inventory(
         group_vml_hyperlink_count=kind_counts["group"],
         shape_type_vml_hyperlink_count=kind_counts["shape_type"],
         target_attribute_vml_hyperlink_count=target_attribute_count,
+        signature=_digest_records(records),
+    )
+
+
+def _vml_external_image_relationship_classification(
+    relationship: _Relationship | None,
+) -> str | None:
+    """Classify only an externally stored relation behind VML image data.
+
+    VML ``imagedata/@r:id`` also represents ordinary embedded images. Those
+    internal relationships are intentionally outside this external-image review
+    boundary, as are absent or malformed relationship records. An external
+    relation with a non-image type stays reviewable as unsupported stored
+    evidence rather than being treated as a linked image.
+    """
+
+    if relationship is None or relationship.target_mode.casefold() != "external":
+        return None
+    if relationship.relationship_type.casefold() in _IMAGE_RELATIONSHIP_TYPES:
+        return "external_image_relationship"
+    return "unsupported_relationship"
+
+
+def _vml_external_image_marker_signature(relationship: _Relationship) -> str:
+    """Fingerprint only the reviewed relationship surface of a VML marker.
+
+    In particular, raw VML ``src`` and the other legacy relationship attributes
+    are not folded into this inventory's signature. They remain separate
+    surfaces rather than making this narrow ``r:id`` review boundary wider.
+    """
+
+    return _digest_records(
+        [("word_vml_external_image_marker", *relationship.canonical_value())]
+    )
+
+
+def _vml_external_image_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_VmlExternalImageReference, ...]:
+    """Retain direct VML ``imagedata/@r:id`` external-image markers.
+
+    This deliberately inventories each stored ``r:id`` marker only when its
+    resolved relationship has stored ``TargetMode=External``. It includes
+    duplicate markers that share a relationship and markers in
+    markup-compatibility branches, but does not select a rendering branch,
+    deduplicate visual objects, retrieve an image, or claim a Word client will
+    load one. Internal image relationships, raw VML ``src``, ``r:pict``,
+    ``r:href``, and ``o:relid`` are not part of this boundary.
+    """
+
+    references: list[_VmlExternalImageReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace != _VML_NAMESPACE or local_name != "imagedata":
+            continue
+        relationship_id = _relationship_id_value(element)
+        if relationship_id is None:
+            continue
+        relationship = relationships.get(relationship_id)
+        classification = _vml_external_image_relationship_classification(
+            relationship
+        )
+        if classification is None or relationship is None:
+            continue
+        references.append(
+            _VmlExternalImageReference(
+                story_part=story_part,
+                marker_signature=_vml_external_image_marker_signature(relationship),
+                classification=classification,
+            )
+        )
+    return tuple(references)
+
+
+def _word_vml_external_image_inventory(
+    references: tuple[_VmlExternalImageReference, ...],
+) -> WordVmlExternalImageInventory:
+    """Aggregate VML external-image markers without emitting image data."""
+
+    classification_counts = {
+        "external_image_relationship": 0,
+        "unsupported_relationship": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        classification_counts[reference.classification] += 1
+        records.append(
+            (
+                "word_vml_external_image",
+                reference.story_part,
+                reference.marker_signature,
+                reference.classification,
+            )
+        )
+
+    return WordVmlExternalImageInventory(
+        vml_external_image_reference_count=len(references),
+        vml_external_image_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        external_image_relationship_vml_external_image_count=(
+            classification_counts["external_image_relationship"]
+        ),
+        unsupported_relationship_vml_external_image_count=(
+            classification_counts["unsupported_relationship"]
+        ),
         signature=_digest_records(records),
     )
 

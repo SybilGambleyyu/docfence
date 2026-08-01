@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.21 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.22 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -16,7 +16,8 @@ following properties:
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
   linked-picture markup state, direct legacy VML shape-link `href` markup
-  state, and
+  state, direct legacy VML external-image `v:imagedata/@r:id` markup state,
+  and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -138,6 +139,15 @@ following properties:
   an empty direct `href`, same-count `href` and target rewrites,
   JSON/Markdown/SARIF redaction, and
   policy findings;
+- direct legacy VML `v:imagedata/@r:id` markup is separately inventoried from
+  DrawingML linked pictures, VML shape `href`, `HYPERLINK` fields, direct
+  `w:hyperlink` markup, and generic relationship totals. Tests cover external
+  standard-image and unsupported relationship types, excluded internal image
+  relationships, duplicate markers, body/header stories, Transitional and
+  Strict Word/relationship namespaces, orphaned relationship exclusion,
+  excluded raw-`src`, `r:pict`, and `r:href` attributes, same-count external
+  target changes, raw-`src` change quietness, relationship-ID renumbering
+  stability, JSON/Markdown/SARIF redaction, and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -177,6 +187,8 @@ following properties:
   drawing markup, and story paths,
   direct VML `href` values, frame targets, titles, alternate text, shape IDs,
   and story paths,
+  direct VML image targets, relationship IDs, raw source values, other
+  image-data attributes, and story paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -290,6 +302,17 @@ external-image classifications while keeping relationship IDs and paths out of
 the output. This is a compatibility smoke test, not a runtime dependency or a
 statement that any Word client will retrieve, update, or render the pictures.
 
+For legacy VML external-image markup, release validation profiles the paired
+public [`rel/1.docx` package](https://github.com/pea-sys/shell-experiments/blob/91386d4de9e499a21bbb2e54743eb63a63727bfb/powershell/survey/abspath2relpath-docx/survey/rel/1.docx)
+from the same open-source `abspath2relpath-docx` investigation. The pinned
+package SHA-256 is
+`60708e292cd38cb9bee28886e91b2103b7d2ee43e963fa5e1cac4eccaaa71ed6`.
+It stores two direct `v:imagedata/@r:id` markers backed by two external standard
+image relationships. DocFence reports two direct markers and two external-image
+classifications while keeping relationship IDs and paths out of the output.
+This is a compatibility smoke test, not a runtime dependency or a statement
+that any Word client will retrieve, update, or render the images.
+
 For legacy VML shape-link markup, the release check uses a controlled,
 standards-shaped Word-story package that places direct `href` attributes on all
 supported VML geometry kinds and keeps the package's relationship, field,
@@ -342,7 +365,11 @@ it records bounded stored marker/relationship evidence only. It likewise does
 not assert that a direct VML shape `href` is valid,
 inherited, rendered, reachable, safe, followed, or honored by a client; it
 records bounded direct-markup evidence only. It does not calculate effective
-VML inheritance or inspect arbitrary VML elements. The style/default layer is a stored
+VML inheritance or inspect arbitrary VML elements. It likewise does not assert
+that a direct VML `imagedata/@r:id` marker is selected, valid, retrievable,
+rendered, updated, reachable, safe, or honored by a client; it records bounded
+stored relationship evidence only and does not use raw VML `src` as an
+alternate marker. The style/default layer is a stored
 declaration inventory, not a renderer. It does
 not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package

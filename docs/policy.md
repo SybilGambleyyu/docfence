@@ -78,6 +78,8 @@ starter policy.
 | `no_word_vml_hyperlink_changes` | `DFP054` | VML hyperlink-markup inventory differs | Comparison |
 | `require_no_word_drawing_linked_pictures` | `DFP055` | Candidate has direct DrawingML linked-picture markup | Candidate |
 | `no_word_drawing_linked_picture_changes` | `DFP056` | DrawingML linked-picture inventory differs | Comparison |
+| `require_no_word_vml_external_images` | `DFP057` | Candidate has direct VML external-image markup | Candidate |
+| `no_word_vml_external_image_changes` | `DFP058` | VML external-image inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -134,6 +136,8 @@ intentionally retains direct DrawingML hyperlink-action markup.
 intentionally retains direct DrawingML linked-picture markup.
 `no_word_vml_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct legacy VML shape-link markup.
+`no_word_vml_external_image_changes` provides the equivalent gate when it
+intentionally retains direct legacy VML external-image markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -720,6 +724,39 @@ client will render, honor, safely reach, or follow a target.
 supported direct VML shape-link marker. Use it for a handoff that must carry no
 such legacy markup. `no_word_vml_hyperlink_changes` compares the private
 inventory signature for a controlled baseline.
+
+## Legacy VML external-image scope
+
+Direct legacy VML `v:imagedata/@r:id` markup is a separate relationship-backed
+surface from VML shape `href`, `HYPERLINK` fields, direct WordprocessingML
+`w:hyperlink` markup, DrawingML linked pictures, and generic relationship
+totals. DocFence scans each direct `r:id` marker in supported Word stories, but
+records it only when its resolved relationship has stored `TargetMode=External`.
+Duplicate markers and markers in Markup Compatibility branches remain separate
+stored evidence; the inventory does not select a client-rendered branch or
+deduplicate a visual image.
+
+A standard image relationship with stored external mode is classified as an
+external image relationship. Another externally stored relationship type is
+counted as unsupported evidence. Ordinary internal image relationships do not
+become external-image markers, nor does an orphaned external image
+relationship. Raw VML `src`, `r:pict`, `r:href`, and `o:relid` are deliberately
+excluded rather than treated as alternate forms of this marker.
+
+Public output reports only aggregate marker/story and relationship-classification
+counts. Image targets, relationship IDs, source values, VML attributes, story
+paths, and fingerprints never appear in reports. The private signature is
+limited to the reviewed external `r:id` relationship semantics: a same-count
+external target rewrite stays visible, an unchanged-semantics relationship-ID
+renumbering remains quiet, and a raw-`src` rewrite does not become an
+external-image inventory change.
+
+`require_no_word_vml_external_images` fails whenever a candidate contains a
+stored direct VML external-image marker. Use it for a handoff that must carry no
+such markup. `no_word_vml_external_image_changes` compares the private
+inventory signature for a controlled baseline. Neither rule resolves,
+retrieves, renders, updates, or validates an image target, or establishes that
+Word will load, reach, or honor it.
 
 ## External Word document dependency scope
 

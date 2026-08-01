@@ -46,6 +46,8 @@ Direct DrawingML linked-picture targets, relationship IDs, surrounding drawing
 markup, and story-part paths are sensitive package material too.
 Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are sensitive package material too.
+Direct legacy VML image targets, relationship IDs, raw source values, other
+image-data attributes, and story-part paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -238,6 +240,19 @@ private. The full direct element is privately fingerprinted so same-count
 attribute rewrites remain review-visible. This does not calculate an inherited
 or rendered link, inspect arbitrary VML elements, or follow an `href`.
 
+Direct legacy VML `v:imagedata/@r:id` markup receives a separate private-digest
+treatment from VML shape links, DrawingML linked pictures, field instructions,
+`w:hyperlink` markup, and broad relationship totals. It retains a marker only
+when the resolved relationship has stored external target mode, classifying a
+standard image relationship separately from another external relationship type.
+Internal image relationships and orphaned external image relationships do not
+become marker counts. Raw VML `src`, `r:pict`, `r:href`, and `o:relid` are
+intentionally excluded from both the marker definition and its private
+signature. Targets, relationship IDs, source values, VML attributes, paths,
+and fingerprints remain private. A same-count external target rewrite remains
+review-visible; relationship-ID renumbering with unchanged semantics and a
+raw-`src` rewrite do not create external-image inventory churn.
+
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
 `w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
@@ -429,6 +444,12 @@ proof that a client inherits a group/template link, renders a shape, honors an
 select a Markup Compatibility branch, calculate effective VML inheritance,
 inspect arbitrary VML attributes, resolve, retrieve, follow, validate,
 evaluate, render, or execute an `href` action.
+Direct legacy VML external-image counts are likewise stored-state evidence, not
+proof that a client selects a marker, retrieves or updates an image, renders a
+picture, or honors an external relationship. DocFence does not select Markup
+Compatibility branches, associate a marker with a rendered image, deduplicate a
+visual picture, resolve, retrieve, validate, evaluate, render, or update an
+image target.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.
