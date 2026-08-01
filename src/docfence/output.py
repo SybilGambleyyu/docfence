@@ -68,6 +68,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
         )
     )
     lines.extend(
+        _word_hyperlink_field_section(document.get("word_hyperlink_fields", {}))
+    )
+    lines.extend(
         _word_permission_range_section(document.get("word_permission_ranges", {}))
     )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
@@ -106,6 +109,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_protection_comparison(before, after))
     lines.extend(_word_document_variable_comparison(before, after))
     lines.extend(_word_document_variable_field_comparison(before, after))
+    lines.extend(_word_hyperlink_field_comparison(before, after))
     lines.extend(_word_permission_range_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
@@ -298,6 +302,10 @@ def _word_document_variable_field_section(value: object) -> list[str]:
     return _inventory_section("Word DOCVARIABLE field-reference inventory", value)
 
 
+def _word_hyperlink_field_section(value: object) -> list[str]:
+    return _inventory_section("Word HYPERLINK field-reference inventory", value)
+
+
 def _word_permission_range_section(value: object) -> list[str]:
     return _inventory_section("Word editable-range permission inventory", value)
 
@@ -424,6 +432,16 @@ def _word_permission_range_comparison(
         "Word editable-range permission inventory",
         before.get("word_permission_ranges", {}),
         after.get("word_permission_ranges", {}),
+    )
+
+
+def _word_hyperlink_field_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Word HYPERLINK field-reference inventory",
+        before.get("word_hyperlink_fields", {}),
+        after.get("word_hyperlink_fields", {}),
     )
 
 

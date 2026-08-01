@@ -300,6 +300,39 @@ class WordDocumentVariableFieldInventory:
 
 
 @dataclass(frozen=True)
+class WordHyperlinkFieldInventory:
+    """Stored ``HYPERLINK`` field references, aggregate only.
+
+    Field instructions can embed destinations without an OOXML relationship.
+    Destinations, internal locations, ScreenTips, targets, story paths, and
+    fingerprints remain in the private signature; public output reports only
+    conservative lexical classifications of complete field instructions.
+    """
+
+    hyperlink_field_reference_count: int
+    hyperlink_field_story_count: int
+    literal_destination_hyperlink_field_count: int
+    literal_internal_location_only_hyperlink_field_count: int
+    dynamic_or_unparseable_hyperlink_field_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "hyperlink_field_reference_count": self.hyperlink_field_reference_count,
+            "hyperlink_field_story_count": self.hyperlink_field_story_count,
+            "literal_destination_hyperlink_field_count": (
+                self.literal_destination_hyperlink_field_count
+            ),
+            "literal_internal_location_only_hyperlink_field_count": (
+                self.literal_internal_location_only_hyperlink_field_count
+            ),
+            "dynamic_or_unparseable_hyperlink_field_count": (
+                self.dynamic_or_unparseable_hyperlink_field_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -647,6 +680,7 @@ class DocumentSnapshot:
     word_protection: WordProtectionInventory
     word_document_variables: WordDocumentVariableInventory
     word_document_variable_fields: WordDocumentVariableFieldInventory
+    word_hyperlink_fields: WordHyperlinkFieldInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -744,6 +778,7 @@ class DocumentSnapshot:
             "word_document_variable_fields": (
                 self.word_document_variable_fields.public_dict()
             ),
+            "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

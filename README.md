@@ -6,7 +6,8 @@ reviewable, privacy-safe account of stored content-block changes and the review
 surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
-external relationships, custom XML, macros, core/extended/custom document
+`HYPERLINK` field references, external relationships, custom XML, macros,
+core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
 Word editing/write-protection state, document-variable state, editable-range
@@ -37,6 +38,8 @@ algorithm fields, and Settings-part paths are private too.
 Word document-variable names, values, and Settings-part paths are private too.
 DOCVARIABLE field instructions, literal field arguments, and story-part paths
 are private too.
+HYPERLINK field instructions, destinations, internal locations, ScreenTips,
+frame targets, and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -67,7 +70,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.16 focuses on Office Open XML Word documents and templates and
+Version 0.17 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -76,11 +79,13 @@ deliberately keeps a small, inspectable contract:
   bookkeeping while retaining stored text and formatting semantics privately;
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
-  field-code, external-source field, content-control, external-relationship,
+  field-code, `HYPERLINK` field-reference, external-source field,
+  content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, sensitivity-label metadata, OPC
   package digital-signature material, Word editing/write-protection,
-  document-variable state, and `DOCVARIABLE` field references,
+  document-variable state, `DOCVARIABLE` field references, and `HYPERLINK`
+  field references,
   editable-range permission markup,
   mail-merge, content-control
   data-binding, modern-comment metadata,
@@ -250,6 +255,27 @@ interpreted.
 protects an approved field-reference baseline. DocFence does not evaluate a
 field, run macros, resolve a template, or claim that a stored variable is used,
 visible, or safe.
+
+`HYPERLINK` fields are independently inventoried from relationship hyperlinks
+and external-source field families. A complete field code can carry a URL, file
+location, or bookmark directly, so an OOXML relationship inventory cannot see
+every stored target. Public output reports only total/reference-story counts
+and one mutually exclusive lexical class per complete field: a literal leading
+destination, a literal `\l` internal-location-only target, or a dynamic or
+unparseable field. A leading literal accepts a plain token or a wholly quoted
+string with optional trailing field-switch material; nested or compound
+expressions remain dynamic or unparseable.
+
+A literal destination is deliberately not labeled external: Word permits a
+bookmark in the primary field argument, while `\l` denotes the documented
+in-file location form. Destinations, bookmarks, ScreenTips, frame targets,
+field instructions, story paths, and fingerprints stay private. The inventory
+does not resolve, follow, evaluate, or render a field; it does not establish
+that a target is reachable, safe, or shown by Word.
+
+`require_no_word_hyperlink_fields` fails for every stored complete `HYPERLINK`
+reference, while `no_word_hyperlink_field_changes` protects an approved
+field-reference baseline.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -550,6 +576,13 @@ resolves, or evaluates a variable name or value. Word's
 notes that `\* MERGEFORMAT` is inserted by default through the Field dialog;
 DocFence retains the leading literal association while keeping that switch and
 the whole field code private.
+The `HYPERLINK` field boundary follows Microsoft's current [Word field
+guidance](https://learn.microsoft.com/en-us/office/dev/add-ins/word/fields-guidance),
+which describes links to same-document and external locations, and the OOXML
+[`HYPERLINK` field definition](https://c-rex.net/samples/ooxml/e1/Part4/OOXML_P4_DOCX_HYPERLINKHYPERLINK_topic_ID0EFYG1.html),
+which documents the primary argument and `\l` location switch. DocFence keeps
+all those arguments private and reports stored lexical evidence only; a
+literal primary argument is not treated as proof of an external target.
 The editable-range boundary follows the Open XML SDK's
 [`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
 and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),

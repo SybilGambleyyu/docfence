@@ -493,6 +493,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_hyperlink_fields.signature
+        != after.word_hyperlink_fields.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_hyperlink_field_inventory_changed",
+                message="Stored HYPERLINK field-reference inventory changed.",
+                details={
+                    "before": before.word_hyperlink_fields.public_dict(),
+                    "after": after.word_hyperlink_fields.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

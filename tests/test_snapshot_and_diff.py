@@ -2637,6 +2637,198 @@ def test_word_document_variable_fields_keep_revision_variants_and_document_scope
         assert marker not in rendered
 
 
+def test_word_hyperlink_field_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    changed = tmp_path / "changed.docx"
+    split_complex = tmp_path / "split-complex.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+    literal_destination = "https://DESTINATION_DO_NOT_LEAK.invalid/path"
+    changed_destination = "https://CHANGED_DESTINATION_DO_NOT_LEAK.invalid/path"
+
+    _write_hyperlink_field_document(before, include_fields=False)
+    _write_hyperlink_field_document(
+        after,
+        literal_destination=literal_destination,
+    )
+    _write_hyperlink_field_document(
+        changed,
+        literal_destination=changed_destination,
+    )
+    _write_hyperlink_field_document(
+        split_complex,
+        literal_destination=literal_destination,
+        split_complex_instructions=True,
+    )
+    _write_hyperlink_field_document(
+        strict,
+        literal_destination=literal_destination,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+    )
+
+    expected_inventory = {
+        "hyperlink_field_reference_count": 7,
+        "hyperlink_field_story_count": 2,
+        "literal_destination_hyperlink_field_count": 3,
+        "literal_internal_location_only_hyperlink_field_count": 2,
+        "dynamic_or_unparseable_hyperlink_field_count": 2,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert after_snapshot.public_dict()["word_hyperlink_fields"] == expected_inventory
+    assert before_snapshot.public_dict()["word_hyperlink_fields"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert load_snapshot(strict).public_dict()["word_hyperlink_fields"] == (
+        expected_inventory
+    )
+    assert (
+        load_snapshot(split_complex).word_hyperlink_fields.signature
+        == after_snapshot.word_hyperlink_fields.signature
+    )
+    assert after_snapshot.public_dict()["external_fields"] == {
+        "database_field_count": 0,
+        "legacy_data_field_count": 0,
+        "dde_field_count": 0,
+        "dde_auto_field_count": 0,
+        "include_text_field_count": 0,
+        "include_picture_field_count": 0,
+        "link_field_count": 0,
+        "referenced_document_field_count": 0,
+    }
+
+    report = diff_documents(before, after)
+    assert "word_hyperlink_field_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_hyperlink_field_inventory_changed" in {
+        change.kind for change in diff_documents(after, changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_hyperlink_fields: true
+  no_word_hyperlink_field_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP047",
+        "DFP048",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, changed), policy).findings
+    } == {"DFP047", "DFP048"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_HYPERLINK_FIELD_INVENTORY_CHANGED",
+        "DFP047",
+        "DFP048",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "DESTINATION_DO_NOT_LEAK",
+        "CHANGED_DESTINATION_DO_NOT_LEAK",
+        "SECOND_DESTINATION_DO_NOT_LEAK",
+        "INTERNAL_LOCATION_DO_NOT_LEAK",
+        "SECOND_INTERNAL_LOCATION_DO_NOT_LEAK",
+        "TOOLTIP_DO_NOT_LEAK",
+        "TARGET_FRAME_DO_NOT_LEAK",
+        "COMPOUND_DESTINATION_DO_NOT_LEAK",
+        "UNPARSED_ARGUMENT_DO_NOT_LEAK",
+        "DYNAMIC_HYPERLINK_DO_NOT_LEAK",
+        "LOOSE_HYPERLINK_DO_NOT_LEAK",
+        "POST_SEPARATOR_HYPERLINK_DO_NOT_LEAK",
+        "UNCLOSED_HYPERLINK_DO_NOT_LEAK",
+        "HEADER_HYPERLINK_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_word_hyperlink_fields_keep_revision_variants_privately(tmp_path) -> None:
+    document = tmp_path / "revision-fields.docx"
+
+    def instruction_text(text: str) -> str:
+        return f'<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>'
+
+    def field_char(field_type: str) -> str:
+        return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
+
+    def deleted_instruction_text(text: str) -> str:
+        return (
+            '<w:del w:id="1"><w:r><w:delInstrText>'
+            f"{text}</w:delInstrText></w:r></w:del>"
+        )
+
+    def inserted_instruction_text(text: str) -> str:
+        return (
+            '<w:ins w:id="2"><w:r><w:instrText>'
+            f"{text}</w:instrText></w:r></w:ins>"
+        )
+
+    body_markup = "".join(
+        (
+            field_char("begin"),
+            instruction_text(' HYPERLINK "'),
+            deleted_instruction_text("DELETED_DESTINATION_DO_NOT_LEAK"),
+            inserted_instruction_text("CURRENT_DESTINATION_DO_NOT_LEAK"),
+            instruction_text('" '),
+            field_char("end"),
+            field_char("begin"),
+            deleted_instruction_text(' HYPERLINK \\l "RETIRED_LOCATION_DO_NOT_LEAK"'),
+            inserted_instruction_text(" DATE "),
+            field_char("end"),
+            field_char("begin"),
+            (
+                '<w:moveFrom w:id="3"><w:r><w:delInstrText>'
+                "HYPERLINK MOVED_FROM_DESTINATION_DO_NOT_LEAK"
+                "</w:delInstrText></w:r></w:moveFrom>"
+            ),
+            (
+                '<w:moveTo w:id="4"><w:r><w:instrText>'
+                "HYPERLINK MOVED_TO_DESTINATION_DO_NOT_LEAK"
+                "</w:instrText></w:r></w:moveTo>"
+            ),
+            field_char("end"),
+            deleted_instruction_text("HYPERLINK LOOSE_DELETED_HYPERLINK_DO_NOT_LEAK"),
+        )
+    )
+    _write_document_variable_field_document(document, body_markup=body_markup)
+
+    snapshot = load_snapshot(document)
+    assert snapshot.public_dict()["word_hyperlink_fields"] == {
+        "hyperlink_field_reference_count": 5,
+        "hyperlink_field_story_count": 1,
+        "literal_destination_hyperlink_field_count": 4,
+        "literal_internal_location_only_hyperlink_field_count": 1,
+        "dynamic_or_unparseable_hyperlink_field_count": 0,
+    }
+    rendered = render_profile(snapshot, "json") + render_profile(snapshot, "markdown")
+    for marker in (
+        "DELETED_DESTINATION_DO_NOT_LEAK",
+        "CURRENT_DESTINATION_DO_NOT_LEAK",
+        "RETIRED_LOCATION_DO_NOT_LEAK",
+        "MOVED_FROM_DESTINATION_DO_NOT_LEAK",
+        "MOVED_TO_DESTINATION_DO_NOT_LEAK",
+        "LOOSE_DELETED_HYPERLINK_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     noncanonical = tmp_path / "noncanonical.docx"
     strict_relationship = tmp_path / "strict-relationship.docx"
@@ -4343,6 +4535,130 @@ def _write_document_variable_field_document(
             f"{glossary_settings_markup}</w:settings>"
         ).encode()
 
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_hyperlink_field_document(
+    path,
+    *,
+    include_fields: bool = True,
+    literal_destination: str = "https://DESTINATION_DO_NOT_LEAK.invalid/path",
+    split_complex_instructions: bool = False,
+    word_namespace: str = W,
+) -> None:
+    """Write a small package spanning supported HYPERLINK field encodings."""
+
+    def simple_field(instruction: str) -> str:
+        escaped_instruction = (
+            instruction.replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "&lt;")
+        )
+        return (
+            f'<w:fldSimple w:instr="{escaped_instruction}">'
+            "<w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r></w:fldSimple>"
+        )
+
+    def instruction_text(text: str) -> str:
+        return (
+            '<w:r><w:instrText xml:space="preserve">'
+            f"{text}</w:instrText></w:r>"
+        )
+
+    def field_char(field_type: str) -> str:
+        return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
+
+    def complex_field(instruction: str) -> str:
+        chunks = [instruction]
+        if split_complex_instructions:
+            split_at = len(instruction) // 2
+            chunks = [instruction[:split_at], instruction[split_at:]]
+        return "".join(
+            (
+                field_char("begin"),
+                *(instruction_text(chunk) for chunk in chunks),
+                field_char("separate"),
+                "<w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r>",
+                field_char("end"),
+            )
+        )
+
+    nested_dynamic = "".join(
+        (
+            field_char("begin"),
+            instruction_text(" HYPERLINK "),
+            field_char("begin"),
+            instruction_text(" MERGEFIELD DYNAMIC_HYPERLINK_DO_NOT_LEAK "),
+            field_char("end"),
+            instruction_text(" "),
+            field_char("end"),
+        )
+    )
+    fields = ""
+    if include_fields:
+        fields = "".join(
+            (
+                simple_field(
+                    f'HYPERLINK "{literal_destination}" '
+                    '\\o "TOOLTIP_DO_NOT_LEAK"'
+                ),
+                complex_field(
+                    ' hyperlink SECOND_DESTINATION_DO_NOT_LEAK '
+                    '\\t "TARGET_FRAME_DO_NOT_LEAK"'
+                ),
+                simple_field(
+                    'HYPERLINK \\l "INTERNAL_LOCATION_DO_NOT_LEAK" '
+                    '\\o "TOOLTIP_DO_NOT_LEAK"'
+                ),
+                complex_field(
+                    'HYPERLINK \\L SECOND_INTERNAL_LOCATION_DO_NOT_LEAK '
+                    "\\* MERGEFORMAT"
+                ),
+                simple_field(
+                    'HYPERLINK "COMPOUND_DESTINATION_DO_NOT_LEAK" '
+                    "UNPARSED_ARGUMENT_DO_NOT_LEAK"
+                ),
+                nested_dynamic,
+            )
+        )
+    ignored_instruction_markup = "".join(
+        (
+            instruction_text("HYPERLINK LOOSE_HYPERLINK_DO_NOT_LEAK"),
+            field_char("begin"),
+            instruction_text(" DATE "),
+            field_char("separate"),
+            instruction_text("HYPERLINK POST_SEPARATOR_HYPERLINK_DO_NOT_LEAK"),
+            field_char("end"),
+            field_char("begin"),
+            instruction_text("HYPERLINK UNCLOSED_HYPERLINK_DO_NOT_LEAK"),
+        )
+    )
+    header_field = (
+        simple_field("HYPERLINK HEADER_HYPERLINK_DO_NOT_LEAK")
+        if include_fields
+        else ""
+    )
+    entries = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body><w:p>'
+            f"{fields}{ignored_instruction_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}"><w:p>{header_field}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)

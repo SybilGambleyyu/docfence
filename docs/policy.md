@@ -68,6 +68,8 @@ starter policy.
 | `no_word_document_variable_changes` | `DFP044` | Word document-variable inventory differs | Comparison |
 | `require_no_word_document_variable_fields` | `DFP045` | Candidate has stored `DOCVARIABLE` field references | Candidate |
 | `no_word_document_variable_field_changes` | `DFP046` | Word `DOCVARIABLE` field-reference inventory differs | Comparison |
+| `require_no_word_hyperlink_fields` | `DFP047` | Candidate has stored `HYPERLINK` field references | Candidate |
+| `no_word_hyperlink_field_changes` | `DFP048` | Word `HYPERLINK` field-reference inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -114,6 +116,8 @@ approved template intentionally retains editable-range permission markup.
 approved document or template intentionally retains document-variable state.
 `no_word_document_variable_field_changes` provides the equivalent gate when it
 intentionally retains stored `DOCVARIABLE` field references.
+`no_word_hyperlink_field_changes` provides the equivalent gate when it
+intentionally retains stored `HYPERLINK` field references.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -557,6 +561,31 @@ no such field codes. `no_word_document_variable_field_changes` protects an
 approved field-reference baseline. None of these rules evaluates a field, runs
 a macro, resolves a template, determines whether a Word client will display a
 value, or judges the safety or meaning of the stored state.
+
+## Word HYPERLINK field scope
+
+`HYPERLINK` field codes are distinct from ordinary `w:hyperlink` relationship
+markup and from the external-source field inventory: a complete field code can
+carry a URL, file location, or bookmark directly without a relationship. The
+inventory scans direct `w:fldSimple/@w:instr` instructions and complete complex
+pre-separator instruction sequences across supported stories, retaining current
+and deleted field-code variants separately. Loose instruction text and
+unclosed complex fields do not count.
+
+Public output reports only reference/story counts plus mutually exclusive
+lexical classifications: a literal leading destination, a literal `\l`
+internal-location-only target, or a dynamic/unparseable field. A literal is a
+leading plain token or one wholly quoted string with optional trailing
+field-switch material. Nested or compound expressions remain dynamic or
+unparseable. The primary literal is not labeled external because Word permits a
+bookmark there; `\l` is the documented in-file location switch.
+
+`require_no_word_hyperlink_fields` fails whenever a candidate contains a
+complete stored `HYPERLINK` reference. Use it for a handoff that must carry no
+such field codes. `no_word_hyperlink_field_changes` compares the private
+inventory signature to protect an approved baseline. Neither rule emits,
+resolves, follows, evaluates, or renders a destination, nor does it establish
+that a target is reachable, safe, or displayed by Word.
 
 ## External Word document dependency scope
 

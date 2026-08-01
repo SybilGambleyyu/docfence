@@ -41,6 +41,7 @@ from docfence.models import (
     TaskpaneWebExtensionInventory,
     WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
+    WordHyperlinkFieldInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
 )
@@ -567,6 +568,15 @@ class _DocumentVariableFieldReference:
 
 
 @dataclass(frozen=True)
+class _HyperlinkFieldReference:
+    """One private ``HYPERLINK`` instruction and lexical target class."""
+
+    story_part: str
+    instruction_signature: str
+    classification: str
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -719,6 +729,7 @@ def _load_package(
                 data_binding_references,
                 external_field_references,
                 document_variable_field_references,
+                hyperlink_field_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -734,6 +745,9 @@ def _load_package(
             word_document_variable_fields = _word_document_variable_field_inventory(
                 document_variable_field_references,
                 stored_document_variables,
+            )
+            word_hyperlink_fields = _word_hyperlink_field_inventory(
+                hyperlink_field_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -820,6 +834,7 @@ def _load_package(
         word_protection=word_protection,
         word_document_variables=word_document_variables,
         word_document_variable_fields=word_document_variable_fields,
+        word_hyperlink_fields=word_hyperlink_fields,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3124,12 +3139,14 @@ def _story_snapshots(
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
+    tuple[_HyperlinkFieldReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
     data_binding_references: list[_DataBindingReference] = []
     external_field_references: list[_ExternalFieldReference] = []
     document_variable_field_references: list[_DocumentVariableFieldReference] = []
+    hyperlink_field_references: list[_HyperlinkFieldReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3139,6 +3156,7 @@ def _story_snapshots(
             story_data_binding_references,
             story_external_field_references,
             story_document_variable_field_references,
+            story_hyperlink_field_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3146,6 +3164,7 @@ def _story_snapshots(
         document_variable_field_references.extend(
             story_document_variable_field_references
         )
+        hyperlink_field_references.extend(story_hyperlink_field_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3161,6 +3180,7 @@ def _story_snapshots(
         tuple(data_binding_references),
         tuple(external_field_references),
         tuple(document_variable_field_references),
+        tuple(hyperlink_field_references),
         tuple(web_extension_control_references),
     )
 
@@ -3228,6 +3248,7 @@ def _snapshot_story(
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
+    tuple[_HyperlinkFieldReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3323,6 +3344,7 @@ def _snapshot_story(
         _data_binding_references(root, part_key, relationships),
         _external_field_references(field_instruction_references),
         _document_variable_field_references(field_instruction_references),
+        _hyperlink_field_references(field_instruction_references),
     )
 
 
@@ -3673,6 +3695,38 @@ def _document_variable_field_references(
     return tuple(references)
 
 
+def _hyperlink_field_references(
+    field_instruction_references: tuple[_FieldInstructionReference, ...],
+) -> tuple[_HyperlinkFieldReference, ...]:
+    """Select ``HYPERLINK`` fields without retaining any destination publicly.
+
+    A Hyperlink field can point to a web address, a file, or a bookmark with no
+    separate OOXML relationship. This is a stored-field inventory only: it
+    neither resolves nor follows any target, and it does not label a literal
+    destination as external because Word also accepts bookmarks there.
+    """
+
+    references: list[_HyperlinkFieldReference] = []
+    for reference in field_instruction_references:
+        if _field_instruction_keyword(reference.instruction) != "hyperlink":
+            continue
+        references.append(
+            _HyperlinkFieldReference(
+                story_part=reference.story_part,
+                instruction_signature=_digest_bytes(
+                    reference.instruction.encode("utf-8")
+                ),
+                classification=_hyperlink_field_classification(
+                    reference.instruction,
+                    contains_nested_instruction_field=(
+                        reference.contains_nested_instruction_field
+                    ),
+                ),
+            )
+        )
+    return tuple(references)
+
+
 def _document_variable_field_literal_name(
     instruction: str, *, contains_nested_instruction_field: bool
 ) -> str | None:
@@ -3688,29 +3742,81 @@ def _document_variable_field_literal_name(
 
     if contains_nested_instruction_field:
         return None
+    return _leading_literal_field_argument(_field_instruction_argument(instruction))
+
+
+def _hyperlink_field_classification(
+    instruction: str, *, contains_nested_instruction_field: bool
+) -> str:
+    """Classify a complete ``HYPERLINK`` field without exposing its target.
+
+    ``HYPERLINK field-argument [ switches ]`` can use a URL, file name, or
+    bookmark as its first argument. ``HYPERLINK \\l field-argument`` is the
+    standard internal-location-only form. We recognize only a leading plain or
+    wholly quoted literal followed by optional switch material. Any nested,
+    compound, missing, or malformed argument stays dynamic or unparseable;
+    DocFence intentionally does not implement Word's field evaluator.
+    """
+
+    if contains_nested_instruction_field:
+        return "dynamic_or_unparseable"
+    argument = _field_instruction_argument(instruction)
+    if _leading_literal_field_argument(argument) is not None:
+        return "literal_destination"
+    if _hyperlink_internal_location_only_literal(argument) is not None:
+        return "literal_internal_location_only"
+    return "dynamic_or_unparseable"
+
+
+def _field_instruction_argument(instruction: str) -> str | None:
+    """Return the trimmed material following one field keyword, if present."""
+
     tokens = instruction.lstrip().split(maxsplit=1)
     if len(tokens) != 2:
         return None
     argument = tokens[1].strip()
+    return argument or None
+
+
+def _leading_literal_field_argument(argument: str | None) -> str | None:
+    """Return one conservative leading literal field argument.
+
+    A literal is a plain, unquoted token or one wholly enclosed by one pair of
+    double quotes. Any remaining material must start with a Word field switch.
+    This parser deliberately declines escaped quotes and compound expressions
+    rather than trying to reproduce Word field evaluation semantics.
+    """
+
     if not argument:
         return None
     if not argument.startswith('"'):
         argument_tokens = argument.split(maxsplit=1)
-        literal_name = argument_tokens[0]
+        literal_argument = argument_tokens[0]
         suffix = argument_tokens[1] if len(argument_tokens) == 2 else ""
         if (
-            literal_name.startswith("\\")
-            or '"' in literal_name
+            literal_argument.startswith("\\")
+            or '"' in literal_argument
             or (suffix and not suffix.startswith("\\"))
         ):
             return None
-        return literal_name
+        return literal_argument
 
     closing_quote = argument.find('"', 1)
     suffix = argument[closing_quote + 1 :].strip() if closing_quote >= 0 else ""
     if closing_quote < 0 or (suffix and not suffix.startswith("\\")):
         return None
     return argument[1:closing_quote]
+
+
+def _hyperlink_internal_location_only_literal(argument: str | None) -> str | None:
+    """Return a literal ``\\l`` location for switch-only Hyperlink fields."""
+
+    if not argument:
+        return None
+    switch_tokens = argument.split(maxsplit=1)
+    if len(switch_tokens) != 2 or switch_tokens[0].casefold() != "\\l":
+        return None
+    return _leading_literal_field_argument(switch_tokens[1])
 
 
 def _document_scope_for_story(story_part: str) -> str:
@@ -4136,6 +4242,50 @@ def _word_document_variable_field_inventory(
         literal_document_variable_field_reference_not_matching_stored_variable_count=(
             not_matching_stored_variable_count
         ),
+        signature=_digest_records(records),
+    )
+
+
+def _word_hyperlink_field_inventory(
+    references: tuple[_HyperlinkFieldReference, ...],
+) -> WordHyperlinkFieldInventory:
+    """Inventory stored Hyperlink field codes without disclosing targets.
+
+    The classification is lexical evidence about a complete stored field code,
+    not a claim that Word will render a link, that its destination is reachable,
+    or that a literal destination is external. The raw instruction remains
+    solely in a private digest.
+    """
+
+    counts = {
+        "literal_destination": 0,
+        "literal_internal_location_only": 0,
+        "dynamic_or_unparseable": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        counts[reference.classification] += 1
+        records.append(
+            (
+                "word_hyperlink_field",
+                reference.story_part,
+                reference.instruction_signature,
+                reference.classification,
+            )
+        )
+
+    return WordHyperlinkFieldInventory(
+        hyperlink_field_reference_count=len(references),
+        hyperlink_field_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        literal_destination_hyperlink_field_count=counts["literal_destination"],
+        literal_internal_location_only_hyperlink_field_count=counts[
+            "literal_internal_location_only"
+        ],
+        dynamic_or_unparseable_hyperlink_field_count=counts[
+            "dynamic_or_unparseable"
+        ],
         signature=_digest_records(records),
     )
 

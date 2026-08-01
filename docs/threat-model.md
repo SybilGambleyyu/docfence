@@ -36,6 +36,9 @@ Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are sensitive package material too.
 Word document-variable names, values, Settings-part paths, and `DOCVARIABLE`
 field arguments are sensitive package material too.
+Word `HYPERLINK` field destinations, internal locations, ScreenTips, frame
+targets, field instructions, and story-part paths are sensitive package
+material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -158,6 +161,19 @@ field-switch material) exactly matches a validated `w:docVar` from the same
 main or glossary package document scope. Nested or compound expressions remain
 nonliteral. This association is never output as a name, never crosses into an
 attached template, and is not an evaluation of a Word field.
+
+Complete `HYPERLINK` field instructions receive a separate private-digest
+treatment because their primary argument can carry a URL, file location, or
+bookmark without an OOXML relationship. DocFence scans direct simple-field
+instructions and complete complex pre-separator instructions across supported
+stories, retaining current and deleted field-code variants separately. Public
+output contains only reference/story counts and a mutually exclusive lexical
+class: literal leading destination, literal `\l` internal-location-only target,
+or dynamic/unparseable. A literal is deliberately narrow—a leading plain token
+or wholly quoted string with optional trailing switch material—and a nested or
+compound expression stays dynamic or unparseable. All arguments, locations,
+ScreenTips, targets, paths, and fingerprints remain private. A primary literal
+is not reported as external because Word permits a bookmark there.
 
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
@@ -324,6 +340,10 @@ preserve the state. A same-scope literal association is not variable resolution,
 and a missing association does not make a field broken. DocFence does not run
 macros, evaluate fields, resolve variable names or templates, or interpret the
 content or purpose of a stored value.
+Word `HYPERLINK` field-reference counts are likewise stored-state evidence, not
+proof that Word will render a link, a literal primary argument is external, a
+destination is reachable or safe, or a client will follow it. DocFence does not
+resolve, retrieve, follow, evaluate, or render a `HYPERLINK` field.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

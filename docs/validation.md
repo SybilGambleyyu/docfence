@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.16 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.17 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -12,7 +12,7 @@ following properties:
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
-  state, and
+  state, and Word `HYPERLINK` field-reference state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -92,6 +92,13 @@ following properties:
   namespaces, main-versus-glossary exact-literal association, unclosed/loose
   instruction exclusion, same-count changes, JSON/Markdown/SARIF redaction,
   and policy findings;
+- `HYPERLINK` field references are separately inventoried from relationship
+  hyperlinks and external-source field families. Tests cover simple and complete
+  split complex encodings, quoted/plain leading arguments, `\l`
+  internal-location-only fields, trailing field switches, nested/dynamic and
+  compound expressions, current/deleted revision variants, headers, Strict Word
+  namespaces, unclosed/loose/post-separator instruction exclusion, same-count
+  destination changes, JSON/Markdown/SARIF redaction, and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -123,6 +130,8 @@ following properties:
   algorithm fields, and Settings-part paths,
   Word document-variable names, values, Settings-part paths, `DOCVARIABLE`
   instructions, literal field arguments, and story paths,
+  `HYPERLINK` instructions, destinations, internal locations, ScreenTips,
+  frame targets, and story paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -198,6 +207,14 @@ switch. DocFence reports one literal same-scope association without emitting
 the variable name or value. This is a compatibility smoke test, not a runtime
 dependency or a statement about field rendering.
 
+For the `HYPERLINK` field boundary, the release check profiles the public
+[`doc.docx` attachment](https://github.com/jgm/pandoc/files/13645632/doc.docx)
+from Pandoc issue [#9246](https://github.com/jgm/pandoc/issues/9246). It is a
+real Word document with a complete complex `HYPERLINK \l` field pointing to an
+in-document location. DocFence reports one literal internal-location-only
+reference without emitting the bookmark or result text. This is a compatibility
+smoke test, not a runtime dependency or a statement about field rendering.
+
 For the package-signature boundary, the release check profiles the signed DOCX
 fixture from the public [USENIX 2023 OOXML Signature Security
 artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). It confirms
@@ -224,7 +241,9 @@ document-property value is personal, confidential, intended, or safe to share,
 or whether stored mail-merge state will run, retrieve data, or select a
 recipient. It does not assert that a recognized external-source field will
 update, reach a target, use a particular argument as a source, or be accepted
-by Word; it records the bounded stored field-family evidence only. The
+by Word; it records the bounded stored field-family evidence only. It does not
+assert that a `HYPERLINK` field is valid, external, reachable, safe, rendered,
+or followed by Word; it records bounded private-digest evidence only. The
 style/default layer is a stored declaration inventory, not a renderer. It does
 not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
@@ -238,5 +257,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.16 contract; see the
+only, not field evaluation. Those limits are explicit in the 0.17 contract; see the
 [threat model](threat-model.md).

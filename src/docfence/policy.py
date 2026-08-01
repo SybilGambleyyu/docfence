@@ -58,6 +58,8 @@ _RULES: Final = {
     "no_word_document_variable_changes": "DFP044",
     "require_no_word_document_variable_fields": "DFP045",
     "no_word_document_variable_field_changes": "DFP046",
+    "require_no_word_hyperlink_fields": "DFP047",
+    "no_word_hyperlink_field_changes": "DFP048",
 }
 
 
@@ -326,6 +328,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                     "after": after.word_document_variable_fields.public_dict(),
                 },
             )
+    )
+    if policy.enabled("no_word_hyperlink_field_changes") and (
+        before.word_hyperlink_fields.signature
+        != after.word_hyperlink_fields.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_hyperlink_field_changes",
+                "Stored HYPERLINK field-reference inventory changed.",
+                {
+                    "before": before.word_hyperlink_fields.public_dict(),
+                    "after": after.word_hyperlink_fields.public_dict(),
+                },
+            )
         )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
@@ -575,6 +591,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_document_variable_fields",
                 "Candidate contains stored DOCVARIABLE field references.",
                 after.word_document_variable_fields.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_hyperlink_fields") and any(
+        after.word_hyperlink_fields.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_hyperlink_fields",
+                "Candidate contains stored HYPERLINK field references.",
+                after.word_hyperlink_fields.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

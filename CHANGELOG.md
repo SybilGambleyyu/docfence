@@ -2,6 +2,31 @@
 
 All notable changes are documented here.
 
+## 0.17.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for stored Word `HYPERLINK`
+  field references. It is separate from both relationship hyperlinks and the
+  existing external-source-field families, because a field code can carry a
+  destination directly.
+- Added `DFP047` to require a handoff with no stored `HYPERLINK` field
+  references and `DFP048` to protect an approved field-reference baseline.
+- Reports now expose only aggregate reference/story counts and mutually
+  exclusive lexical classes: a literal leading destination, a literal `\l`
+  internal-location-only target, or dynamic/unparseable field code. Raw
+  destinations, locations, ScreenTips, frame targets, field instructions,
+  story paths, and fingerprints remain private.
+- Recognizes direct simple-field instructions and complete complex pre-separator
+  instructions across supported stories, including separate current/deleted
+  revision variants. Loose instruction text and unclosed complex fields remain
+  outside the inventory.
+- A literal leading destination is not labeled external: Word permits a URL,
+  file location, or bookmark there. The inventory never resolves, follows,
+  evaluates, or renders a field, and it does not claim that a target is
+  reachable or that Word will display a link.
+- Added regression coverage for privacy redaction, policy/SARIF output, simple,
+  split complex, nested/dynamic, revision, header, Strict, `\l`, formatting
+  switch, same-count destination-change, and ignored-instruction encodings.
+
 ## 0.16.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for stored Word `DOCVARIABLE`
