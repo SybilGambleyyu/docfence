@@ -7,7 +7,8 @@ surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 external relationships, custom XML, macros, core/extended/custom document
-properties, mail-merge configuration and recipient-data state, data-bound
+properties, Microsoft Purview sensitivity-label metadata, mail-merge
+configuration and recipient-data state, data-bound
 content controls and their referenced custom XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
 document-task workflow state, task-pane Office web-extension configuration,
@@ -22,7 +23,9 @@ names, comments, URLs, relationship targets, field instructions, custom XML,
 macro bytes, or modern-comment contact records and identifiers.
 It also never emits document-task identities, user records, titles, dates, or
 comment anchor IDs; Office web-extension IDs, stores, properties, bindings, or
-part paths stay private as well.
+part paths stay private as well. Sensitivity-label and tenant IDs, names, dates,
+action IDs, extension data, custom MIP attributes, and content-marking strings
+are private too.
 
 ```bash
 python -m pip install docfence
@@ -51,7 +54,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.10 focuses on Office Open XML Word documents and templates and
+Version 0.11 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -62,7 +65,8 @@ deliberately keeps a small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, external-source field, content-control, external-relationship,
   custom-XML, macro,
-  core/extended/custom document-property, mail-merge, content-control
+  core/extended/custom document-property, sensitivity-label metadata,
+  mail-merge, content-control
   data-binding, modern-comment metadata,
   document-task workflow state, task-pane Office web-extension configuration
   and content-control binding markers,
@@ -113,6 +117,24 @@ property elements containing stored text, including automatic dates, statistics,
 and application metadata. The custom count reports stored custom-property
 definitions even when a value is empty. It does not decide whether any value is
 personal, confidential, user-authored, or safe to share.
+
+Sensitivity-label metadata has a separate inventory because a general custom
+property count does not describe the governance state that Office can retain.
+DocFence recognizes the Office 2021 `LabelInfo` part by its standard package
+classification-label relationship, its SDK content type, or conventional
+`docMetadata/LabelInfo` paths. A recognized relationship must originate in the
+package relationship item, be internal, and resolve to a stored member; its
+`labelList` root and required label state are validated. It also recognizes
+legacy `MSIP_Label_<GUID>_<attribute>` custom properties, the legacy
+`Sensitivity` property, and documented Word content-marking property names.
+Reports expose only aggregate LabelInfo part/label/enabled/removed/extension,
+legacy MIP label/property, legacy sensitivity-property, and Word
+content-marking-property counts. Label and tenant IDs, label names, methods,
+dates, action IDs, extension content, custom MIP attributes, property names and
+values, and part paths are privately fingerprinted only. DocFence does not
+decrypt a protected file, read an encrypted LabelInfo stream, resolve a label
+policy, determine effective permissions, apply or remove a label, or predict
+which markings an Office client will display.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -235,6 +257,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_modern_comment_metadata: true
   require_no_document_tasks: true
   require_no_taskpane_web_extensions: true
+  require_no_sensitivity_label_metadata: true
   require_no_external_document_dependencies: true
 ```
 
@@ -252,6 +275,7 @@ later mutation:
   no_modern_comment_metadata_changes: true
   no_document_task_changes: true
   no_taskpane_web_extension_changes: true
+  no_sensitivity_label_metadata_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -277,6 +301,9 @@ progress, priorities, and comment anchors are private too. So are task-pane
 layout details and Office web-extension IDs, stores, reference versions,
 property names and values, binding identifiers and application references,
 content-control markers, and part paths.
+Sensitivity-label IDs, tenant site IDs, label names, methods, set dates, action
+IDs, label-extension data, legacy MIP custom attributes, and Word content
+marking values remain private as well.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -356,6 +383,13 @@ document information. Microsoft's [task-pane auto-open
 guidance](https://learn.microsoft.com/en-us/office/dev/add-ins/develop/automatically-open-a-task-pane-with-a-document)
 explains the stored auto-show setting; DocFence reports that setting without
 predicting runtime behavior.
+The sensitivity-label boundary follows Microsoft's
+[Sensitivity Label Information part](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/c0599e21-b77f-475e-99e0-bd647f60bcbb),
+[LabelInfo/custom-property precedence](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-offcrypto/13939de6-c833-44ab-b213-e0088bf02341),
+and [sensitivity-label property contract](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/85388ac6-fb55-4017-828c-2680e3ab22ba).
+Microsoft's [MIP SDK metadata guidance](https://learn.microsoft.com/en-us/information-protection/develop/concept-mip-metadata)
+also documents legacy `MSIP_Label_` attributes and custom extensions; DocFence
+keeps them private while comparing their stored state.
 
 ## Development
 

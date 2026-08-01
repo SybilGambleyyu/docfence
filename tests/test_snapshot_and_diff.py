@@ -180,6 +180,15 @@ _TASKPANE_WEB_EXTENSION_CONTENT_TYPE = (
     "application/vnd.ms-office.webextensiontaskpanes+xml"
 )
 _WEB_EXTENSION_CONTENT_TYPE = "application/vnd.ms-office.webextension+xml"
+_SENSITIVITY_LABEL_NAMESPACE = (
+    "http://schemas.microsoft.com/office/2020/mipLabelMetadata"
+)
+_SENSITIVITY_LABEL_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels"
+)
+_SENSITIVITY_LABEL_CONTENT_TYPE = (
+    "application/vnd.ms-office.classificationlabels+xml"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -1584,6 +1593,215 @@ def test_web_extension_content_control_markers_follow_created_precedence(
     }
 
 
+def test_sensitivity_label_metadata_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    label_info_changed = tmp_path / "label-info-changed.docx"
+    extension_payload_changed = tmp_path / "extension-payload-changed.docx"
+    legacy_property_changed = tmp_path / "legacy-property-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_sensitivity_label_document(
+        before,
+        include_label_info=False,
+        include_legacy_properties=False,
+    )
+    _write_sensitivity_label_document(after)
+    _write_sensitivity_label_document(
+        label_info_changed,
+        label_name="SENSITIVITY_LABEL_NAME_CHANGED_DO_NOT_LEAK",
+    )
+    _write_sensitivity_label_document(
+        extension_payload_changed,
+        label_extension_marker="SENSITIVITY_LABEL_EXTENSION_CHANGED_DO_NOT_LEAK",
+    )
+    _write_sensitivity_label_document(
+        legacy_property_changed,
+        legacy_label_name="SENSITIVITY_LEGACY_NAME_CHANGED_DO_NOT_LEAK",
+    )
+    _write_sensitivity_label_document(renumbered, relationship_id_suffix="9")
+
+    expected_inventory = {
+        "label_info_part_count": 1,
+        "label_info_label_count": 2,
+        "label_info_enabled_label_count": 1,
+        "label_info_removed_label_count": 1,
+        "label_info_extension_count": 1,
+        "legacy_mip_label_count": 1,
+        "legacy_mip_property_count": 3,
+        "legacy_sensitivity_property_count": 1,
+        "word_content_marking_property_count": 4,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert after_snapshot.public_dict()["sensitivity_labels"] == expected_inventory
+    assert before_snapshot.public_dict()["sensitivity_labels"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "sensitivity_label_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert {
+        change.kind for change in diff_documents(after, label_info_changed).changes
+    } == {"sensitivity_label_inventory_changed"}
+    assert {
+        change.kind
+        for change in diff_documents(after, extension_payload_changed).changes
+    } == {"sensitivity_label_inventory_changed"}
+    assert {
+        "document_property_inventory_changed",
+        "sensitivity_label_inventory_changed",
+    } <= {
+        change.kind
+        for change in diff_documents(after, legacy_property_changed).changes
+    }
+    assert diff_documents(after, renumbered).changes == ()
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_sensitivity_label_metadata: true
+  no_sensitivity_label_metadata_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP035",
+        "DFP036",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, label_info_changed), policy
+        ).findings
+    } == {"DFP035", "DFP036"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP035"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_SENSITIVITY_LABEL_INVENTORY_CHANGED",
+        "DFP035",
+        "DFP036",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "SENSITIVITY_LABEL_NAME_DO_NOT_LEAK",
+        "SENSITIVITY_LABEL_NAME_CHANGED_DO_NOT_LEAK",
+        "SENSITIVITY_LABEL_EXTENSION_DO_NOT_LEAK",
+        "SENSITIVITY_LABEL_EXTENSION_CHANGED_DO_NOT_LEAK",
+        "SENSITIVITY_LEGACY_NAME_DO_NOT_LEAK",
+        "SENSITIVITY_LEGACY_NAME_CHANGED_DO_NOT_LEAK",
+        "SENSITIVITY_MIP_CUSTOM_DO_NOT_LEAK",
+        "SENSITIVITY_MARKING_TEXT_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_sensitivity_label_metadata_discovers_parts_and_rejects_invalid_state(
+    tmp_path,
+) -> None:
+    relationship_only = tmp_path / "relationship-only.docx"
+    content_type_only = tmp_path / "content-type-only.docx"
+    conventional_unlinked = tmp_path / "conventional-unlinked.docx"
+    noncanonical_custom_properties = tmp_path / "noncanonical-custom-properties.docx"
+    wrong_root = tmp_path / "wrong-root.docx"
+    missing_attribute = tmp_path / "missing-attribute.docx"
+    invalid_site_id = tmp_path / "invalid-site-id.docx"
+    external_relationship = tmp_path / "external-relationship.docx"
+    non_root_relationship = tmp_path / "non-root-relationship.docx"
+    missing_target = tmp_path / "missing-target.docx"
+    multiple_parts = tmp_path / "multiple-parts.docx"
+    _write_sensitivity_label_document(
+        relationship_only,
+        label_info_part_name="private/label-data.xml",
+        include_label_info_content_type=False,
+        include_legacy_properties=False,
+    )
+    _write_sensitivity_label_document(
+        content_type_only,
+        label_info_part_name="private/label-data.xml",
+        include_label_info_relationship=False,
+        include_legacy_properties=False,
+    )
+    _write_sensitivity_label_document(
+        conventional_unlinked,
+        label_info_part_name="docMetadata/LabelInfo",
+        include_label_info_relationship=False,
+        include_label_info_content_type=False,
+        include_legacy_properties=False,
+    )
+    _write_sensitivity_label_document(
+        noncanonical_custom_properties,
+        include_label_info=False,
+        custom_property_part_name="private/label-properties.xml",
+        include_legacy_properties=True,
+    )
+    _write_sensitivity_label_document(wrong_root, wrong_label_info_root=True)
+    _write_sensitivity_label_document(missing_attribute, omit_label_method=True)
+    _write_sensitivity_label_document(invalid_site_id, label_site_id="not-a-guid")
+    _write_sensitivity_label_document(
+        external_relationship,
+        label_info_target_mode="External",
+    )
+    _write_sensitivity_label_document(
+        non_root_relationship,
+        label_info_relationship_source="word/document.xml",
+    )
+    _write_sensitivity_label_document(
+        missing_target,
+        include_label_info_part=False,
+        include_label_info_content_type=False,
+    )
+    _write_sensitivity_label_document(
+        multiple_parts,
+        additional_label_info_part_name="docMetadata/OtherLabelInfo.xml",
+    )
+
+    for document in (
+        relationship_only,
+        content_type_only,
+        conventional_unlinked,
+    ):
+        snapshot = load_snapshot(document)
+        assert snapshot.sensitivity_labels.label_info_part_count == 1
+        assert snapshot.sensitivity_labels.label_info_label_count == 2
+    custom_snapshot = load_snapshot(noncanonical_custom_properties)
+    assert custom_snapshot.sensitivity_labels.label_info_part_count == 0
+    assert custom_snapshot.sensitivity_labels.legacy_mip_property_count == 3
+    assert custom_snapshot.sensitivity_labels.word_content_marking_property_count == 4
+
+    for document in (
+        wrong_root,
+        missing_attribute,
+        invalid_site_id,
+        external_relationship,
+        non_root_relationship,
+        missing_target,
+        multiple_parts,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
     template = tmp_path / "review-template.dotx"
     macro_template = tmp_path / "review-template.dotm"
@@ -2317,6 +2535,177 @@ def _write_modern_comment_metadata_document(
         )
     if macro_payload is not None:
         entries["word/vbaProject.bin"] = macro_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_sensitivity_label_document(
+    path,
+    *,
+    include_label_info: bool = True,
+    include_legacy_properties: bool = True,
+    include_label_info_part: bool = True,
+    include_label_info_relationship: bool = True,
+    include_label_info_content_type: bool = True,
+    include_legacy_property_relationship: bool = True,
+    label_info_part_name: str = "docMetadata/LabelInfo.xml",
+    additional_label_info_part_name: str | None = None,
+    custom_property_part_name: str = "docProps/custom.xml",
+    label_info_target_mode: str = "Internal",
+    label_info_relationship_source: str = "/",
+    relationship_id_suffix: str = "1",
+    wrong_label_info_root: bool = False,
+    omit_label_method: bool = False,
+    label_site_id: str = "{A0A00000-0000-0000-0000-000000000001}",
+    label_name: str = "SENSITIVITY_LABEL_NAME_DO_NOT_LEAK",
+    label_extension_marker: str = "SENSITIVITY_LABEL_EXTENSION_DO_NOT_LEAK",
+    legacy_label_name: str = "SENSITIVITY_LEGACY_NAME_DO_NOT_LEAK",
+) -> None:
+    """Write a small package carrying current and legacy sensitivity metadata."""
+
+    def relationship_target(
+        source_part: str, target_part: str, target_mode: str
+    ) -> str:
+        if target_mode != "Internal":
+            return "https://example.invalid/SENSITIVITY_LABEL_TARGET_DO_NOT_LEAK"
+        if source_part == "/":
+            return target_part
+        return posixpath.relpath(target_part, start=source_part.rpartition("/")[0])
+
+    def relationship_markup(
+        relationship_id: str,
+        relationship_type: str,
+        source_part: str,
+        target_part: str,
+        target_mode: str = "Internal",
+    ) -> str:
+        target_mode_attribute = (
+            "" if target_mode == "Internal" else f' TargetMode="{target_mode}"'
+        )
+        return (
+            f'<Relationship Id="{relationship_id}" Type="{relationship_type}" '
+            f'Target="{relationship_target(source_part, target_part, target_mode)}"'
+            f"{target_mode_attribute}/>"
+        )
+
+    root_relationships: list[str] = []
+    document_relationships: list[str] = []
+    if include_label_info and include_label_info_relationship:
+        label_relationship = relationship_markup(
+            f"rIdLabelInfo{relationship_id_suffix}",
+            _SENSITIVITY_LABEL_RELATIONSHIP_TYPE,
+            label_info_relationship_source,
+            label_info_part_name,
+            label_info_target_mode,
+        )
+        if label_info_relationship_source == "/":
+            root_relationships.append(label_relationship)
+        else:
+            document_relationships.append(label_relationship)
+    if include_legacy_properties and include_legacy_property_relationship:
+        root_relationships.append(
+            relationship_markup(
+                f"rIdCustomProperties{relationship_id_suffix}",
+                _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE,
+                "/",
+                custom_property_part_name,
+            )
+        )
+
+    label_method = "" if omit_label_method else ' method="Privileged"'
+    label_root_name = "notLabelList" if wrong_label_info_root else "labelList"
+    label_info_xml = (
+        f'<clbl:{label_root_name} '
+        f'xmlns:clbl="{_SENSITIVITY_LABEL_NAMESPACE}" '
+        'xmlns:future="urn:docfence:future-label-extension">'
+        '<clbl:label id="{A0A00000-0000-0000-0000-000000000010}" '
+        'enabled="true" setDate="SENSITIVITY_LABEL_DATE_DO_NOT_LEAK"'
+        f"{label_method}"
+        f' name="{label_name}" siteId="{label_site_id}" '
+        'actionId="{A0A00000-0000-0000-0000-000000000011}" '
+        'contentBits="7" removed="false"/>'
+        '<clbl:label id="{A0A00000-0000-0000-0000-000000000012}" '
+        'enabled="0" method="" '
+        'siteId="{A0A00000-0000-0000-0000-000000000013}" removed="1"/>'
+        '<clbl:extLst><clbl:ext uri="{A0A00000-0000-0000-0000-000000000014}">'
+        f'<future:payload value="{label_extension_marker}"/>'
+        "</clbl:ext></clbl:extLst>"
+        f"</clbl:{label_root_name}>"
+    ).encode()
+    legacy_label_guid = "a0a00000-0000-0000-0000-000000000020"
+    legacy_properties_xml = (
+        f'<Properties xmlns="{_CUSTOM_PROPERTIES_NAMESPACE}" '
+        f'xmlns:vt="{_DOCUMENT_PROPERTIES_VT_NAMESPACE}">'
+        '<property fmtid="FMTID" pid="2" '
+        f'name="MSIP_Label_{legacy_label_guid}_Enabled">'
+        "<vt:lpwstr>true</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="3" '
+        f'name="MSIP_Label_{legacy_label_guid}_Name">'
+        f"<vt:lpwstr>{legacy_label_name}</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="4" '
+        f'name="MSIP_Label_{legacy_label_guid}_GeneratedBy">'
+        "<vt:lpwstr>SENSITIVITY_MIP_CUSTOM_DO_NOT_LEAK</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="5" name="Sensitivity">'
+        f"<vt:lpwstr>{legacy_label_guid}</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="6" '
+        'name="ClassificationContentMarkingHeaderText">'
+        "<vt:lpwstr>SENSITIVITY_MARKING_TEXT_DO_NOT_LEAK</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="7" '
+        'name="ClassificationContentMarkingHeaderShapeIds-1">'
+        "<vt:lpwstr>aa,bb</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="8" '
+        'name="ClassificationContentMarkingFooterFontProps">'
+        "<vt:lpwstr>#000000,12,Calibri</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="9" name="ClassificationWatermarkText">'
+        "<vt:lpwstr>SENSITIVITY_WATERMARK_DO_NOT_LEAK</vt:lpwstr></property>"
+        '<property fmtid="FMTID" pid="10" name="UNRELATED_DO_NOT_LEAK">'
+        "<vt:lpwstr>UNRELATED_VALUE_DO_NOT_LEAK</vt:lpwstr></property>"
+        "</Properties>"
+    ).encode()
+
+    label_overrides: list[str] = []
+    if include_label_info and include_label_info_content_type:
+        label_overrides.append(
+            f'<Override PartName="/{label_info_part_name}" '
+            f'ContentType="{_SENSITIVITY_LABEL_CONTENT_TYPE}"/>'
+        )
+        if additional_label_info_part_name is not None:
+            label_overrides.append(
+                f'<Override PartName="/{additional_label_info_part_name}" '
+                f'ContentType="{_SENSITIVITY_LABEL_CONTENT_TYPE}"/>'
+            )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{''.join(label_overrides)}"
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "VISIBLE_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if root_relationships:
+        entries["_rels/.rels"] = (
+            f'<Relationships xmlns="{PR}">{"".join(root_relationships)}</Relationships>'
+        ).encode()
+    if document_relationships:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f"{''.join(document_relationships)}</Relationships>"
+        ).encode()
+    if include_label_info and include_label_info_part:
+        entries[label_info_part_name] = label_info_xml
+    if additional_label_info_part_name is not None:
+        entries[additional_label_info_part_name] = label_info_xml
+    if include_legacy_properties:
+        entries[custom_property_part_name] = legacy_properties_xml
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

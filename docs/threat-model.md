@@ -25,7 +25,10 @@ Document-task IDs, event IDs/times, users, titles, schedules, progress,
 priorities, and comment anchors are sensitive under the same rule. So are
 task-pane layout values and Office web-extension IDs, store/reference data,
 property names and values, binding IDs/application references, content-control
-marker values, and part paths.
+marker values, and part paths. Sensitivity-label IDs, tenant site IDs, label
+names, assignment methods, set dates, action IDs, extension payloads, legacy
+MIP custom attributes, Word content-marking text, property names and values,
+and LabelInfo part paths are sensitive package material too.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -82,6 +85,19 @@ validates recognized property roots and fingerprints the full stored structure
 privately. It does not disclose a property name, value, path, relationship
 target, or digest. A count is evidence that stored metadata exists, not a
 classification of the metadata as personal or safe.
+
+Sensitivity-label metadata receives a dedicated private-digest treatment rather
+than relying on the broad custom-property inventory. DocFence recognizes the
+Office 2021 LabelInfo root, standard package relationship, SDK content type,
+and canonical LabelInfo paths. A recognized classification-label relationship
+must be root-package scoped, internal, and resolvable; multiple LabelInfo parts
+or malformed label state fail closed. It also scans recognized custom-property
+parts for legacy MIP `MSIP_Label_<GUID>_<attribute>` state, the legacy
+`Sensitivity` property, and documented Word marking properties. Public output
+is aggregate-only, while label IDs, tenant IDs, names, dates, methods, action
+IDs, extension content, MIP custom attributes, and marking values remain in the
+private signature. Thus a same-count label change remains visible without
+placing governance metadata in a report.
 
 Mail-merge configuration and recipient-data parts use the same private-digest
 approach. Recognized data and header sources must be external relationships;
@@ -206,6 +222,12 @@ installed, valid, loaded, displayed, safe, or able to auto-open. An enabled
 `Office.AutoShowTaskpaneWithDocument` property is recorded as stored state, not
 as a prediction of runtime behavior. Content-control markers are not resolved
 to a specific extension or rendered control.
+Sensitivity-label counts are stored-state evidence, not a statement that a
+particular label policy exists, that the label is effective for a recipient, or
+that a file is encrypted or accessible. DocFence does not decrypt IRM-protected
+files, read a LabelInfo stream from an encrypted storage, interpret label
+policy, calculate permissions, apply/remove a label, or render a label's
+header, footer, or watermark.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

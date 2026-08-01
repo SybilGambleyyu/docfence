@@ -2,6 +2,29 @@
 
 All notable changes are documented here.
 
+## 0.11.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for Microsoft Purview sensitivity
+  label metadata in both Office 2021 `LabelInfo` parts and legacy MIP custom
+  document properties.
+- Added `DFP035` to require that a handoff contain no stored sensitivity-label
+  metadata and `DFP036` to protect an approved label-metadata baseline.
+- Reports now expose aggregate LabelInfo part/label/enabled/removed/extension,
+  legacy MIP label/property, legacy `Sensitivity` property, and Word
+  content-marking-property counts only. Label and tenant IDs, names, dates,
+  action IDs, extension data, custom MIP attributes, marking strings, paths,
+  and fingerprints remain private.
+- Detects modern label parts through the Office classification-label
+  relationship, SDK content type, and canonical `docMetadata/LabelInfo` paths.
+  Validates the `labelList` root and required label state, requires a recognized
+  relationship to be internal, root-package scoped, and resolvable, and fails
+  closed on malformed recognized metadata.
+- Privately fingerprints same-count LabelInfo and legacy-property mutations,
+  while relationship-ID renumbering alone remains quiet. Added adversarial
+  coverage for discovery modes, malformed roots/attributes/site IDs,
+  unavailable/external/non-root relationships, multiple LabelInfo parts,
+  noncanonical custom-property parts, policy/SARIF output, and redaction.
+
 ## 0.10.0 — 2026-08-01
 
 - Added first-class, privacy-safe inventories for Word document tasks and

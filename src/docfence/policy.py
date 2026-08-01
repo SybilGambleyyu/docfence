@@ -46,6 +46,8 @@ _RULES: Final = {
     "no_document_task_changes": "DFP032",
     "require_no_taskpane_web_extensions": "DFP033",
     "no_taskpane_web_extension_changes": "DFP034",
+    "require_no_sensitivity_label_metadata": "DFP035",
+    "no_sensitivity_label_metadata_changes": "DFP036",
 }
 
 
@@ -230,6 +232,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 {
                     "before": before.document_properties.public_dict(),
                     "after": after.document_properties.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_sensitivity_label_metadata_changes") and (
+        before.sensitivity_labels.signature != after.sensitivity_labels.signature
+    ):
+        findings.append(
+            _finding(
+                "no_sensitivity_label_metadata_changes",
+                "Office sensitivity-label metadata inventory changed.",
+                {
+                    "before": before.sensitivity_labels.public_dict(),
+                    "after": after.sensitivity_labels.public_dict(),
                 },
             )
         )
@@ -421,6 +436,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                         after.document_properties.custom_property_count
                     ),
                 },
+            )
+        )
+    if policy.enabled("require_no_sensitivity_label_metadata") and any(
+        after.sensitivity_labels.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_sensitivity_label_metadata",
+                "Candidate contains stored Office sensitivity-label metadata.",
+                after.sensitivity_labels.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

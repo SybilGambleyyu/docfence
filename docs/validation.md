@@ -1,13 +1,14 @@
 # Validation notes
 
-DocFence 0.10 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.11 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
 
 - stored paragraph/table changes are summarized without source text;
 - revision markup, comments, modern comment contact/thread/identifier/reaction
-  metadata, document tasks, task-pane Office web-extension configuration and
+  metadata, document tasks, task-pane Office web-extension configuration,
+  Office sensitivity-label LabelInfo and legacy custom-property metadata, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -52,6 +53,14 @@ following properties:
 - same-count Office web-extension store/property/binding rewrites produce a
   private-inventory change; enabled `webExtensionCreated` takes precedence over
   `webExtensionLinked` when counting document-bound content controls;
+- Office sensitivity-label metadata is separately inventoried from the general
+  document-property count across modern LabelInfo and legacy MIP property
+  storage. LabelInfo discovery covers standard root-package relationships,
+  Office SDK content types, canonical extensionful/extensionless paths, and
+  noncanonical relationship targets; legacy MIP discovery covers noncanonical
+  custom-property parts reached through a standard relationship. Same-count
+  label and legacy-property rewrites remain review-visible while relationship-ID
+  renumbering alone remains quiet;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -68,6 +77,8 @@ following properties:
   document-task IDs, event times, users, titles, schedules, priorities,
   progress, comment anchors, Office web-extension IDs, stores, properties,
   bindings, content-control markers, and pane values,
+  sensitivity-label and tenant IDs, names, methods, dates, action IDs,
+  extension payloads, legacy MIP custom attributes, and content-marking values,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -78,9 +89,11 @@ following properties:
   recognized data-binding custom-XML-properties relationships, and malformed
   recognized external-document dependency relationship/anchor state, malformed
   modern-comment metadata roots, external modern-comment metadata
-  relationships, document-task roots/relationships, and task-pane or
+  relationships, document-task roots/relationships, task-pane or
   web-extension roots, relationships, and direct task-pane references are
-  rejected before reporting.
+  rejected before reporting. Malformed sensitivity LabelInfo roots, required
+  attributes, tenant-site IDs, unavailable/external/non-root classification
+  relationships, and multiple LabelInfo parts are rejected before reporting.
 
 The release check is:
 
@@ -132,6 +145,8 @@ or whether stored mail-merge state will run, retrieve data, or select a
 recipient. It does not assert that a recognized external-source field will
 update, reach a target, use a particular argument as a source, or be accepted
 by Word; it records the bounded stored field-family evidence only. The
-style/default layer is a stored declaration inventory, not a renderer. Those
-limits are explicit in the 0.10 contract; see the
+style/default layer is a stored declaration inventory, not a renderer. It does
+not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
+permissions, or predict label markings. Those limits are explicit in the 0.11
+contract; see the
 [threat model](threat-model.md).

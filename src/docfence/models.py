@@ -118,6 +118,39 @@ class DocumentPropertyInventory:
 
 
 @dataclass(frozen=True)
+class SensitivityLabelInventory:
+    """Stored Microsoft Purview sensitivity-label evidence, aggregate only."""
+
+    label_info_part_count: int
+    label_info_label_count: int
+    label_info_enabled_label_count: int
+    label_info_removed_label_count: int
+    label_info_extension_count: int
+    legacy_mip_label_count: int
+    legacy_mip_property_count: int
+    legacy_sensitivity_property_count: int
+    word_content_marking_property_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "label_info_part_count": self.label_info_part_count,
+            "label_info_label_count": self.label_info_label_count,
+            "label_info_enabled_label_count": self.label_info_enabled_label_count,
+            "label_info_removed_label_count": self.label_info_removed_label_count,
+            "label_info_extension_count": self.label_info_extension_count,
+            "legacy_mip_label_count": self.legacy_mip_label_count,
+            "legacy_mip_property_count": self.legacy_mip_property_count,
+            "legacy_sensitivity_property_count": (
+                self.legacy_sensitivity_property_count
+            ),
+            "word_content_marking_property_count": (
+                self.word_content_marking_property_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class MailMergeInventory:
     """Stored mail-merge configuration and recipient-data evidence."""
 
@@ -404,6 +437,7 @@ class DocumentSnapshot:
     embedded_objects: EmbeddedObjectInventory
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
+    sensitivity_labels: SensitivityLabelInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
@@ -489,6 +523,7 @@ class DocumentSnapshot:
             "embedded_objects": self.embedded_objects.public_dict(),
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
+            "sensitivity_labels": self.sensitivity_labels.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),

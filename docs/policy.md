@@ -56,6 +56,8 @@ starter policy.
 | `no_document_task_changes` | `DFP032` | Word document-task inventory differs | Comparison |
 | `require_no_taskpane_web_extensions` | `DFP033` | Candidate has stored task-pane Office web-extension state | Candidate |
 | `no_taskpane_web_extension_changes` | `DFP034` | Task-pane Office web-extension inventory differs | Comparison |
+| `require_no_sensitivity_label_metadata` | `DFP035` | Candidate has stored Office sensitivity-label metadata | Candidate |
+| `no_sensitivity_label_metadata_changes` | `DFP036` | Office sensitivity-label metadata inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -89,7 +91,9 @@ fields. `no_modern_comment_metadata_changes` does the same for a controlled
 template that intentionally retains modern comment review state.
 `no_document_task_changes` and `no_taskpane_web_extension_changes` provide
 the equivalent controlled-baseline gates for stored workflow and document-borne
-add-in state.
+add-in state. `no_sensitivity_label_metadata_changes` does the same for a
+controlled template that intentionally retains an approved Office sensitivity
+label or its related legacy metadata.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -322,6 +326,46 @@ claim that Word will install, load, display, or auto-open an add-in.
 `no_taskpane_web_extension_changes` protects an approved baseline. These rules
 do not install or execute an add-in, retrieve a manifest, access a store,
 authenticate, resolve a binding, or assess add-in safety.
+
+## Office sensitivity-label metadata scope
+
+Office can retain sensitivity-label state in two compatible storage forms.
+Modern Office 2021 packages use a `LabelInfo` part whose `labelList` records
+label ID, enabled/removed state, method, tenant site ID, and optional label
+details. Older or compatibility paths retain MIP key/value metadata in custom
+document properties, including `MSIP_Label_<GUID>_<attribute>`, the legacy
+`Sensitivity` property, and documented Word header/footer/watermark marking
+properties. MIP also permits custom attributes and versioned attribute names.
+
+DocFence discovers a modern LabelInfo part through the standard
+classification-label package relationship, the Office SDK content type, or the
+canonical `docMetadata/LabelInfo` / `docMetadata/LabelInfo.xml` paths. It
+requires a recognized classification-label relationship to originate in the
+package relationship item, use an internal target, and resolve to a stored
+member. At most one LabelInfo part is accepted. The `labelList` root, direct
+`label` records, required label attributes, boolean state, tenant-site GUID,
+and extension-list structure are validated; malformed recognized state fails
+closed. Legacy MIP evidence is found in canonical or standard
+relationship-linked custom-property parts, including noncanonical property-part
+targets.
+
+Public output reports only aggregate LabelInfo part, label, enabled-label,
+removed-label, extension, legacy MIP-label, legacy MIP-property, legacy
+`Sensitivity`-property, and Word content-marking-property counts. Label IDs,
+tenant IDs, label names, methods, dates, action IDs, extension payloads, MIP
+custom attribute names and values, property names and values, relationship IDs,
+paths, and fingerprints remain private. The comparison signature retains that
+material, so a label-ID/name/value or same-count custom-property mutation is
+review-visible without disclosure; relationship-ID renumbering alone remains
+quiet.
+
+`require_no_sensitivity_label_metadata` fails whenever any sensitivity-label
+public count is nonzero, including an empty recognized LabelInfo part. Use it
+for a handoff that must not retain label/tenant/governance metadata.
+`no_sensitivity_label_metadata_changes` protects an approved baseline instead.
+Neither rule decrypts IRM-protected content, reads a LabelInfo stream from an
+encrypted storage, resolves a label policy, determines permissions, applies or
+removes labels, or predicts whether an Office client will display a marking.
 
 ## External Word document dependency scope
 

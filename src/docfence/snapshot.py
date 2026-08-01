@@ -11,6 +11,7 @@ import hashlib
 import io
 import json
 import posixpath
+import re
 import stat
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -33,6 +34,7 @@ from docfence.models import (
     ModernCommentMetadataInventory,
     RelationshipInventory,
     RevisionInventory,
+    SensitivityLabelInventory,
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
@@ -175,6 +177,33 @@ _DOCUMENT_PROPERTY_ROOTS: Final = {
         "Properties",
     ),
 }
+_SENSITIVITY_LABEL_NAMESPACE: Final = (
+    "http://schemas.microsoft.com/office/2020/mipLabelMetadata"
+)
+_SENSITIVITY_LABEL_PART_CONTENT_TYPES: Final = frozenset(
+    {"application/vnd.ms-office.classificationlabels+xml"}
+)
+_SENSITIVITY_LABEL_RELATIONSHIP_TYPE: Final = (
+    "http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels"
+)
+_SENSITIVITY_LABEL_FALLBACK_PART_NAMES: Final = frozenset(
+    {"docmetadata/labelinfo", "docmetadata/labelinfo.xml"}
+)
+_SENSITIVITY_LABEL_GUID: Final = re.compile(
+    r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$"
+)
+_LEGACY_MIP_LABEL_PROPERTY_NAME: Final = re.compile(
+    r"^msip_label_(?P<label_id>\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"[0-9a-f]{4}-[0-9a-f]{12}\}?)_(?P<attribute>.+)$",
+    re.IGNORECASE,
+)
+_WORD_SENSITIVITY_CONTENT_MARKING_PROPERTY_NAME: Final = re.compile(
+    r"^(?:classificationcontentmarking(?:header(?:fontprops|text|shapeids(?:-"
+    r"[0-9a-f]+)?)|footer(?:fontprops|text|shapeids(?:-[0-9a-f]+)?))|"
+    r"classificationwatermark(?:fontprops|text|shapeids(?:-[0-9a-f]+)?))$",
+    re.IGNORECASE,
+)
 _MAIL_MERGE_DATA_SOURCE_RELATIONSHIP_TYPES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
@@ -512,6 +541,9 @@ def _load_package(
             document_properties, document_property_parts = _document_property_inventory(
                 archive, members, relationship_maps, limits
             )
+            sensitivity_labels, sensitivity_label_parts = _sensitivity_label_inventory(
+                archive, members, content_types, relationship_maps, limits
+            )
             mail_merge, mail_merge_parts = _mail_merge_inventory(
                 archive, members, relationship_maps, limits
             )
@@ -583,6 +615,7 @@ def _load_package(
                     embedded_object_parts
                     | alternative_format_import_parts
                     | document_property_parts
+                    | sensitivity_label_parts
                     | mail_merge_parts
                     | modern_comment_metadata_parts
                     | document_task_parts
@@ -613,6 +646,7 @@ def _load_package(
         embedded_objects=embedded_objects,
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
+        sensitivity_labels=sensitivity_labels,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
         external_fields=external_fields,
@@ -1029,6 +1063,256 @@ def _custom_property_count(root: ET.Element) -> int:
 
 def _element_has_text_value(element: ET.Element) -> bool:
     return any((value or "").strip() for value in element.itertext())
+
+
+def _sensitivity_label_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[SensitivityLabelInventory, frozenset[str]]:
+    """Inventory stored Office sensitivity-label metadata without revealing it.
+
+    Current Office files can store label state in an Office 2021 LabelInfo part,
+    while older and coauthoring-compatible flows retain MIP key/value metadata
+    in custom document properties.  Tenant IDs, label IDs, labels names, dates,
+    action IDs, arbitrary MIP extension attributes, and content-marking text
+    remain in the private signature.
+    """
+
+    records: list[tuple[str, ...]] = []
+    label_info_parts: set[str] = set()
+
+    def add_label_info_part(part_name: str) -> None:
+        label_info_parts.add(part_name)
+        if len(label_info_parts) > 1:
+            raise DocumentFormatError("sensitivity label information parts are invalid")
+
+    for part_name in members:
+        if _is_conventional_sensitivity_label_part_name(part_name):
+            add_label_info_part(part_name)
+    for part_name, content_type in content_types.items():
+        if content_type.casefold() in _SENSITIVITY_LABEL_PART_CONTENT_TYPES:
+            add_label_info_part(part_name)
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            if (
+                relationship.relationship_type.casefold()
+                != _SENSITIVITY_LABEL_RELATIONSHIP_TYPE
+            ):
+                continue
+            if source_part != "/" or relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError("sensitivity label relationships are invalid")
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError("sensitivity label relationships are invalid")
+            add_label_info_part(target)
+            records.append(
+                (
+                    "sensitivity_label_relationship",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    counts = {
+        "label_info_label": 0,
+        "label_info_enabled_label": 0,
+        "label_info_removed_label": 0,
+        "label_info_extension": 0,
+        "legacy_mip_property": 0,
+        "legacy_sensitivity_property": 0,
+        "word_content_marking_property": 0,
+    }
+    for part_name in sorted(label_info_parts):
+        root = _read_xml(archive, members[part_name], limits)
+        labels, extension_count = _validate_sensitivity_label_root(root)
+        records.append(
+            (
+                "sensitivity_label_info_part",
+                part_name,
+                _fingerprint_element(
+                    root,
+                    relationship_maps.get(part_name, {}),
+                    preserve_volatile_attributes=True,
+                ),
+            )
+        )
+        counts["label_info_label"] += len(labels)
+        counts["label_info_extension"] += extension_count
+        for label in labels:
+            enabled = _sensitivity_label_boolean(label.attrib["enabled"])
+            removed = _sensitivity_label_boolean(label.attrib["removed"])
+            if removed:
+                counts["label_info_removed_label"] += 1
+            elif enabled:
+                counts["label_info_enabled_label"] += 1
+
+    legacy_mip_label_ids: set[str] = set()
+    for part_name in _custom_document_property_part_names(members, relationship_maps):
+        root = _read_xml(archive, members[part_name], limits)
+        _validate_document_property_root(root, "custom")
+        relationships = relationship_maps.get(part_name, {})
+        for property_element in root:
+            if _local_name(property_element.tag) != "property":
+                continue
+            property_name = property_element.attrib.get("name")
+            if property_name is None:
+                continue
+            category = _sensitivity_label_custom_property_category(property_name)
+            if category is None:
+                continue
+            records.append(
+                (
+                    "sensitivity_label_custom_property",
+                    category,
+                    part_name,
+                    _fingerprint_element(property_element, relationships),
+                )
+            )
+            if category == "legacy_mip":
+                counts["legacy_mip_property"] += 1
+                match = _LEGACY_MIP_LABEL_PROPERTY_NAME.fullmatch(property_name)
+                if match is None:
+                    raise DocumentFormatError("sensitivity label metadata is invalid")
+                legacy_mip_label_ids.add(
+                    match.group("label_id").strip("{}").casefold()
+                )
+            elif category == "legacy_sensitivity":
+                counts["legacy_sensitivity_property"] += 1
+            else:
+                counts["word_content_marking_property"] += 1
+
+    return (
+        SensitivityLabelInventory(
+            label_info_part_count=len(label_info_parts),
+            label_info_label_count=counts["label_info_label"],
+            label_info_enabled_label_count=counts["label_info_enabled_label"],
+            label_info_removed_label_count=counts["label_info_removed_label"],
+            label_info_extension_count=counts["label_info_extension"],
+            legacy_mip_label_count=len(legacy_mip_label_ids),
+            legacy_mip_property_count=counts["legacy_mip_property"],
+            legacy_sensitivity_property_count=counts[
+                "legacy_sensitivity_property"
+            ],
+            word_content_marking_property_count=counts[
+                "word_content_marking_property"
+            ],
+            signature=_digest_records(records),
+        ),
+        frozenset(label_info_parts),
+    )
+
+
+def _is_conventional_sensitivity_label_part_name(part_name: str) -> bool:
+    return part_name.casefold() in _SENSITIVITY_LABEL_FALLBACK_PART_NAMES
+
+
+def _validate_sensitivity_label_root(
+    root: ET.Element,
+) -> tuple[list[ET.Element], int]:
+    if _qualified_name(root.tag) != (_SENSITIVITY_LABEL_NAMESPACE, "labelList"):
+        raise DocumentFormatError("sensitivity label information part is invalid")
+
+    labels: list[ET.Element] = []
+    extension_count = 0
+    saw_extension_list = False
+    for child in root:
+        qualified_name = _qualified_name(child.tag)
+        if qualified_name == (_SENSITIVITY_LABEL_NAMESPACE, "label"):
+            if saw_extension_list:
+                raise DocumentFormatError(
+                    "sensitivity label information part is invalid"
+                )
+            _validate_sensitivity_label(child)
+            labels.append(child)
+        elif qualified_name == (_SENSITIVITY_LABEL_NAMESPACE, "extLst"):
+            if saw_extension_list:
+                raise DocumentFormatError(
+                    "sensitivity label information part is invalid"
+                )
+            saw_extension_list = True
+            for extension in child:
+                if _qualified_name(extension.tag) != (
+                    _SENSITIVITY_LABEL_NAMESPACE,
+                    "ext",
+                ) or extension.attrib.get("uri") is None:
+                    raise DocumentFormatError(
+                        "sensitivity label information part is invalid"
+                    )
+                extension_count += 1
+        else:
+            raise DocumentFormatError("sensitivity label information part is invalid")
+    return labels, extension_count
+
+
+def _validate_sensitivity_label(label: ET.Element) -> None:
+    required_attributes = ("id", "enabled", "method", "siteId", "removed")
+    if any(attribute not in label.attrib for attribute in required_attributes) or list(
+        label
+    ):
+        raise DocumentFormatError("sensitivity label information part is invalid")
+    if _SENSITIVITY_LABEL_GUID.fullmatch(label.attrib["siteId"]) is None:
+        raise DocumentFormatError("sensitivity label information part is invalid")
+    _sensitivity_label_boolean(label.attrib["enabled"])
+    _sensitivity_label_boolean(label.attrib["removed"])
+    content_bits = label.attrib.get("contentBits")
+    if content_bits is not None:
+        try:
+            content_bits_value = int(content_bits)
+        except ValueError:
+            raise DocumentFormatError(
+                "sensitivity label information part is invalid"
+            ) from None
+        if content_bits_value < 0 or content_bits_value > 0xFFFFFFFF:
+            raise DocumentFormatError("sensitivity label information part is invalid")
+
+
+def _sensitivity_label_boolean(value: str) -> bool:
+    normalized = value.casefold()
+    if normalized in {"1", "true"}:
+        return True
+    if normalized in {"0", "false"}:
+        return False
+    raise DocumentFormatError("sensitivity label information part is invalid")
+
+
+def _custom_document_property_part_names(
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> list[str]:
+    part_names = {
+        part_name
+        for part_name, kind in _DOCUMENT_PROPERTY_FALLBACK_PARTS.items()
+        if kind == "custom" and part_name in members
+    }
+    for source_part, relationships in relationship_maps.items():
+        for relationship in relationships.values():
+            if (
+                _DOCUMENT_PROPERTY_RELATIONSHIP_TYPES.get(
+                    relationship.relationship_type.casefold()
+                )
+                != "custom"
+            ):
+                continue
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is not None:
+                part_names.add(target)
+    return sorted(part_names)
+
+
+def _sensitivity_label_custom_property_category(property_name: str) -> str | None:
+    if _LEGACY_MIP_LABEL_PROPERTY_NAME.fullmatch(property_name) is not None:
+        return "legacy_mip"
+    if property_name.casefold() == "sensitivity":
+        return "legacy_sensitivity"
+    if _WORD_SENSITIVITY_CONTENT_MARKING_PROPERTY_NAME.fullmatch(property_name):
+        return "word_content_marking"
+    return None
 
 
 def _mail_merge_inventory(

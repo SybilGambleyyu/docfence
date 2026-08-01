@@ -428,6 +428,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.sensitivity_labels.signature != after.sensitivity_labels.signature:
+        changes.append(
+            Change(
+                kind="sensitivity_label_inventory_changed",
+                message="Stored Office sensitivity-label metadata inventory changed.",
+                details={
+                    "before": before.sensitivity_labels.public_dict(),
+                    "after": after.sensitivity_labels.public_dict(),
+                },
+            )
+        )
     if before.mail_merge.signature != after.mail_merge.signature:
         changes.append(
             Change(
