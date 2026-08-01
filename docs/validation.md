@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.12 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.13 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -9,7 +9,8 @@ following properties:
 - revision markup, comments, modern comment contact/thread/identifier/reaction
   metadata, document tasks, task-pane Office web-extension configuration,
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
-  OPC package digital-signature origin/XML-signature/certificate material, and
+  OPC package digital-signature origin/XML-signature/certificate material,
+  Word `w:documentProtection`/`w:writeProtection` state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -69,6 +70,12 @@ following properties:
   JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
   SignedInfo shape, unavailable/external/non-root/duplicate origin
   relationships, and unavailable/external signature and certificate targets;
+- Word editing/write-protection state is separately inventoried from generic
+  Settings-part changes. Tests cover conventional, Transitional, and Strict
+  Settings discovery; aggregate editing/write/recommendation/password-material
+  counts; same-count hash/verifier rewrites; JSON/Markdown/SARIF redaction;
+  policy findings; duplicate leaves; malformed roots/leaves; unsupported
+  attributes; invalid edit/boolean values; and external Settings relationships;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -89,6 +96,8 @@ following properties:
   extension payloads, legacy MIP custom attributes, and content-marking values,
   package-signature signer/certificate material, values, algorithms, reference
   URIs, signing times, comments, provider data, relationship IDs, and paths,
+  Word protection hashes, salts, verifier values, cryptographic provider and
+  algorithm fields, and Settings-part paths,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -105,7 +114,10 @@ following properties:
   attributes, tenant-site IDs, unavailable/external/non-root classification
   relationships, and multiple LabelInfo parts are rejected before reporting.
   Malformed recognized package-signature XMLDSIG shape and origin/signature/
-  certificate relationship topology are rejected before reporting.
+  certificate relationship topology are rejected before reporting. Malformed
+  recognized Word protection element structure, attributes, edit values,
+  booleans, duplicate leaves, and external Settings relationships are rejected
+  before reporting.
 
 The release check is:
 
@@ -153,6 +165,15 @@ the standard origin, XML-signature, and origin-relationship topology and the
 aggregate count projection without treating that fixture's signature as trusted.
 It is a compatibility smoke test, not a runtime dependency.
 
+For the Word-protection boundary, the release check profiles two independent
+Wordprocessing protection assets from Microsoft's open-source
+[Open XML SDK](https://github.com/dotnet/Open-XML-SDK/tree/main/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/protected).
+The write-protected asset reports one write-protection element and one
+read-only recommendation; the partially protected asset reports one
+document-protection element with explicit enforcement and formatting
+restriction. Neither carries counted password-material attributes. These are
+compatibility smoke tests, not runtime dependencies.
+
 ## What this does not validate
 
 The suite does not claim layout equivalence, Word calculation behavior,
@@ -169,6 +190,8 @@ not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
 digital signature or digest, validate certificates or trust chains, check
 revocation or timestamps, establish signer identity, determine coverage, or
-make an Office trust decision. Those limits are explicit in the 0.12 contract;
-see the
+make an Office trust decision. It does not validate Word password-verifier
+construction or strength, recover or test a password, bypass a Word
+restriction, infer effective enforcement, or treat Word protection as
+encryption/security. Those limits are explicit in the 0.13 contract; see the
 [threat model](threat-model.md).

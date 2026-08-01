@@ -453,6 +453,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.word_protection.signature != after.word_protection.signature:
+        changes.append(
+            Change(
+                kind="word_protection_inventory_changed",
+                message="Stored Word editing and write-protection inventory changed.",
+                details={
+                    "before": before.word_protection.public_dict(),
+                    "after": after.word_protection.public_dict(),
+                },
+            )
+        )
     if before.mail_merge.signature != after.mail_merge.signature:
         changes.append(
             Change(

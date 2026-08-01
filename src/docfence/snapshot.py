@@ -39,6 +39,7 @@ from docfence.models import (
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
+    WordProtectionInventory,
 )
 
 
@@ -218,6 +219,41 @@ _XMLDSIG_NAMESPACE: Final = "http://www.w3.org/2000/09/xmldsig#"
 _OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
     "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
+_DOCUMENT_PROTECTION_EDIT_VALUES: Final = frozenset(
+    {"none", "readOnly", "comments", "trackedChanges", "forms"}
+)
+_WORD_PROTECTION_COMMON_ATTRIBUTE_NAMES: Final = frozenset(
+    {
+        "cryptProviderType",
+        "cryptAlgorithmClass",
+        "cryptAlgorithmType",
+        "cryptAlgorithmSid",
+        "cryptSpinCount",
+        "cryptProvider",
+        "algIdExt",
+        "algIdExtSource",
+        "cryptProviderTypeExt",
+        "cryptProviderTypeExtSource",
+        "hash",
+        "salt",
+        "algorithmName",
+        "hashValue",
+        "saltValue",
+        "spinCount",
+    }
+)
+_DOCUMENT_PROTECTION_ATTRIBUTE_NAMES: Final = (
+    _WORD_PROTECTION_COMMON_ATTRIBUTE_NAMES
+    | frozenset({"edit", "formatting", "enforcement"})
+)
+_WRITE_PROTECTION_ATTRIBUTE_NAMES: Final = (
+    _WORD_PROTECTION_COMMON_ATTRIBUTE_NAMES | frozenset({"recommended"})
+)
+_WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES: Final = frozenset(
+    {"hash", "salt", "hashValue", "saltValue"}
+)
+_WORD_PROTECTION_TRUE_VALUES: Final = frozenset({"1", "true", "on"})
+_WORD_PROTECTION_FALSE_VALUES: Final = frozenset({"0", "false", "off"})
 _SENSITIVITY_LABEL_GUID: Final = re.compile(
     r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
     r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$"
@@ -579,6 +615,18 @@ def _load_package(
             ) = _package_digital_signature_inventory(
                 archive, members, content_types, relationship_maps, limits
             )
+            (
+                settings_enabled,
+                settings_signature,
+                document_settings_parts,
+            ) = _settings_inventory(archive, members, relationship_maps, limits)
+            word_protection = _word_protection_inventory(
+                archive,
+                members,
+                relationship_maps,
+                document_settings_parts,
+                limits,
+            )
             mail_merge, mail_merge_parts = _mail_merge_inventory(
                 archive, members, relationship_maps, limits
             )
@@ -635,9 +683,6 @@ def _load_package(
                 relationship_maps,
                 limits,
             )
-            settings_enabled, settings_signature = _settings_inventory(
-                archive, members, relationship_maps, limits
-            )
             custom_count, custom_signature = _custom_xml_inventory(
                 archive, members, limits
             )
@@ -652,6 +697,7 @@ def _load_package(
                     | document_property_parts
                     | sensitivity_label_parts
                     | package_digital_signature_parts
+                    | document_settings_parts
                     | mail_merge_parts
                     | modern_comment_metadata_parts
                     | document_task_parts
@@ -684,6 +730,7 @@ def _load_package(
         document_properties=document_properties,
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
+        word_protection=word_protection,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
         external_fields=external_fields,
@@ -3507,22 +3554,213 @@ def _settings_inventory(
     members: dict[str, zipfile.ZipInfo],
     relationship_maps: dict[str, dict[str, _Relationship]],
     limits: PackageLimits,
-) -> tuple[bool, str]:
-    settings_member = members.get("word/settings.xml")
-    if settings_member is None:
-        return False, _digest_bytes(b"settings-absent")
-    root = _read_xml(archive, settings_member, limits)
-    if not _is_word_element(root, "settings"):
-        raise DocumentFormatError("document settings are invalid")
-    enabled = any(
-        _is_word_element(element, "trackRevisions") and _is_enabled(element)
-        for element in root.iter()
-    )
-    return (
-        enabled,
-        _fingerprint_element(
-            root, relationship_maps.get("word/settings.xml", {}), ignore_rsids=True
+) -> tuple[bool, str, frozenset[str]]:
+    """Fingerprint every discovered document Settings part."""
+
+    settings_part_names = _linked_document_settings_parts(members, relationship_maps)
+    if not settings_part_names:
+        return False, _digest_bytes(b"settings-absent"), frozenset()
+
+    enabled = False
+    records: list[tuple[str, str, str]] = []
+    for settings_part in settings_part_names:
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        if any(
+            _is_word_element(element, "trackRevisions") and _is_enabled(element)
+            for element in root.iter()
+        ):
+            enabled = True
+        records.append(
+            (
+                "settings",
+                settings_part,
+                _fingerprint_element(
+                    root,
+                    relationship_maps.get(settings_part, {}),
+                    ignore_rsids=True,
+                ),
+            )
+        )
+    return enabled, _digest_records(records), frozenset(settings_part_names)
+
+
+def _word_protection_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> WordProtectionInventory:
+    """Inventory stored Word editing/write protection without exposing verifiers.
+
+    The protection elements are direct children of a document Settings part.
+    Their opaque password-verifier and cryptographic fields are retained only
+    inside the private element fingerprint. This inventory deliberately does
+    not validate password construction, strength, or effective application
+    enforcement.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    document_protection_count = 0
+    document_protection_enforcement_enabled_count = 0
+    document_protection_formatting_restricted_count = 0
+    document_protection_read_only_count = 0
+    document_protection_comments_count = 0
+    document_protection_tracked_changes_count = 0
+    document_protection_forms_count = 0
+    document_protection_password_material_count = 0
+    write_protection_count = 0
+    write_protection_recommended_count = 0
+    write_protection_password_material_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        document_protections = [
+            element
+            for element in root
+            if _is_word_element(element, "documentProtection")
+        ]
+        write_protections = [
+            element for element in root if _is_word_element(element, "writeProtection")
+        ]
+        if len(document_protections) > 1 or len(write_protections) > 1:
+            raise DocumentFormatError("Word protection state is invalid")
+
+        relationships = relationship_maps.get(settings_part, {})
+        for element in document_protections:
+            attributes = _validate_word_protection_element(
+                element,
+                "documentProtection",
+                _DOCUMENT_PROTECTION_ATTRIBUTE_NAMES,
+            )
+            document_protection_count += 1
+            if _word_protection_attribute_enabled(attributes, "enforcement"):
+                document_protection_enforcement_enabled_count += 1
+            if _word_protection_attribute_enabled(attributes, "formatting"):
+                document_protection_formatting_restricted_count += 1
+            edit_mode = attributes.get("edit")
+            if edit_mode == "readOnly":
+                document_protection_read_only_count += 1
+            elif edit_mode == "comments":
+                document_protection_comments_count += 1
+            elif edit_mode == "trackedChanges":
+                document_protection_tracked_changes_count += 1
+            elif edit_mode == "forms":
+                document_protection_forms_count += 1
+            if (
+                _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES
+                & attributes.keys()
+            ):
+                document_protection_password_material_count += 1
+            records.append(
+                (
+                    "document_protection",
+                    settings_part,
+                    _fingerprint_element(element, relationships),
+                )
+            )
+
+        for element in write_protections:
+            attributes = _validate_word_protection_element(
+                element,
+                "writeProtection",
+                _WRITE_PROTECTION_ATTRIBUTE_NAMES,
+            )
+            write_protection_count += 1
+            if _word_protection_attribute_enabled(attributes, "recommended"):
+                write_protection_recommended_count += 1
+            if (
+                _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES
+                & attributes.keys()
+            ):
+                write_protection_password_material_count += 1
+            records.append(
+                (
+                    "write_protection",
+                    settings_part,
+                    _fingerprint_element(element, relationships),
+                )
+            )
+
+    return WordProtectionInventory(
+        document_protection_count=document_protection_count,
+        document_protection_enforcement_enabled_count=(
+            document_protection_enforcement_enabled_count
         ),
+        document_protection_formatting_restricted_count=(
+            document_protection_formatting_restricted_count
+        ),
+        document_protection_read_only_count=document_protection_read_only_count,
+        document_protection_comments_count=document_protection_comments_count,
+        document_protection_tracked_changes_count=(
+            document_protection_tracked_changes_count
+        ),
+        document_protection_forms_count=document_protection_forms_count,
+        document_protection_password_material_count=(
+            document_protection_password_material_count
+        ),
+        write_protection_count=write_protection_count,
+        write_protection_recommended_count=write_protection_recommended_count,
+        write_protection_password_material_count=(
+            write_protection_password_material_count
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _validate_word_protection_element(
+    element: ET.Element,
+    expected_local_name: str,
+    allowed_attribute_names: frozenset[str],
+) -> dict[str, str]:
+    if (
+        not _is_word_element(element, expected_local_name)
+        or list(element)
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("Word protection state is invalid")
+
+    attributes: dict[str, str] = {}
+    for attribute, value in element.attrib.items():
+        namespace, local_name = _qualified_name(attribute)
+        if (
+            namespace not in _WORD_NAMESPACES
+            or local_name not in allowed_attribute_names
+            or local_name in attributes
+        ):
+            raise DocumentFormatError("Word protection state is invalid")
+        attributes[local_name] = value
+
+    if expected_local_name == "documentProtection":
+        edit_mode = attributes.get("edit")
+        if (
+            edit_mode is not None
+            and edit_mode not in _DOCUMENT_PROTECTION_EDIT_VALUES
+        ):
+            raise DocumentFormatError("Word protection state is invalid")
+        boolean_attributes = ("formatting", "enforcement")
+    else:
+        boolean_attributes = ("recommended",)
+    for attribute_name in boolean_attributes:
+        value = attributes.get(attribute_name)
+        if value is not None and value.strip().casefold() not in (
+            _WORD_PROTECTION_TRUE_VALUES | _WORD_PROTECTION_FALSE_VALUES
+        ):
+            raise DocumentFormatError("Word protection state is invalid")
+    return attributes
+
+
+def _word_protection_attribute_enabled(
+    attributes: dict[str, str], attribute_name: str
+) -> bool:
+    value = attributes.get(attribute_name)
+    return (
+        value is not None
+        and value.strip().casefold() in _WORD_PROTECTION_TRUE_VALUES
     )
 
 

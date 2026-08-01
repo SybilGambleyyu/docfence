@@ -60,6 +60,8 @@ starter policy.
 | `no_sensitivity_label_metadata_changes` | `DFP036` | Office sensitivity-label metadata inventory differs | Comparison |
 | `require_no_package_digital_signatures` | `DFP037` | Candidate has stored OPC package digital-signature material | Candidate |
 | `no_package_digital_signature_changes` | `DFP038` | OPC package digital-signature inventory differs | Comparison |
+| `require_no_word_protection` | `DFP039` | Candidate has stored Word editing or write-protection state | Candidate |
+| `no_word_protection_changes` | `DFP040` | Word editing/write-protection inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -98,6 +100,8 @@ controlled template that intentionally retains an approved Office sensitivity
 label or its related legacy metadata.
 `no_package_digital_signature_changes` provides the controlled-baseline gate for
 a template that intentionally retains approved OPC package-signature material.
+`no_word_protection_changes` provides the equivalent gate when an approved
+template intentionally retains Word editing/write-protection state.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -409,6 +413,48 @@ Neither rule verifies a cryptographic signature or digest, validates a
 certificate or chain, checks revocation or a timestamp, establishes signer
 identity, determines what content is covered, assesses an Office client, or
 decides whether a signature should be trusted.
+
+## Word editing and write-protection scope
+
+Word can retain two related but independent settings: direct
+`w:documentProtection` editing restrictions and `w:writeProtection` state. The
+former can restrict editing to read-only, comments, tracked changes, or forms
+and can include an enforcement/formatting setting; the latter can represent a
+read-only recommendation or stored write-protection material. Neither is file
+encryption or a general security verdict.
+
+DocFence discovers document Settings parts through the conventional
+`word/settings.xml` fallback and Transitional or Strict `settings` relationships
+from the main or glossary document. The generic settings signature covers every
+discovered part. The protection inventory recognizes direct Word-namespace
+`documentProtection` and `writeProtection` leaves in those parts, allows at most
+one of each per part, and rejects recognized elements with children, nonblank
+text, unknown/non-Word attributes, duplicate attributes, invalid edit values,
+or invalid boolean values.
+
+Public output reports only aggregate document-protection element,
+explicitly-enabled enforcement, formatting-restriction, read-only, comments,
+tracked-changes, forms, document password-material, write-protection,
+read-only-recommendation, and write password-material counts. A
+password-material count means one recognized element stores at least one
+`hash`, `salt`, `hashValue`, or `saltValue` attribute; it does not mean that
+DocFence judged a verifier complete, valid, or strong. The enforcement-enabled
+count similarly means only that the stored attribute is explicitly true—not
+that a particular Word client will enforce it.
+
+Hashes, salts, verifier values, provider and algorithm fields, all other
+protection attributes, part paths, and fingerprints are never emitted. The
+full recognized direct elements are privately fingerprinted, so a same-count
+verifier or configuration rewrite remains visible. `require_no_word_protection`
+fails whenever any protection element is present, including an otherwise empty
+recognized element. Use it for a handoff that must carry no stored Word
+editing/write-protection state. `no_word_protection_changes` protects an
+approved baseline instead.
+
+These rules do not validate password construction, derive or recover a
+password, estimate password or algorithm strength, bypass a restriction,
+determine the effective settings after Word/compatibility behavior, decrypt a
+file, or decide whether the stored protection is a security control.
 
 ## External Word document dependency scope
 

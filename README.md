@@ -9,6 +9,7 @@ style/default declarations, field codes, external-source field instructions,
 external relationships, custom XML, macros, core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
+Word editing/write-protection state and password-verifier material,
 data-bound
 content controls and their referenced custom XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
@@ -29,6 +30,8 @@ action IDs, extension data, custom MIP attributes, and content-marking strings
 are private too.
 Package signer/certificate material, signing times and comments, signature
 values, signed-reference targets, and signature-part paths are private too.
+Word protection hashes, salts, verifier values, cryptographic provider and
+algorithm fields, and Settings-part paths are private too.
 
 ```bash
 python -m pip install docfence
@@ -57,7 +60,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.12 focuses on Office Open XML Word documents and templates and
+Version 0.13 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -69,7 +72,7 @@ deliberately keeps a small, inspectable contract:
   field-code, external-source field, content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, sensitivity-label metadata, OPC
-  package digital-signature material,
+  package digital-signature material, Word editing/write-protection state,
   mail-merge, content-control
   data-binding, modern-comment metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -162,6 +165,27 @@ certificate mutation remains review-visible. This is deliberately not a
 cryptographic verifier: DocFence does not validate a signature value,
 certificate chain, revocation or timestamp, signer identity, signing policy,
 what a signature covers, or whether a consumer should trust it.
+
+Word editing and write-protection state has its own inventory because a generic
+Settings-part fingerprint cannot tell a reviewer whether a document retained an
+editing restriction, a read-only recommendation, or password-verifier material.
+DocFence discovers document Settings parts through Word's conventional
+`word/settings.xml` fallback and recognized Transitional or Strict settings
+relationships from the main or glossary document. It recognizes direct
+`w:documentProtection` and `w:writeProtection` leaves, permits at most one of
+each per Settings part, and rejects malformed recognized element shape,
+attributes, edit modes, or boolean values.
+
+Reports expose only aggregate protection-element, explicitly-enabled
+enforcement, formatting-restriction, edit-mode, read-only-recommendation, and
+password-material counts. Password hashes, salts, verifier values, provider and
+algorithm fields, all other attributes, paths, and fingerprints remain private.
+The full direct protection elements are privately fingerprinted, so a
+same-count verifier rewrite remains review-visible. This is stored package
+state—not encryption or an assurance that Word will enforce a restriction.
+DocFence does not validate password construction or strength, try or recover a
+password, determine effective enforcement, bypass a restriction, or make a
+security claim about either protection feature.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -286,6 +310,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_taskpane_web_extensions: true
   require_no_sensitivity_label_metadata: true
   require_no_package_digital_signatures: true
+  require_no_word_protection: true
   require_no_external_document_dependencies: true
 ```
 
@@ -305,6 +330,7 @@ later mutation:
   no_taskpane_web_extension_changes: true
   no_sensitivity_label_metadata_changes: true
   no_package_digital_signature_changes: true
+  no_word_protection_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -336,6 +362,8 @@ marking values remain private as well.
 Package-signature signer and certificate material, signature values, reference
 URIs, signing times, comments, provider data, relationship IDs, and part paths
 remain private as well.
+Word protection hashes, salts, verifier values, cryptographic provider and
+algorithm fields, and Settings-part paths remain private as well.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -429,6 +457,13 @@ Microsoft explicitly leaves signer identity and trust decisions to the package
 consumer; DocFence therefore inventories structure without claiming signature
 validity. Independent [OOXML-signature security research](https://www.usenix.org/conference/usenixsecurity23/presentation/rohlmann)
 is further reason to keep that distinction explicit.
+The Word-protection boundary follows the Open XML SDK's
+[`w:documentProtection` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.documentprotection?view=openxml-3.0.1)
+and [`w:writeProtection` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.writeprotection?view=openxml-3.0.1).
+Both make the critical boundary explicit: editing/write protection is not
+encryption or a security verdict. Microsoft also documents stored
+[password-verifier salt](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.writeprotection.salt?view=openxml-3.0.1)
+behavior, which is why DocFence keeps those fields out of reports.
 
 ## Development
 

@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.13.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for stored Word
+  `documentProtection` editing restrictions and `writeProtection` state.
+- Added `DFP039` to require a handoff with no stored Word protection state and
+  `DFP040` to protect an approved protection-state baseline.
+- Reports now expose only aggregate protection-element, explicitly-enabled
+  enforcement, formatting-restriction, edit-mode, read-only-recommendation, and
+  password-material counts. Hashes, salts, verifier values, provider and
+  algorithm fields, Settings-part paths, and fingerprints remain private.
+- Discovers document Settings through the conventional path and Transitional or
+  Strict relationships from main/glossary documents. It validates direct
+  protection-element shape, known attributes, edit modes, and booleans; duplicate
+  or malformed recognized protection state fails closed.
+- Privately detects same-count password-material changes without validating a
+  password, estimating its strength, bypassing protection, inferring effective
+  enforcement, or claiming document encryption/security. Added regression
+  coverage for privacy redaction, policy/SARIF output, malformed markup, and
+  public Open XML SDK protection-fixture compatibility smokes.
+
 ## 0.12.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for OPC package digital-signature

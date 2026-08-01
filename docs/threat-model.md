@@ -32,6 +32,8 @@ and LabelInfo part paths are sensitive package material too.
 Package-signature signer and certificate material, signature values, algorithm
 identifiers, reference URIs, signing times, comments, provider data,
 relationship IDs, and signature-part paths are sensitive package material too.
+Word protection hashes, salts, verifier values, cryptographic provider and
+algorithm fields, and Settings-part paths are sensitive package material too.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -115,6 +117,19 @@ times, comments, provider data, relationship IDs, paths, or digests. A
 same-count signature or certificate rewrite is therefore visible without
 copying signature material into a report.
 
+Word editing/write-protection state receives the same dedicated treatment.
+DocFence discovers document Settings parts through Word's conventional
+`word/settings.xml` path and Transitional or Strict settings relationships from
+main or glossary documents, then privately fingerprints each discovered
+Settings root. It inventories direct `w:documentProtection` and
+`w:writeProtection` leaves only after validating their bounded structure,
+known Word attributes, edit values, and boolean values. Public output is
+aggregate-only; verifier fields, provider/algorithm data, paths, and
+fingerprints remain private. A same-count verifier rewrite is therefore
+review-visible without putting password-verifier material in a CI artifact.
+This treats all cryptographic-looking fields as opaque package data: DocFence
+does not decode, interpret, or emit them as password verifiers.
+
 Mail-merge configuration and recipient-data parts use the same private-digest
 approach. Recognized data and header sources must be external relationships;
 recognized recipient data must be an internal stored target. DocFence validates
@@ -181,12 +196,13 @@ relationships from discovered Web Settings parts. It checks their direct Word
 anchors and requires the standard relationship type and `External` target mode.
 Settings and Web Settings parts are discovered through conventional or Strict
 relationships from the main or glossary document; the conventional
-`word/settings.xml` Settings path is also retained for compatibility. A linked
-Web Settings part with frame dependency state is fingerprinted privately and
-removed from the generic opaque-payload inventory, so relationship-ID rewriting
-does not create report churn while a stored layout or source change remains
-visible. DocFence never resolves, retrieves, opens, authenticates to, imports,
-or renders a template, subdocument, or frame target.
+`word/settings.xml` Settings path is also retained for compatibility. Every
+discovered document Settings part is privately fingerprinted as settings state;
+a linked Web Settings part with frame dependency state is fingerprinted
+privately and removed from the generic opaque-payload inventory, so
+relationship-ID rewriting does not create report churn while a stored layout or
+source change remains visible. DocFence never resolves, retrieves, opens,
+authenticates to, imports, or renders a template, subdocument, or frame target.
 
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
@@ -251,6 +267,13 @@ or that an Office client will make a particular trust decision. DocFence does
 not verify XMLDSIG values or reference digests, build or validate certificate
 chains, check revocation or timestamps, establish signer identity, evaluate a
 signing policy, or calculate signature coverage.
+Word-protection counts are stored-state evidence, not a statement that a
+restriction is encrypted, difficult to circumvent, currently effective in a
+particular client, or appropriate for a document. DocFence does not validate
+password construction or verifier completeness, derive or recover passwords,
+estimate password/algorithm strength, bypass a restriction, resolve the
+standard-versus-Word behavior of omitted enforcement, or make a security
+decision from `w:documentProtection` or `w:writeProtection`.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

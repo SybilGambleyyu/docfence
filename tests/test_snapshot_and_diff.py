@@ -30,6 +30,9 @@ _OLE_OBJECT_RELATIONSHIP_TYPE = (
 _PACKAGE_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
 )
+_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+)
 _MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeSource"
 _MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeHeaderSource"
 _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeRecipientData"
@@ -2053,6 +2056,193 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
             load_snapshot(document)
 
 
+def test_word_protection_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    verifier_changed = tmp_path / "verifier-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_word_protection_document(
+        before,
+        include_document_protection=False,
+        include_write_protection=False,
+    )
+    _write_word_protection_document(
+        after,
+        document_provider="WORD_PROTECTION_PROVIDER_DO_NOT_LEAK",
+        document_algorithm_name="WORD_PROTECTION_ALGORITHM_DO_NOT_LEAK",
+    )
+    _write_word_protection_document(
+        verifier_changed,
+        document_hash="WORD_PROTECTION_HASH_CHANGED_DO_NOT_LEAK",
+        write_hash="WRITE_PROTECTION_HASH_CHANGED_DO_NOT_LEAK",
+    )
+
+    expected_inventory = {
+        "document_protection_count": 1,
+        "document_protection_enforcement_enabled_count": 1,
+        "document_protection_formatting_restricted_count": 1,
+        "document_protection_read_only_count": 1,
+        "document_protection_comments_count": 0,
+        "document_protection_tracked_changes_count": 0,
+        "document_protection_forms_count": 0,
+        "document_protection_password_material_count": 1,
+        "write_protection_count": 1,
+        "write_protection_recommended_count": 1,
+        "write_protection_password_material_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert after_snapshot.public_dict()["word_protection"] == expected_inventory
+    assert before_snapshot.public_dict()["word_protection"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "word_protection_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert {
+        change.kind for change in diff_documents(after, verifier_changed).changes
+    } == {"document_settings_changed", "word_protection_inventory_changed"}
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_protection: true
+  no_word_protection_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP039",
+        "DFP040",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, verifier_changed), policy
+        ).findings
+    } == {"DFP039", "DFP040"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_PROTECTION_INVENTORY_CHANGED",
+        "DFP039",
+        "DFP040",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "WORD_PROTECTION_HASH_DO_NOT_LEAK",
+        "WORD_PROTECTION_SALT_DO_NOT_LEAK",
+        "WORD_PROTECTION_HASH_VALUE_DO_NOT_LEAK",
+        "WORD_PROTECTION_SALT_VALUE_DO_NOT_LEAK",
+        "WORD_PROTECTION_PROVIDER_DO_NOT_LEAK",
+        "WORD_PROTECTION_ALGORITHM_DO_NOT_LEAK",
+        "WRITE_PROTECTION_HASH_DO_NOT_LEAK",
+        "WRITE_PROTECTION_SALT_DO_NOT_LEAK",
+        "WORD_PROTECTION_HASH_CHANGED_DO_NOT_LEAK",
+        "WRITE_PROTECTION_HASH_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_word_protection_discovery_and_invalid_markup(tmp_path) -> None:
+    noncanonical = tmp_path / "noncanonical.docx"
+    strict_relationship = tmp_path / "strict-relationship.docx"
+    glossary_linked = tmp_path / "glossary-linked.docx"
+    duplicate_document_protection = tmp_path / "duplicate-document-protection.docx"
+    duplicate_write_protection = tmp_path / "duplicate-write-protection.docx"
+    invalid_edit = tmp_path / "invalid-edit.docx"
+    invalid_boolean = tmp_path / "invalid-boolean.docx"
+    unsupported_attribute = tmp_path / "unsupported-attribute.docx"
+    nonleaf = tmp_path / "nonleaf.docx"
+    invalid_settings_root = tmp_path / "invalid-settings-root.docx"
+    external_settings = tmp_path / "external-settings.docx"
+    _write_word_protection_document(
+        noncanonical,
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+    )
+    _write_word_protection_document(
+        strict_relationship,
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+        settings_relationship_type=_STRICT_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE,
+        settings_word_namespace=_STRICT_WORD_NAMESPACE,
+    )
+    _write_word_protection_document(
+        glossary_linked,
+        settings_part_name="word/glossary/private/settings.xml",
+        include_settings_relationship=True,
+        settings_relationship_source="word/glossary/document.xml",
+    )
+    _write_word_protection_document(
+        duplicate_document_protection,
+        duplicate_document_protection=True,
+    )
+    _write_word_protection_document(
+        duplicate_write_protection,
+        duplicate_write_protection=True,
+    )
+    _write_word_protection_document(invalid_edit, document_edit="unrestricted")
+    _write_word_protection_document(
+        invalid_boolean,
+        document_enforcement="probably",
+    )
+    _write_word_protection_document(
+        unsupported_attribute,
+        document_extra_attributes='w:futureProtection="1"',
+    )
+    _write_word_protection_document(
+        nonleaf,
+        document_extra_content="<w:unexpected/>",
+    )
+    _write_word_protection_document(
+        invalid_settings_root,
+        settings_root_name="notSettings",
+    )
+    _write_word_protection_document(
+        external_settings,
+        settings_part_name="word/private/settings.xml",
+        include_settings_relationship=True,
+        settings_target_mode="External",
+        include_settings_part=False,
+    )
+
+    for document in (noncanonical, strict_relationship, glossary_linked):
+        snapshot = load_snapshot(document)
+        assert snapshot.word_protection.document_protection_count == 1
+        assert snapshot.word_protection.write_protection_count == 1
+        assert snapshot.unclassified_part_count == 1
+
+    for document in (
+        duplicate_document_protection,
+        duplicate_write_protection,
+        invalid_edit,
+        invalid_boolean,
+        unsupported_attribute,
+        nonleaf,
+        invalid_settings_root,
+        external_settings,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
     template = tmp_path / "review-template.dotx"
     macro_template = tmp_path / "review-template.dotm"
@@ -3171,6 +3361,116 @@ def _write_package_digital_signature_document(
             )
         entries[relationship_part_name] = (
             f'<Relationships xmlns="{PR}">{"".join(relationships)}</Relationships>'
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_word_protection_document(
+    path,
+    *,
+    include_document_protection: bool = True,
+    include_write_protection: bool = True,
+    settings_part_name: str = "word/settings.xml",
+    include_settings_relationship: bool = False,
+    settings_relationship_type: str = _DOCUMENT_SETTINGS_RELATIONSHIP_TYPE,
+    settings_relationship_source: str = "word/document.xml",
+    settings_target_mode: str = "Internal",
+    include_settings_part: bool = True,
+    settings_root_name: str = "settings",
+    settings_word_namespace: str = W,
+    duplicate_document_protection: bool = False,
+    duplicate_write_protection: bool = False,
+    document_edit: str = "readOnly",
+    document_enforcement: str = "1",
+    document_formatting: str = "1",
+    document_hash: str = "WORD_PROTECTION_HASH_DO_NOT_LEAK",
+    document_salt: str = "WORD_PROTECTION_SALT_DO_NOT_LEAK",
+    document_hash_value: str = "WORD_PROTECTION_HASH_VALUE_DO_NOT_LEAK",
+    document_salt_value: str = "WORD_PROTECTION_SALT_VALUE_DO_NOT_LEAK",
+    document_provider: str = "rsaAES",
+    document_algorithm_name: str = "SHA-512",
+    document_extra_attributes: str = "",
+    document_extra_content: str = "",
+    write_recommended: str = "1",
+    write_hash: str = "WRITE_PROTECTION_HASH_DO_NOT_LEAK",
+    write_salt: str = "WRITE_PROTECTION_SALT_DO_NOT_LEAK",
+) -> None:
+    """Write a structural Word protection fixture with opaque verifier markers."""
+
+    document_protection = (
+        f'<w:documentProtection w:edit="{document_edit}" '
+        f'w:formatting="{document_formatting}" '
+        f'w:enforcement="{document_enforcement}" '
+        f'w:cryptProviderType="{document_provider}" '
+        'w:cryptAlgorithmClass="hash" '
+        'w:cryptAlgorithmType="typeAny" w:cryptAlgorithmSid="14" '
+        'w:cryptSpinCount="100000" '
+        f'w:hash="{document_hash}" w:salt="{document_salt}" '
+        f'w:algorithmName="{document_algorithm_name}" '
+        f'w:hashValue="{document_hash_value}" '
+        f'w:saltValue="{document_salt_value}" w:spinCount="100000" '
+        f"{document_extra_attributes}>{document_extra_content}</w:documentProtection>"
+    )
+    write_protection = (
+        f'<w:writeProtection w:recommended="{write_recommended}" '
+        f'w:hash="{write_hash}" w:salt="{write_salt}"/>'
+    )
+    settings_children = ""
+    if include_document_protection:
+        settings_children += document_protection
+        if duplicate_document_protection:
+            settings_children += document_protection
+    if include_write_protection:
+        settings_children += write_protection
+        if duplicate_write_protection:
+            settings_children += write_protection
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "VISIBLE_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_settings_part:
+        entries[settings_part_name] = (
+            f'<w:{settings_root_name} xmlns:w="{settings_word_namespace}">'
+            f"{settings_children}</w:{settings_root_name}>"
+        ).encode()
+    if settings_relationship_source == "word/glossary/document.xml":
+        entries[settings_relationship_source] = (
+            f'<w:glossaryDocument xmlns:w="{W}"><w:docParts/>'
+            "</w:glossaryDocument>"
+        ).encode()
+    if include_settings_relationship:
+        if settings_target_mode == "Internal":
+            target = posixpath.relpath(
+                settings_part_name,
+                start=settings_relationship_source.rpartition("/")[0],
+            )
+            target_mode_attribute = ""
+        else:
+            target = "https://example.invalid/WORD_SETTINGS_TARGET_DO_NOT_LEAK"
+            target_mode_attribute = f' TargetMode="{settings_target_mode}"'
+        source_directory, _, source_basename = settings_relationship_source.rpartition(
+            "/"
+        )
+        relationship_part_name = (
+            f"{source_directory}/_rels/{source_basename}.rels"
+        )
+        entries[relationship_part_name] = (
+            f'<Relationships xmlns="{PR}"><Relationship Id="rIdSettings1" '
+            f'Type="{settings_relationship_type}" Target="{target}"'
+            f"{target_mode_attribute}/></Relationships>"
         ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

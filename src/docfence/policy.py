@@ -50,6 +50,8 @@ _RULES: Final = {
     "no_sensitivity_label_metadata_changes": "DFP036",
     "require_no_package_digital_signatures": "DFP037",
     "no_package_digital_signature_changes": "DFP038",
+    "require_no_word_protection": "DFP039",
+    "no_word_protection_changes": "DFP040",
 }
 
 
@@ -264,6 +266,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_protection_changes") and (
+        before.word_protection.signature != after.word_protection.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_protection_changes",
+                "Stored Word editing and write-protection inventory changed.",
+                {
+                    "before": before.word_protection.public_dict(),
+                    "after": after.word_protection.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -472,6 +487,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_package_digital_signatures",
                 "Candidate contains stored OPC package digital-signature material.",
                 after.package_digital_signatures.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_protection") and any(
+        after.word_protection.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_protection",
+                "Candidate contains stored Word editing or write-protection state.",
+                after.word_protection.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

@@ -178,6 +178,55 @@ class PackageDigitalSignatureInventory:
 
 
 @dataclass(frozen=True)
+class WordProtectionInventory:
+    """Stored Word editing and write-protection evidence, aggregate only."""
+
+    document_protection_count: int
+    document_protection_enforcement_enabled_count: int
+    document_protection_formatting_restricted_count: int
+    document_protection_read_only_count: int
+    document_protection_comments_count: int
+    document_protection_tracked_changes_count: int
+    document_protection_forms_count: int
+    document_protection_password_material_count: int
+    write_protection_count: int
+    write_protection_recommended_count: int
+    write_protection_password_material_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "document_protection_count": self.document_protection_count,
+            "document_protection_enforcement_enabled_count": (
+                self.document_protection_enforcement_enabled_count
+            ),
+            "document_protection_formatting_restricted_count": (
+                self.document_protection_formatting_restricted_count
+            ),
+            "document_protection_read_only_count": (
+                self.document_protection_read_only_count
+            ),
+            "document_protection_comments_count": (
+                self.document_protection_comments_count
+            ),
+            "document_protection_tracked_changes_count": (
+                self.document_protection_tracked_changes_count
+            ),
+            "document_protection_forms_count": self.document_protection_forms_count,
+            "document_protection_password_material_count": (
+                self.document_protection_password_material_count
+            ),
+            "write_protection_count": self.write_protection_count,
+            "write_protection_recommended_count": (
+                self.write_protection_recommended_count
+            ),
+            "write_protection_password_material_count": (
+                self.write_protection_password_material_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class MailMergeInventory:
     """Stored mail-merge configuration and recipient-data evidence."""
 
@@ -466,6 +515,7 @@ class DocumentSnapshot:
     document_properties: DocumentPropertyInventory
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
+    word_protection: WordProtectionInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
@@ -555,6 +605,7 @@ class DocumentSnapshot:
             "package_digital_signatures": (
                 self.package_digital_signatures.public_dict()
             ),
+            "word_protection": self.word_protection.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
