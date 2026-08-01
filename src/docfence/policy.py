@@ -56,6 +56,8 @@ _RULES: Final = {
     "no_word_permission_range_changes": "DFP042",
     "require_no_word_document_variables": "DFP043",
     "no_word_document_variable_changes": "DFP044",
+    "require_no_word_document_variable_fields": "DFP045",
+    "no_word_document_variable_field_changes": "DFP046",
 }
 
 
@@ -311,6 +313,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_document_variable_field_changes") and (
+        before.word_document_variable_fields.signature
+        != after.word_document_variable_fields.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_document_variable_field_changes",
+                "Stored DOCVARIABLE field-reference inventory changed.",
+                {
+                    "before": before.word_document_variable_fields.public_dict(),
+                    "after": after.word_document_variable_fields.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -549,6 +565,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_document_variables",
                 "Candidate contains stored Word document-variable state.",
                 after.word_document_variables.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_document_variable_fields") and any(
+        after.word_document_variable_fields.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_document_variable_fields",
+                "Candidate contains stored DOCVARIABLE field references.",
+                after.word_document_variable_fields.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

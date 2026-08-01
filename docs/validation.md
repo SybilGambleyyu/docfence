@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.15 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.16 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -11,7 +11,8 @@ following properties:
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
-  Word Settings `w:docVars`/`w:docVar` state, and
+  Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
+  state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -84,6 +85,13 @@ following properties:
   findings; and malformed containers/leaves, attributes, required names/values,
   SDK length limits, nonblank text, duplicate containers, and external Settings
   relationships;
+- `DOCVARIABLE` field references are separately inventoried from generic field
+  counts and stored-variable state. Tests cover simple and complete complex
+  encodings, quoted names, trailing Word formatting switches, nested/dynamic
+  expressions, current/deleted revision variants, headers, Strict Word
+  namespaces, main-versus-glossary exact-literal association, unclosed/loose
+  instruction exclusion, same-count changes, JSON/Markdown/SARIF redaction,
+  and policy findings;
 - Word editable-range permission markup is separately inventoried across body,
   header, footer, note, comment, and glossary stories. Tests cover aggregate
   marker/pairing/individual-editor/predefined-group/table-column/custom-XML
@@ -113,7 +121,8 @@ following properties:
   URIs, signing times, comments, provider data, relationship IDs, and paths,
   Word protection hashes, salts, verifier values, cryptographic provider and
   algorithm fields, and Settings-part paths,
-  Word document-variable names, values, and Settings-part paths,
+  Word document-variable names, values, Settings-part paths, `DOCVARIABLE`
+  instructions, literal field arguments, and story paths,
   editable-range marker IDs, individual editor identities, exact table-column
   selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
@@ -180,6 +189,15 @@ fixtures. They exercise real complex and simple Word field encodings without
 creating a false external-source-field count. They are compatibility smoke
 tests, not runtime dependencies.
 
+For the document-variable-field boundary, the release check profiles
+LibreOffice's public [`tdf150542.docx` regression
+fixture](https://github.com/LibreOffice/core/blob/2553d132a7e95170568cb99920a7264fe5c8081d/sw/qa/extras/ooxmlexport/data/tdf150542.docx).
+It contains one stored `DOCVARIABLE` reference, a standard `w:docVars`
+container with three variables, and Word's common `\* MERGEFORMAT` field
+switch. DocFence reports one literal same-scope association without emitting
+the variable name or value. This is a compatibility smoke test, not a runtime
+dependency or a statement about field rendering.
+
 For the package-signature boundary, the release check profiles the signed DOCX
 fixture from the public [USENIX 2023 OOXML Signature Security
 artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). It confirms
@@ -218,6 +236,7 @@ restriction, infer effective enforcement, or treat Word protection as
 encryption/security. It does not authenticate a stored editable-range editor,
 resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
-a document-variable name, or infer whether a stored variable is used or
-visible. Those limits are explicit in the 0.15 contract; see the
+a document-variable name or template, or infer whether a stored variable is
+used or visible. Exact-literal same-scope association is stored-package evidence
+only, not field evaluation. Those limits are explicit in the 0.16 contract; see the
 [threat model](threat-model.md).

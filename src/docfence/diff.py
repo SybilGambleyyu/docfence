@@ -479,6 +479,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_document_variable_fields.signature
+        != after.word_document_variable_fields.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_document_variable_field_inventory_changed",
+                message="Stored DOCVARIABLE field-reference inventory changed.",
+                details={
+                    "before": before.word_document_variable_fields.public_dict(),
+                    "after": after.word_document_variable_fields.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

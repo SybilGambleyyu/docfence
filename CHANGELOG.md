@@ -2,6 +2,29 @@
 
 All notable changes are documented here.
 
+## 0.16.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for stored Word `DOCVARIABLE`
+  field references, separate from `w:docVars` / `w:docVar` storage.
+- Added `DFP045` to require a handoff with no stored `DOCVARIABLE` field
+  references and `DFP046` to protect an approved field-reference baseline.
+- Reports now expose only aggregate reference/story, literal/nonliteral, and
+  exact-literal same-scope stored-variable-association counts. Field
+  instructions, literal arguments, variable names/values, story paths,
+  Settings-part paths, and fingerprints remain private.
+- Recognizes direct simple-field instructions and complete complex pre-separator
+  instructions across supported stories, including separate current/deleted
+  revision variants. Loose instruction text and unclosed complex fields remain
+  outside the inventory.
+- Associates only a leading plain or wholly quoted literal argument, with
+  optional Word field switches, with an exact validated `w:docVar` in the same
+  main or glossary package document scope. Nested or compound expressions remain
+  nonliteral; an unmatched literal can still be supplied by an attached template.
+  The inventory never evaluates a field, resolves a template, or claims that
+  Word will display a value.
+- Added regression coverage for privacy redaction, policy/SARIF output, simple,
+  complex, nested, revision, header, Strict, and glossary-scope encodings.
+
 ## 0.15.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for stored Word document

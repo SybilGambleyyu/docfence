@@ -10,7 +10,7 @@ external relationships, custom XML, macros, core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
 Word editing/write-protection state, document-variable state, editable-range
-permission markup, and
+permission markup, document-variable field references, and
 password-verifier material,
 data-bound
 content controls and their referenced custom XML state, external document
@@ -35,6 +35,8 @@ values, signed-reference targets, and signature-part paths are private too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are private too.
 Word document-variable names, values, and Settings-part paths are private too.
+DOCVARIABLE field instructions, literal field arguments, and story-part paths
+are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -65,7 +67,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.15 focuses on Office Open XML Word documents and templates and
+Version 0.16 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -77,8 +79,8 @@ deliberately keeps a small, inspectable contract:
   field-code, external-source field, content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, sensitivity-label metadata, OPC
-  package digital-signature material, Word editing/write-protection and
-  document-variable state,
+  package digital-signature material, Word editing/write-protection,
+  document-variable state, and `DOCVARIABLE` field references,
   editable-range permission markup,
   mail-merge, content-control
   data-binding, modern-comment metadata,
@@ -228,8 +230,25 @@ fingerprinted, so a same-count name or value rewrite remains review-visible.
 
 `require_no_word_document_variables` fails for any recognized `w:docVars`
 container, including an empty one. `no_word_document_variable_changes` protects
-an approved baseline. DocFence does not evaluate `DOCVARIABLE` fields, run
-macros, resolve variable names, or claim that a stored variable is used,
+an approved baseline.
+
+`DOCVARIABLE` fields are independently inventoried from those stored values.
+DocFence recognizes complete simple `w:fldSimple` instructions and complete
+complex pre-separator field instructions across every supported story, retaining
+current and deleted revision variants as separate stored evidence. Public output
+contains only total/reference-story counts plus conservative literal/nonliteral
+and exact-literal association counts. A literal association means the leading
+field argument was a plain token or one complete quoted string (with optional
+trailing Word field switches) and exactly matches a discovered `w:docVar` in
+the same main or glossary package document scope. It does not mean Word will
+render a value: an unmatched literal can be provided by an attached template,
+and a nested or compound field expression is reported as nonliteral rather than
+interpreted.
+
+`require_no_word_document_variable_fields` fails for every stored
+`DOCVARIABLE` reference, while `no_word_document_variable_field_changes`
+protects an approved field-reference baseline. DocFence does not evaluate a
+field, run macros, resolve a template, or claim that a stored variable is used,
 visible, or safe.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
@@ -358,6 +377,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_word_protection: true
   require_no_word_permission_ranges: true
   require_no_word_document_variables: true
+  require_no_word_document_variable_fields: true
   require_no_external_document_dependencies: true
 ```
 
@@ -380,6 +400,7 @@ later mutation:
   no_word_protection_changes: true
   no_word_permission_range_changes: true
   no_word_document_variable_changes: true
+  no_word_document_variable_field_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -515,12 +536,20 @@ Both make the critical boundary explicit: editing/write protection is not
 encryption or a security verdict. Microsoft also documents stored
 [password-verifier salt](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.writeprotection.salt?view=openxml-3.0.1)
 behavior, which is why DocFence keeps those fields out of reports.
-The Word document-variable boundary follows the Open XML SDK's
+The Word document-variable and `DOCVARIABLE`-field boundary follows the Open XML SDK's
 [`w:docVar` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.documentvariable?view=openxml-3.0.1)
 and Word's [Variable object documentation](https://learn.microsoft.com/en-us/office/vba/api/word.variable):
 the values persist with a document or template and are normally invisible until
-a matching field is inserted. DocFence inventories that storage without
-emitting, resolving, or evaluating a variable name or value.
+a matching field is inserted. The OOXML [`DOCVARIABLE` field
+definition](https://c-rex.net/samples/ooxml/e1/Part4/OOXML_P4_DOCX_DOCVARIABLEDOCVARIAB_topic_ID0EIEE1.html)
+describes its field argument as the designated document variable. DocFence
+therefore inventories the stored field code and only a conservative exact
+literal association with discovered same-scope storage; it never emits,
+resolves, or evaluates a variable name or value. Word's
+[field-formatting guidance](https://support.microsoft.com/en-gb/office/format-field-results-baa61f5a-5636-4f11-ab4f-6c36ae43508c)
+notes that `\* MERGEFORMAT` is inserted by default through the Field dialog;
+DocFence retains the leading literal association while keeping that switch and
+the whole field code private.
 The editable-range boundary follows the Open XML SDK's
 [`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
 and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),

@@ -39,6 +39,7 @@ from docfence.models import (
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
+    WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
@@ -547,6 +548,33 @@ class _ExternalFieldReference:
 
 
 @dataclass(frozen=True)
+class _FieldInstructionReference:
+    """One complete field instruction retained only during story traversal."""
+
+    story_part: str
+    instruction: str
+    contains_nested_instruction_field: bool
+
+
+@dataclass(frozen=True)
+class _DocumentVariableFieldReference:
+    """One private ``DOCVARIABLE`` instruction with optional literal name."""
+
+    story_part: str
+    document_scope: str
+    instruction_signature: str
+    literal_name: str | None
+
+
+@dataclass(frozen=True)
+class _StoredDocumentVariable:
+    """A validated stored variable, private until association is complete."""
+
+    document_scopes: frozenset[str]
+    name: str
+
+
+@dataclass(frozen=True)
 class _WebExtensionControlReference:
     """One private marker for a Word content control bound to an add-in."""
 
@@ -561,6 +589,7 @@ class _ComplexFieldState:
 
     simple_field_depth: int
     instruction_chunks: dict[str, list[str]]
+    nested_instruction_field_variants: set[str]
     accepts_instructions: bool = True
 
 
@@ -653,6 +682,7 @@ def _load_package(
                 settings_enabled,
                 settings_signature,
                 document_settings_parts,
+                document_settings_part_scopes,
             ) = _settings_inventory(archive, members, relationship_maps, limits)
             word_protection = _word_protection_inventory(
                 archive,
@@ -661,11 +691,15 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
-            word_document_variables = _word_document_variable_inventory(
+            (
+                word_document_variables,
+                stored_document_variables,
+            ) = _word_document_variable_inventory(
                 archive,
                 members,
                 relationship_maps,
                 document_settings_parts,
+                document_settings_part_scopes,
                 limits,
             )
             word_permission_ranges = _word_permission_range_inventory(
@@ -684,6 +718,7 @@ def _load_package(
                 comment_count,
                 data_binding_references,
                 external_field_references,
+                document_variable_field_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -696,6 +731,10 @@ def _load_package(
                 limits,
             )
             external_fields = _external_field_inventory(external_field_references)
+            word_document_variable_fields = _word_document_variable_field_inventory(
+                document_variable_field_references,
+                stored_document_variables,
+            )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
                     archive,
@@ -780,6 +819,7 @@ def _load_package(
         package_digital_signatures=package_digital_signatures,
         word_protection=word_protection,
         word_document_variables=word_document_variables,
+        word_document_variable_fields=word_document_variable_fields,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -2094,9 +2134,22 @@ def _linked_document_settings_parts(
 ) -> tuple[str, ...]:
     """Return discovered Settings parts, retaining Word's canonical fallback."""
 
-    part_names: set[str] = set()
+    return tuple(sorted(_document_settings_part_scopes(members, relationship_maps)))
+
+
+def _document_settings_part_scopes(
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> dict[str, frozenset[str]]:
+    """Map Settings parts to the main or glossary document that links them."""
+
+    source_parts_by_settings_part: dict[str, set[str]] = {}
+
+    def add(settings_part: str, source_part: str) -> None:
+        source_parts_by_settings_part.setdefault(settings_part, set()).add(source_part)
+
     if "word/settings.xml" in members:
-        part_names.add("word/settings.xml")
+        add("word/settings.xml", "word/document.xml")
     for source_part in _SETTINGS_SOURCE_PARTS:
         if source_part not in members:
             continue
@@ -2107,8 +2160,11 @@ def _linked_document_settings_parts(
             target = _internal_relationship_target(source_part, relationship, members)
             if target is None:
                 raise DocumentFormatError("document settings relationships are invalid")
-            part_names.add(target)
-    return tuple(sorted(part_names))
+            add(target, source_part)
+    return {
+        settings_part: frozenset(source_parts)
+        for settings_part, source_parts in source_parts_by_settings_part.items()
+    }
 
 
 def _linked_web_settings_parts(
@@ -3067,11 +3123,13 @@ def _story_snapshots(
     int,
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
+    tuple[_DocumentVariableFieldReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
     data_binding_references: list[_DataBindingReference] = []
     external_field_references: list[_ExternalFieldReference] = []
+    document_variable_field_references: list[_DocumentVariableFieldReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3080,10 +3138,14 @@ def _story_snapshots(
             story,
             story_data_binding_references,
             story_external_field_references,
+            story_document_variable_field_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
         external_field_references.extend(story_external_field_references)
+        document_variable_field_references.extend(
+            story_document_variable_field_references
+        )
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3098,6 +3160,7 @@ def _story_snapshots(
         comment_count,
         tuple(data_binding_references),
         tuple(external_field_references),
+        tuple(document_variable_field_references),
         tuple(web_extension_control_references),
     )
 
@@ -3164,6 +3227,7 @@ def _snapshot_story(
     StorySnapshot,
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
+    tuple[_DocumentVariableFieldReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3238,6 +3302,7 @@ def _snapshot_story(
         move_to=move_to,
         property_changes=property_changes,
     )
+    field_instruction_references = _field_instruction_references(root, part_key)
     return (
         StorySnapshot(
             part_key=part_key,
@@ -3256,7 +3321,8 @@ def _snapshot_story(
             revisions=revisions,
         ),
         _data_binding_references(root, part_key, relationships),
-        _external_field_references(root, part_key),
+        _external_field_references(field_instruction_references),
+        _document_variable_field_references(field_instruction_references),
     )
 
 
@@ -3417,10 +3483,10 @@ def _web_extension_control_references(
     return tuple(references)
 
 
-def _external_field_references(
+def _field_instruction_references(
     root: ET.Element, story_part: str
-) -> tuple[_ExternalFieldReference, ...]:
-    """Collect external-source field instructions in both OOXML encodings.
+) -> tuple[_FieldInstructionReference, ...]:
+    """Collect complete Word field instructions in both OOXML encodings.
 
     A ``w:fldSimple`` stores its instruction directly in ``w:instr``. Complex
     fields use begin/separate/end characters and may split their instruction
@@ -3429,22 +3495,26 @@ def _external_field_references(
     two variants are assembled independently. Instruction text outside a
     complete complex field's instruction portion is ordinary text under
     ISO/IEC 29500, so it is intentionally ignored here.
+
+    Nested fields occurring before a parent complex field's separator make the
+    parent's assembled argument incomplete. The parent remains a complete
+    field instruction for family-level inventories, but the nested marker lets
+    literal argument consumers remain deliberately conservative.
     """
 
-    references: list[_ExternalFieldReference] = []
+    references: list[_FieldInstructionReference] = []
     complex_fields: list[_ComplexFieldState] = []
 
-    def add_instruction(instruction: str | None) -> None:
+    def add_instruction(
+        instruction: str | None, *, contains_nested_instruction_field: bool
+    ) -> None:
         if instruction is None:
             return
-        category = _external_field_category(instruction)
-        if category is None:
-            return
         references.append(
-            _ExternalFieldReference(
+            _FieldInstructionReference(
                 story_part=story_part,
-                category=category,
-                instruction_signature=_digest_bytes(instruction.encode("utf-8")),
+                instruction=instruction,
+                contains_nested_instruction_field=contains_nested_instruction_field,
             )
         )
 
@@ -3455,13 +3525,23 @@ def _external_field_references(
             if not instruction or instruction in seen_instructions:
                 continue
             seen_instructions.add(instruction)
-            add_instruction(instruction)
+            add_instruction(
+                instruction,
+                contains_nested_instruction_field=(
+                    variant in field.nested_instruction_field_variants
+                ),
+            )
 
     def append_instruction_text(
         field: _ComplexFieldState, text: str, variants: frozenset[str]
     ) -> None:
         for variant in variants:
             field.instruction_chunks[variant].append(text)
+
+    def mark_nested_instruction_field(variants: frozenset[str]) -> None:
+        for field in complex_fields:
+            if field.accepts_instructions:
+                field.nested_instruction_field_variants.update(variants)
 
     def visit(
         element: ET.Element,
@@ -3487,17 +3567,23 @@ def _external_field_references(
 
             if local_name == "fldSimple":
                 if instruction_variants:
-                    add_instruction(_word_attribute_value(element, "instr"))
+                    mark_nested_instruction_field(instruction_variants)
+                    add_instruction(
+                        _word_attribute_value(element, "instr"),
+                        contains_nested_instruction_field=False,
+                    )
                 child_simple_field_depth += 1
             elif local_name == "fldChar":
                 field_char_type = _field_char_type(element)
                 if field_char_type == "begin":
+                    mark_nested_instruction_field(instruction_variants)
                     complex_fields.append(
                         _ComplexFieldState(
                             simple_field_depth=simple_field_depth,
                             instruction_chunks={
                                 variant: [] for variant in _FIELD_INSTRUCTION_VARIANTS
                             },
+                            nested_instruction_field_variants=set(),
                         )
                     )
                 elif field_char_type == "separate" and complex_fields:
@@ -3538,13 +3624,117 @@ def _external_field_references(
     return tuple(references)
 
 
+def _external_field_references(
+    field_instruction_references: tuple[_FieldInstructionReference, ...],
+) -> tuple[_ExternalFieldReference, ...]:
+    """Select external-source field instructions from complete field codes."""
+
+    references: list[_ExternalFieldReference] = []
+    for reference in field_instruction_references:
+        category = _external_field_category(reference.instruction)
+        if category is None:
+            continue
+        references.append(
+            _ExternalFieldReference(
+                story_part=reference.story_part,
+                category=category,
+                instruction_signature=_digest_bytes(
+                    reference.instruction.encode("utf-8")
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _document_variable_field_references(
+    field_instruction_references: tuple[_FieldInstructionReference, ...],
+) -> tuple[_DocumentVariableFieldReference, ...]:
+    """Select ``DOCVARIABLE`` field codes without retaining names publicly."""
+
+    references: list[_DocumentVariableFieldReference] = []
+    for reference in field_instruction_references:
+        if _field_instruction_keyword(reference.instruction) != "docvariable":
+            continue
+        references.append(
+            _DocumentVariableFieldReference(
+                story_part=reference.story_part,
+                document_scope=_document_scope_for_story(reference.story_part),
+                instruction_signature=_digest_bytes(
+                    reference.instruction.encode("utf-8")
+                ),
+                literal_name=_document_variable_field_literal_name(
+                    reference.instruction,
+                    contains_nested_instruction_field=(
+                        reference.contains_nested_instruction_field
+                    ),
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _document_variable_field_literal_name(
+    instruction: str, *, contains_nested_instruction_field: bool
+) -> str | None:
+    """Return one conservative, complete literal ``DOCVARIABLE`` argument.
+
+    A plain argument with no whitespace, or one wholly enclosed by one pair of
+    double quotes, is accepted. Trailing Word field-switch material beginning
+    with ``\\`` does not change that leading argument. Escaped/nested or
+    otherwise compound field expressions deliberately remain nonliteral:
+    DocFence reports their stored presence without implementing Word's field
+    evaluator.
+    """
+
+    if contains_nested_instruction_field:
+        return None
+    tokens = instruction.lstrip().split(maxsplit=1)
+    if len(tokens) != 2:
+        return None
+    argument = tokens[1].strip()
+    if not argument:
+        return None
+    if not argument.startswith('"'):
+        argument_tokens = argument.split(maxsplit=1)
+        literal_name = argument_tokens[0]
+        suffix = argument_tokens[1] if len(argument_tokens) == 2 else ""
+        if (
+            literal_name.startswith("\\")
+            or '"' in literal_name
+            or (suffix and not suffix.startswith("\\"))
+        ):
+            return None
+        return literal_name
+
+    closing_quote = argument.find('"', 1)
+    suffix = argument[closing_quote + 1 :].strip() if closing_quote >= 0 else ""
+    if closing_quote < 0 or (suffix and not suffix.startswith("\\")):
+        return None
+    return argument[1:closing_quote]
+
+
+def _document_scope_for_story(story_part: str) -> str:
+    """Map a supported story to its main or glossary document scope."""
+
+    if story_part == "word/glossary/document.xml":
+        return story_part
+    return "word/document.xml"
+
+
 def _external_field_category(instruction: str) -> str | None:
     """Return the review category for a complete Word field instruction."""
 
+    keyword = _field_instruction_keyword(instruction)
+    if keyword is None:
+        return None
+    return _EXTERNAL_FIELD_CATEGORY_BY_KEYWORD.get(keyword)
+
+
+def _field_instruction_keyword(instruction: str) -> str | None:
     tokens = instruction.lstrip().split(maxsplit=1)
     if not tokens:
         return None
-    return _EXTERNAL_FIELD_CATEGORY_BY_KEYWORD.get(tokens[0].casefold())
+    return tokens[0].casefold()
 
 
 def _word_attribute_value(element: ET.Element, local_name: str) -> str | None:
@@ -3604,12 +3794,15 @@ def _settings_inventory(
     members: dict[str, zipfile.ZipInfo],
     relationship_maps: dict[str, dict[str, _Relationship]],
     limits: PackageLimits,
-) -> tuple[bool, str, frozenset[str]]:
+) -> tuple[bool, str, frozenset[str], dict[str, frozenset[str]]]:
     """Fingerprint every discovered document Settings part."""
 
-    settings_part_names = _linked_document_settings_parts(members, relationship_maps)
+    settings_part_scopes = _document_settings_part_scopes(
+        members, relationship_maps
+    )
+    settings_part_names = tuple(sorted(settings_part_scopes))
     if not settings_part_names:
-        return False, _digest_bytes(b"settings-absent"), frozenset()
+        return False, _digest_bytes(b"settings-absent"), frozenset(), {}
 
     enabled = False
     records: list[tuple[str, str, str]] = []
@@ -3633,7 +3826,12 @@ def _settings_inventory(
                 ),
             )
         )
-    return enabled, _digest_records(records), frozenset(settings_part_names)
+    return (
+        enabled,
+        _digest_records(records),
+        frozenset(settings_part_names),
+        settings_part_scopes,
+    )
 
 
 def _word_protection_inventory(
@@ -3819,8 +4017,9 @@ def _word_document_variable_inventory(
     members: dict[str, zipfile.ZipInfo],
     relationship_maps: dict[str, dict[str, _Relationship]],
     settings_part_names: frozenset[str],
+    settings_part_scopes: dict[str, frozenset[str]],
     limits: PackageLimits,
-) -> WordDocumentVariableInventory:
+) -> tuple[WordDocumentVariableInventory, tuple[_StoredDocumentVariable, ...]]:
     """Inventory persisted Word document variables without exposing contents.
 
     ``w:docVars`` is a direct child of a Word Settings part and stores arbitrary
@@ -3833,6 +4032,7 @@ def _word_document_variable_inventory(
     document_variable_container_count = 0
     document_variable_count = 0
     empty_document_variable_value_count = 0
+    stored_variables: list[_StoredDocumentVariable] = []
 
     for settings_part in sorted(settings_part_names):
         root = _read_xml(archive, members[settings_part], limits)
@@ -3846,12 +4046,19 @@ def _word_document_variable_inventory(
 
         relationships = relationship_maps.get(settings_part, {})
         for container in containers:
-            variable_count, empty_value_count = (
+            variable_count, empty_value_count, variable_names = (
                 _validate_word_document_variables_element(container)
             )
             document_variable_container_count += 1
             document_variable_count += variable_count
             empty_document_variable_value_count += empty_value_count
+            stored_variables.extend(
+                _StoredDocumentVariable(
+                    document_scopes=settings_part_scopes[settings_part],
+                    name=name,
+                )
+                for name in variable_names
+            )
             records.append(
                 (
                     "word_document_variables",
@@ -3860,15 +4067,82 @@ def _word_document_variable_inventory(
                 )
             )
 
-    return WordDocumentVariableInventory(
-        document_variable_container_count=document_variable_container_count,
-        document_variable_count=document_variable_count,
-        empty_document_variable_value_count=empty_document_variable_value_count,
+    return (
+        WordDocumentVariableInventory(
+            document_variable_container_count=document_variable_container_count,
+            document_variable_count=document_variable_count,
+            empty_document_variable_value_count=empty_document_variable_value_count,
+            signature=_digest_records(records),
+        ),
+        tuple(stored_variables),
+    )
+
+
+def _word_document_variable_field_inventory(
+    references: tuple[_DocumentVariableFieldReference, ...],
+    stored_variables: tuple[_StoredDocumentVariable, ...],
+) -> WordDocumentVariableFieldInventory:
+    """Inventory stored ``DOCVARIABLE`` fields without disclosing arguments.
+
+    The only association attempted is an exact, conservatively parsed literal
+    name against a validated ``w:docVar`` in the same main/glossary package
+    document scope. It is evidence about stored package state, not a Word
+    field evaluation or a statement about an attached template.
+    """
+
+    stored_names_by_scope: dict[str, set[str]] = {}
+    for variable in stored_variables:
+        for document_scope in variable.document_scopes:
+            stored_names_by_scope.setdefault(document_scope, set()).add(variable.name)
+
+    literal_reference_count = 0
+    matching_stored_variable_count = 0
+    not_matching_stored_variable_count = 0
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        if reference.literal_name is None:
+            classification = "nonliteral"
+        else:
+            literal_reference_count += 1
+            if reference.literal_name in stored_names_by_scope.get(
+                reference.document_scope, set()
+            ):
+                matching_stored_variable_count += 1
+                classification = "literal_matching_stored_variable"
+            else:
+                not_matching_stored_variable_count += 1
+                classification = "literal_not_matching_stored_variable"
+        records.append(
+            (
+                "word_document_variable_field",
+                reference.story_part,
+                reference.instruction_signature,
+                classification,
+            )
+        )
+
+    return WordDocumentVariableFieldInventory(
+        document_variable_field_reference_count=len(references),
+        document_variable_field_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        literal_document_variable_field_reference_count=literal_reference_count,
+        nonliteral_document_variable_field_reference_count=(
+            len(references) - literal_reference_count
+        ),
+        literal_document_variable_field_reference_matching_stored_variable_count=(
+            matching_stored_variable_count
+        ),
+        literal_document_variable_field_reference_not_matching_stored_variable_count=(
+            not_matching_stored_variable_count
+        ),
         signature=_digest_records(records),
     )
 
 
-def _validate_word_document_variables_element(element: ET.Element) -> tuple[int, int]:
+def _validate_word_document_variables_element(
+    element: ET.Element,
+) -> tuple[int, int, tuple[str, ...]]:
     """Validate Word's direct document-variable container and leaves."""
 
     if (
@@ -3880,14 +4154,16 @@ def _validate_word_document_variables_element(element: ET.Element) -> tuple[int,
 
     variable_count = 0
     empty_value_count = 0
+    variable_names: list[str] = []
     for child in element:
         attributes = _validate_word_document_variable_element(child)
         if (child.tail or "").strip():
             raise DocumentFormatError("Word document variables are invalid")
         variable_count += 1
+        variable_names.append(attributes["name"])
         if not attributes["val"]:
             empty_value_count += 1
-    return variable_count, empty_value_count
+    return variable_count, empty_value_count, tuple(variable_names)
 
 
 def _validate_word_document_variable_element(element: ET.Element) -> dict[str, str]:

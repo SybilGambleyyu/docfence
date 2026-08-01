@@ -253,6 +253,53 @@ class WordDocumentVariableInventory:
 
 
 @dataclass(frozen=True)
+class WordDocumentVariableFieldInventory:
+    """Stored ``DOCVARIABLE`` field references, aggregate only.
+
+    Field instructions and variable names can reveal automation or template
+    state.  They remain inside the private signature; public output reports
+    only reference counts and conservative exact-literal associations with a
+    discovered variable in the same package document scope.
+    """
+
+    document_variable_field_reference_count: int
+    document_variable_field_story_count: int
+    literal_document_variable_field_reference_count: int
+    nonliteral_document_variable_field_reference_count: int
+    literal_document_variable_field_reference_matching_stored_variable_count: int
+    literal_document_variable_field_reference_not_matching_stored_variable_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "document_variable_field_reference_count": (
+                self.document_variable_field_reference_count
+            ),
+            "document_variable_field_story_count": (
+                self.document_variable_field_story_count
+            ),
+            "literal_document_variable_field_reference_count": (
+                self.literal_document_variable_field_reference_count
+            ),
+            "nonliteral_document_variable_field_reference_count": (
+                self.nonliteral_document_variable_field_reference_count
+            ),
+            (
+                "literal_document_variable_field_reference_"
+                "matching_stored_variable_count"
+            ): (
+                self.literal_document_variable_field_reference_matching_stored_variable_count
+            ),
+            (
+                "literal_document_variable_field_reference_"
+                "not_matching_stored_variable_count"
+            ): (
+                self.literal_document_variable_field_reference_not_matching_stored_variable_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -599,6 +646,7 @@ class DocumentSnapshot:
     package_digital_signatures: PackageDigitalSignatureInventory
     word_protection: WordProtectionInventory
     word_document_variables: WordDocumentVariableInventory
+    word_document_variable_fields: WordDocumentVariableFieldInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -692,6 +740,9 @@ class DocumentSnapshot:
             "word_protection": self.word_protection.public_dict(),
             "word_document_variables": (
                 self.word_document_variables.public_dict()
+            ),
+            "word_document_variable_fields": (
+                self.word_document_variable_fields.public_dict()
             ),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),

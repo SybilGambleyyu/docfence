@@ -34,8 +34,8 @@ identifiers, reference URIs, signing times, comments, provider data,
 relationship IDs, and signature-part paths are sensitive package material too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are sensitive package material too.
-Word document-variable names, values, and Settings-part paths are sensitive
-package material too.
+Word document-variable names, values, Settings-part paths, and `DOCVARIABLE`
+field arguments are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -146,6 +146,18 @@ Settings part. Names, values, and paths remain private; public output is
 limited to container, variable, and empty-value counts. Full recognized
 containers are privately fingerprinted, so a same-count name or value rewrite
 remains review-visible without placing automation state into a CI artifact.
+
+Complete `DOCVARIABLE` field instructions receive a companion private-digest
+treatment. DocFence scans direct simple-field instructions and complete complex
+pre-separator instructions across supported stories, retaining current and
+deleted field-code variants separately. The raw instruction is reduced to a
+private hash. Public output contains only reference/story counts and a
+conservative literal/nonliteral classification. A literal name is associated
+only when a leading plain or wholly quoted argument (with optional trailing
+field-switch material) exactly matches a validated `w:docVar` from the same
+main or glossary package document scope. Nested or compound expressions remain
+nonliteral. This association is never output as a name, never crosses into an
+attached template, and is not an evaluation of a Word field.
 
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
@@ -305,11 +317,13 @@ password construction or verifier completeness, derive or recover passwords,
 estimate password/algorithm strength, bypass a restriction, resolve the
 standard-versus-Word behavior of omitted enforcement, or make a security
 decision from `w:documentProtection` or `w:writeProtection`.
-Word document-variable counts are likewise stored-state evidence, not proof
-that a macro will consume a value, a `DOCVARIABLE` field will resolve or render
-it, a template is attached, or an automation client will preserve the state.
-DocFence does not run macros, evaluate fields, resolve variable names, or
-interpret the content or purpose of a stored value.
+Word document-variable and `DOCVARIABLE` field-reference counts are likewise
+stored-state evidence, not proof that a macro will consume a value, a field
+will resolve or render it, a template is attached, or an automation client will
+preserve the state. A same-scope literal association is not variable resolution,
+and a missing association does not make a field broken. DocFence does not run
+macros, evaluate fields, resolve variable names or templates, or interpret the
+content or purpose of a stored value.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

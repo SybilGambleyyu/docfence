@@ -2355,6 +2355,288 @@ rules:
         assert marker not in rendered
 
 
+def test_word_document_variable_field_inventory_is_private_and_semantic(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    field_changed = tmp_path / "field-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    def simple_field(instruction: str) -> str:
+        escaped_instruction = (
+            instruction.replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "&lt;")
+        )
+        return (
+            f'<w:fldSimple w:instr="{escaped_instruction}">'
+            "<w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r></w:fldSimple>"
+        )
+
+    def instruction_text(text: str) -> str:
+        return (
+            '<w:r><w:instrText xml:space="preserve">'
+            f"{text}</w:instrText></w:r>"
+        )
+
+    def field_char(field_type: str) -> str:
+        return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
+
+    simple_instruction = "DOCVARIABLE SIMPLE_VARIABLE_NAME_DO_NOT_LEAK"
+    body_markup = "".join(
+        (
+            instruction_text("DOCVARIABLE LOOSE_FIELD_DO_NOT_LEAK"),
+            simple_field(simple_instruction),
+            field_char("begin"),
+            instruction_text(' DOCVARIABLE "SPACED '),
+            instruction_text('VARIABLE NAME DO NOT LEAK" '),
+            field_char("end"),
+            simple_field("DOCVARIABLE UNMATCHED_VARIABLE_NAME_DO_NOT_LEAK"),
+            simple_field(
+                "DOCVARIABLE COMPOUND_VARIABLE_NAME_DO_NOT_LEAK "
+                "UNPARSED_ARGUMENT_DO_NOT_LEAK"
+            ),
+            field_char("begin"),
+            instruction_text(" DOCVARIABLE NESTED_"),
+            field_char("begin"),
+            instruction_text(" MERGEFIELD INNER_DO_NOT_LEAK "),
+            field_char("end"),
+            instruction_text("VARIABLE_NAME_DO_NOT_LEAK "),
+            field_char("end"),
+            field_char("begin"),
+            instruction_text("DOCVARIABLE UNCLOSED_FIELD_DO_NOT_LEAK"),
+        )
+    )
+    header_markup = simple_field(
+        "DOCVARIABLE HEADER_VARIABLE_NAME_DO_NOT_LEAK \\* MERGEFORMAT"
+    )
+    settings_markup = "".join(
+        (
+            "<w:docVars>",
+            '<w:docVar w:name="SIMPLE_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="SIMPLE_VARIABLE_VALUE_DO_NOT_LEAK"/>',
+            '<w:docVar w:name="SPACED VARIABLE NAME DO NOT LEAK" '
+            'w:val="SPACED_VARIABLE_VALUE_DO_NOT_LEAK"/>',
+            '<w:docVar w:name="HEADER_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="HEADER_VARIABLE_VALUE_DO_NOT_LEAK"/>',
+            '<w:docVar w:name="NESTED_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="NESTED_VARIABLE_VALUE_DO_NOT_LEAK"/>',
+            "</w:docVars>",
+        )
+    )
+    _write_document_variable_field_document(before)
+    _write_document_variable_field_document(
+        after,
+        body_markup=body_markup,
+        header_markup=header_markup,
+        settings_markup=settings_markup,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+    )
+    _write_document_variable_field_document(
+        field_changed,
+        body_markup=body_markup.replace(
+            simple_instruction,
+            "DOCVARIABLE CHANGED_VARIABLE_NAME_DO_NOT_LEAK",
+        ),
+        header_markup=header_markup,
+        settings_markup=settings_markup,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+    )
+
+    expected_inventory = {
+        "document_variable_field_reference_count": 6,
+        "document_variable_field_story_count": 2,
+        "literal_document_variable_field_reference_count": 4,
+        "nonliteral_document_variable_field_reference_count": 2,
+        (
+            "literal_document_variable_field_reference_"
+            "matching_stored_variable_count"
+        ): 3,
+        (
+            "literal_document_variable_field_reference_"
+            "not_matching_stored_variable_count"
+        ): 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert (
+        after_snapshot.public_dict()["word_document_variable_fields"]
+        == expected_inventory
+    )
+    assert before_snapshot.public_dict()["word_document_variable_fields"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "word_document_variable_field_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_document_variable_field_inventory_changed" in {
+        change.kind for change in diff_documents(after, field_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_document_variables: true
+  no_word_document_variable_changes: true
+  require_no_word_document_variable_fields: true
+  no_word_document_variable_field_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP043",
+        "DFP044",
+        "DFP045",
+        "DFP046",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, field_changed), policy
+        ).findings
+    } == {"DFP043", "DFP045", "DFP046"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_DOCUMENT_VARIABLE_FIELD_INVENTORY_CHANGED",
+        "DFP043",
+        "DFP044",
+        "DFP045",
+        "DFP046",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "SIMPLE_VARIABLE_NAME_DO_NOT_LEAK",
+        "SIMPLE_VARIABLE_VALUE_DO_NOT_LEAK",
+        "SPACED VARIABLE NAME DO NOT LEAK",
+        "SPACED_VARIABLE_VALUE_DO_NOT_LEAK",
+        "HEADER_VARIABLE_NAME_DO_NOT_LEAK",
+        "HEADER_VARIABLE_VALUE_DO_NOT_LEAK",
+        "NESTED_VARIABLE_NAME_DO_NOT_LEAK",
+        "NESTED_VARIABLE_VALUE_DO_NOT_LEAK",
+        "UNMATCHED_VARIABLE_NAME_DO_NOT_LEAK",
+        "COMPOUND_VARIABLE_NAME_DO_NOT_LEAK",
+        "UNPARSED_ARGUMENT_DO_NOT_LEAK",
+        "LOOSE_FIELD_DO_NOT_LEAK",
+        "INNER_DO_NOT_LEAK",
+        "UNCLOSED_FIELD_DO_NOT_LEAK",
+        "CHANGED_VARIABLE_NAME_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_word_document_variable_fields_keep_revision_variants_and_document_scope(
+    tmp_path,
+) -> None:
+    document = tmp_path / "scoped-fields.docx"
+
+    def simple_field(instruction: str) -> str:
+        return (
+            f'<w:fldSimple w:instr="{instruction}">'
+            "<w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r></w:fldSimple>"
+        )
+
+    def instruction_text(text: str) -> str:
+        return f"<w:r><w:instrText>{text}</w:instrText></w:r>"
+
+    def field_char(field_type: str) -> str:
+        return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
+
+    def deleted_instruction_text(text: str) -> str:
+        return (
+            '<w:del w:id="1"><w:r><w:delInstrText>'
+            f"{text}</w:delInstrText></w:r></w:del>"
+        )
+
+    def inserted_instruction_text(text: str) -> str:
+        return (
+            '<w:ins w:id="2"><w:r><w:instrText>'
+            f"{text}</w:instrText></w:r></w:ins>"
+        )
+
+    body_markup = "".join(
+        (
+            simple_field("DOCVARIABLE MAIN_VARIABLE_NAME_DO_NOT_LEAK"),
+            field_char("begin"),
+            instruction_text(' DOCVARIABLE "'),
+            deleted_instruction_text("DELETED_VARIABLE_NAME_DO_NOT_LEAK"),
+            inserted_instruction_text("CURRENT_VARIABLE_NAME_DO_NOT_LEAK"),
+            instruction_text('" '),
+            field_char("end"),
+            instruction_text("DOCVARIABLE LOOSE_SCOPE_FIELD_DO_NOT_LEAK"),
+            field_char("begin"),
+            instruction_text("DOCVARIABLE UNCLOSED_SCOPE_FIELD_DO_NOT_LEAK"),
+        )
+    )
+    glossary_markup = "".join(
+        (
+            simple_field("DOCVARIABLE MAIN_VARIABLE_NAME_DO_NOT_LEAK"),
+            simple_field("DOCVARIABLE GLOSSARY_VARIABLE_NAME_DO_NOT_LEAK"),
+        )
+    )
+    _write_document_variable_field_document(
+        document,
+        body_markup=body_markup,
+        settings_markup=(
+            "<w:docVars>"
+            '<w:docVar w:name="MAIN_VARIABLE_NAME_DO_NOT_LEAK" w:val="main"/>'
+            '<w:docVar w:name="DELETED_VARIABLE_NAME_DO_NOT_LEAK" w:val="old"/>'
+            '<w:docVar w:name="CURRENT_VARIABLE_NAME_DO_NOT_LEAK" w:val="new"/>'
+            "</w:docVars>"
+        ),
+        glossary_markup=glossary_markup,
+        glossary_settings_markup=(
+            "<w:docVars>"
+            '<w:docVar w:name="GLOSSARY_VARIABLE_NAME_DO_NOT_LEAK" '
+            'w:val="glossary"/>'
+            "</w:docVars>"
+        ),
+    )
+
+    snapshot = load_snapshot(document)
+    assert snapshot.public_dict()["word_document_variable_fields"] == {
+        "document_variable_field_reference_count": 5,
+        "document_variable_field_story_count": 2,
+        "literal_document_variable_field_reference_count": 5,
+        "nonliteral_document_variable_field_reference_count": 0,
+        (
+            "literal_document_variable_field_reference_"
+            "matching_stored_variable_count"
+        ): 4,
+        (
+            "literal_document_variable_field_reference_"
+            "not_matching_stored_variable_count"
+        ): 1,
+    }
+    rendered = render_profile(snapshot, "json") + render_profile(snapshot, "markdown")
+    for marker in (
+        "MAIN_VARIABLE_NAME_DO_NOT_LEAK",
+        "DELETED_VARIABLE_NAME_DO_NOT_LEAK",
+        "CURRENT_VARIABLE_NAME_DO_NOT_LEAK",
+        "GLOSSARY_VARIABLE_NAME_DO_NOT_LEAK",
+        "LOOSE_SCOPE_FIELD_DO_NOT_LEAK",
+        "UNCLOSED_SCOPE_FIELD_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     noncanonical = tmp_path / "noncanonical.docx"
     strict_relationship = tmp_path / "strict-relationship.docx"
@@ -3991,6 +4273,74 @@ def _write_word_protection_document(
             f'<Relationships xmlns="{PR}"><Relationship Id="rIdSettings1" '
             f'Type="{settings_relationship_type}" Target="{target}"'
             f"{target_mode_attribute}/></Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_document_variable_field_document(
+    path,
+    *,
+    body_markup: str = "",
+    header_markup: str | None = None,
+    settings_markup: str = "",
+    glossary_markup: str | None = None,
+    glossary_settings_markup: str | None = None,
+    word_namespace: str = W,
+) -> None:
+    """Write a small package for DOCVARIABLE-field and Settings-state tests."""
+
+    glossary_override = (
+        '<Override PartName="/word/glossary/document.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.'
+        'wordprocessingml.document.glossaryDocument+xml"/>'
+        if glossary_markup is not None
+        else ""
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{glossary_override}</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body><w:p>'
+            f"{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/settings.xml": (
+            f'<w:settings xmlns:w="{word_namespace}">'
+            f"{settings_markup}</w:settings>"
+        ).encode(),
+    }
+    if header_markup is not None:
+        entries["word/header1.xml"] = (
+            f'<w:hdr xmlns:w="{word_namespace}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode()
+    if glossary_markup is not None:
+        entries["word/glossary/document.xml"] = (
+            f'<w:glossaryDocument xmlns:w="{word_namespace}"><w:docParts>'
+            "<w:docPart><w:docPartBody><w:p>"
+            f"{glossary_markup}"
+            "</w:p></w:docPartBody></w:docPart></w:docParts>"
+            "</w:glossaryDocument>"
+        ).encode()
+    if glossary_settings_markup is not None:
+        entries["word/glossary/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{PR}"><Relationship Id="rIdSettings" '
+            f'Type="{_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE}" '
+            'Target="glossarySettings.xml"/></Relationships>'
+        ).encode()
+        entries["word/glossary/glossarySettings.xml"] = (
+            f'<w:settings xmlns:w="{word_namespace}">'
+            f"{glossary_settings_markup}</w:settings>"
         ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

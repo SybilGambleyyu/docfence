@@ -66,6 +66,8 @@ starter policy.
 | `no_word_permission_range_changes` | `DFP042` | Word editable-range permission inventory differs | Comparison |
 | `require_no_word_document_variables` | `DFP043` | Candidate has stored Word document-variable state | Candidate |
 | `no_word_document_variable_changes` | `DFP044` | Word document-variable inventory differs | Comparison |
+| `require_no_word_document_variable_fields` | `DFP045` | Candidate has stored `DOCVARIABLE` field references | Candidate |
+| `no_word_document_variable_field_changes` | `DFP046` | Word `DOCVARIABLE` field-reference inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -110,6 +112,8 @@ template intentionally retains Word editing/write-protection state.
 approved template intentionally retains editable-range permission markup.
 `no_word_document_variable_changes` provides the equivalent gate when an
 approved document or template intentionally retains document-variable state.
+`no_word_document_variable_field_changes` provides the equivalent gate when it
+intentionally retains stored `DOCVARIABLE` field references.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -528,9 +532,31 @@ placing either string in a report.
 recognized `w:docVars` container, including an empty one. Use it for a handoff
 that must carry no stored document-variable state.
 `no_word_document_variable_changes` protects an approved baseline instead.
-Neither rule evaluates a field, runs a macro, resolves a variable name,
-determines whether a Word client will display a value, or judges the safety or
-meaning of the stored state.
+
+DocFence separately recognizes complete `DOCVARIABLE` field instructions in
+both `w:fldSimple/@w:instr` and complete complex-field pre-separator
+instruction sequences across supported stories. Current and deleted revision
+variants are retained as separate stored evidence. The public field inventory
+contains only reference and story counts plus literal/nonliteral and
+exact-literal association counts; it never emits a field instruction or
+variable name. A literal is deliberately narrow: it must be a leading plain
+argument with no whitespace or one complete quoted string, optionally followed
+by Word field-switch material. A nested or compound field expression is counted
+as nonliteral rather than parsed.
+
+For a literal, DocFence can only report whether its exact string appears in a
+validated `w:docVar` associated with the same main or glossary package document
+scope. This is stored-package association evidence, not field resolution. In
+particular, a literal with no same-scope match may be supplied by an attached
+template, and a matching stored name does not prove that Word will render it or
+that a client will choose that value.
+
+`require_no_word_document_variable_fields` fails whenever a candidate contains
+a complete stored `DOCVARIABLE` reference. Use it for a handoff that must carry
+no such field codes. `no_word_document_variable_field_changes` protects an
+approved field-reference baseline. None of these rules evaluates a field, runs
+a macro, resolves a template, determines whether a Word client will display a
+value, or judges the safety or meaning of the stored state.
 
 ## External Word document dependency scope
 
