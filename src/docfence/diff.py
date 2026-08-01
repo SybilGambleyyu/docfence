@@ -507,6 +507,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_hyperlink_markup.signature
+        != after.word_hyperlink_markup.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_hyperlink_markup_inventory_changed",
+                message="Stored WordprocessingML hyperlink markup inventory changed.",
+                details={
+                    "before": before.word_hyperlink_markup.public_dict(),
+                    "after": after.word_hyperlink_markup.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature
     ):

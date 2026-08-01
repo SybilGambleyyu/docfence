@@ -6,7 +6,8 @@ reviewable, privacy-safe account of stored content-block changes and the review
 surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
-`HYPERLINK` field references, external relationships, custom XML, macros,
+`HYPERLINK` field references, direct `w:hyperlink` markup, external
+relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
@@ -40,6 +41,9 @@ DOCVARIABLE field instructions, literal field arguments, and story-part paths
 are private too.
 HYPERLINK field instructions, destinations, internal locations, ScreenTips,
 frame targets, and story-part paths are private too.
+Direct WordprocessingML hyperlink targets, anchors, locations, tooltips, frame
+names, history values, display text, relationship IDs, and story-part paths are
+private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -70,7 +74,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.17 focuses on Office Open XML Word documents and templates and
+Version 0.18 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -79,13 +83,13 @@ deliberately keeps a small, inspectable contract:
   bookkeeping while retaining stored text and formatting semantics privately;
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
-  field-code, `HYPERLINK` field-reference, external-source field,
+  field-code, `HYPERLINK` field-reference, direct `w:hyperlink` markup,
+  external-source field,
   content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, sensitivity-label metadata, OPC
   package digital-signature material, Word editing/write-protection,
-  document-variable state, `DOCVARIABLE` field references, and `HYPERLINK`
-  field references,
+  document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
   mail-merge, content-control
   data-binding, modern-comment metadata,
@@ -277,6 +281,28 @@ that a target is reachable, safe, or shown by Word.
 reference, while `no_word_hyperlink_field_changes` protects an approved
 field-reference baseline.
 
+Direct WordprocessingML `w:hyperlink` markup is inventoried separately from
+both field codes and the broad relationship totals. A direct element can refer
+to a relationship through `r:id`, name a local anchor through `w:anchor`, or
+omit both (the documented default is the start of the current document). When
+both attributes occur, `r:id` takes precedence, so the anchor is counted as
+stored shadowed evidence rather than a second target. Relationship-backed
+elements are classified by the stored relationship mode as external, internal,
+or unsupported; a relationship is not counted merely because it exists without
+a direct `w:hyperlink` reference.
+
+The markup inventory keeps relationship targets, anchors, `w:docLocation`,
+tooltips, frame names, display text, relationship IDs, story paths, and
+fingerprints private. Its private signature catches same-count target or
+attribute changes while treating a relationship-ID renumbering with identical
+semantics as unchanged. It never resolves, retrieves, follows, validates,
+evaluates, or renders a link, and an external relationship count is not a
+claim that a target is reachable or safe.
+
+`require_no_word_hyperlink_markup` fails for every stored direct
+`w:hyperlink` element, while `no_word_hyperlink_markup_changes` protects an
+approved direct-markup baseline.
+
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
 counts stored `w:mailMerge` configuration, external data and header source
@@ -404,6 +430,8 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_word_permission_ranges: true
   require_no_word_document_variables: true
   require_no_word_document_variable_fields: true
+  require_no_word_hyperlink_fields: true
+  require_no_word_hyperlink_markup: true
   require_no_external_document_dependencies: true
 ```
 
@@ -427,6 +455,8 @@ later mutation:
   no_word_permission_range_changes: true
   no_word_document_variable_changes: true
   no_word_document_variable_field_changes: true
+  no_word_hyperlink_field_changes: true
+  no_word_hyperlink_markup_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -583,6 +613,13 @@ which describes links to same-document and external locations, and the OOXML
 which documents the primary argument and `\l` location switch. DocFence keeps
 all those arguments private and reports stored lexical evidence only; a
 literal primary argument is not treated as proof of an external target.
+The direct WordprocessingML hyperlink-markup boundary follows the Open XML
+SDK's [`w:hyperlink` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.hyperlink?view=openxml-3.0.1)
+and the ECMA-376 [`hyperlink` element definition](https://c-rex.net/samples/ooxml/e1/Part4/OOXML_P4_DOCX_hyperlink_topic_ID0EIMX1.html).
+Those specifications distinguish an `r:id` relationship target from a local
+`w:anchor`, give `r:id` precedence when both are present, and permit hyperlink
+relationship targets inside or outside the package. DocFence reports only that
+stored mechanism and mode evidence; it keeps target and markup values private.
 The editable-range boundary follows the Open XML SDK's
 [`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
 and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),

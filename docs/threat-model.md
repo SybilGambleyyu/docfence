@@ -39,6 +39,9 @@ field arguments are sensitive package material too.
 Word `HYPERLINK` field destinations, internal locations, ScreenTips, frame
 targets, field instructions, and story-part paths are sensitive package
 material too.
+Direct WordprocessingML hyperlink targets, local anchors, locations, tooltips,
+frame names, history values, display text, relationship IDs, and story-part
+paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -174,6 +177,20 @@ or wholly quoted string with optional trailing switch material—and a nested or
 compound expression stays dynamic or unparseable. All arguments, locations,
 ScreenTips, targets, paths, and fingerprints remain private. A primary literal
 is not reported as external because Word permits a bookmark there.
+
+Direct `w:hyperlink` markup receives a separate private-digest treatment from
+both field instructions and broad relationship totals. DocFence scans direct
+elements in supported Word stories, privately normalizing an `r:id` through its
+resolved relationship semantics. The element's `r:id` relationship takes
+precedence over a local `w:anchor`; without an ID, an anchor-only and a
+no-anchor current-document-start form remain distinct stored categories.
+Recognized hyperlink relationships with internal and external target modes are
+counted separately, while another resolved relationship type or target mode is
+counted as unsupported markup. Relationship targets, anchors, locations,
+tooltips, frame names, history, display text, relationship IDs, paths, and
+fingerprints remain private. A relationship-ID rewrite with unchanged semantics
+does not add report churn; a same-count target or markup rewrite remains
+review-visible in the private signature.
 
 Word editable-range permission markup receives a separate private-digest
 treatment. DocFence scans supported Word stories for `w:permStart` and
@@ -344,6 +361,10 @@ Word `HYPERLINK` field-reference counts are likewise stored-state evidence, not
 proof that Word will render a link, a literal primary argument is external, a
 destination is reachable or safe, or a client will follow it. DocFence does not
 resolve, retrieve, follow, evaluate, or render a `HYPERLINK` field.
+Direct `w:hyperlink` markup counts are likewise stored-state evidence, not proof
+that a relationship target is external in the everyday web sense, reachable,
+safe, permitted, or honored by a Word client. DocFence does not resolve,
+retrieve, follow, validate, evaluate, or render a direct hyperlink target.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

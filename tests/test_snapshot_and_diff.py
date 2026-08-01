@@ -98,6 +98,15 @@ _STRICT_WORD_NAMESPACE = "http://purl.oclc.org/ooxml/wordprocessingml/main"
 _STRICT_RELATIONSHIP_NAMESPACE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships"
 )
+_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/package/relationships"
+)
+_HYPERLINK_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
+_STRICT_HYPERLINK_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink"
+)
 _CORE_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
 _EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
 _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
@@ -2829,6 +2838,151 @@ def test_word_hyperlink_fields_keep_revision_variants_privately(tmp_path) -> Non
         assert marker not in rendered
 
 
+def test_word_hyperlink_markup_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    changed = tmp_path / "changed.docx"
+    markup_changed = tmp_path / "markup-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    orphaned_relationship = tmp_path / "orphaned-relationship.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_hyperlink_markup_document(before, include_markup=False)
+    _write_hyperlink_markup_document(after)
+    _write_hyperlink_markup_document(
+        changed,
+        external_target="https://CHANGED_MARKUP_TARGET_DO_NOT_LEAK.invalid/path",
+    )
+    _write_hyperlink_markup_document(
+        markup_changed,
+        shadowed_anchor="CHANGED_MARKUP_SHADOWED_ANCHOR_DO_NOT_LEAK",
+    )
+    _write_hyperlink_markup_document(
+        renumbered,
+        external_relationship_id="rIdRENUMBERED_DO_NOT_LEAK",
+    )
+    _write_hyperlink_markup_document(
+        orphaned_relationship,
+        include_markup=False,
+        include_orphan_hyperlink_relationship=True,
+    )
+    _write_hyperlink_markup_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        relationship_attribute_namespace=_STRICT_RELATIONSHIP_NAMESPACE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+        hyperlink_relationship_type=_STRICT_HYPERLINK_RELATIONSHIP_TYPE,
+    )
+
+    expected_inventory = {
+        "hyperlink_element_count": 6,
+        "hyperlink_story_count": 2,
+        "relationship_backed_hyperlink_count": 4,
+        "external_relationship_hyperlink_count": 2,
+        "internal_relationship_hyperlink_count": 1,
+        "unsupported_relationship_hyperlink_count": 1,
+        "anchor_only_hyperlink_count": 1,
+        "default_document_start_hyperlink_count": 1,
+        "relationship_backed_anchor_attribute_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    changed_snapshot = load_snapshot(changed)
+    markup_changed_snapshot = load_snapshot(markup_changed)
+    renumbered_snapshot = load_snapshot(renumbered)
+    assert after_snapshot.public_dict()["word_hyperlink_markup"] == expected_inventory
+    assert before_snapshot.public_dict()["word_hyperlink_markup"] == {
+        key: 0 for key in expected_inventory
+    }
+    orphaned_snapshot = load_snapshot(orphaned_relationship)
+    assert orphaned_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 1,
+        "external_relationship_count": 1,
+    }
+    assert orphaned_snapshot.public_dict()["word_hyperlink_markup"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert load_snapshot(strict).public_dict()["word_hyperlink_markup"] == (
+        expected_inventory
+    )
+    assert (
+        renumbered_snapshot.word_hyperlink_markup.signature
+        == after_snapshot.word_hyperlink_markup.signature
+    )
+
+    report = diff_documents(before, after)
+    assert "word_hyperlink_markup_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_hyperlink_markup_inventory_changed" in {
+        change.kind for change in diff_documents(after, changed).changes
+    }
+    assert "word_hyperlink_markup_inventory_changed" in {
+        change.kind for change in diff_documents(after, markup_changed).changes
+    }
+    assert "word_hyperlink_markup_inventory_changed" not in {
+        change.kind for change in diff_documents(after, renumbered).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_hyperlink_markup: true
+  no_word_hyperlink_markup_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP049",
+        "DFP050",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, changed), policy).findings
+    } == {"DFP049", "DFP050"}
+
+    gated = apply_policy(report, policy)
+    changed_gated = apply_policy(diff_documents(after, changed), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(changed_snapshot, "json"),
+            render_report(changed_gated, "sarif"),
+            render_profile(markup_changed_snapshot, "markdown"),
+            render_profile(renumbered_snapshot, "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_HYPERLINK_MARKUP_INVENTORY_CHANGED",
+        "DFP049",
+        "DFP050",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "MARKUP_EXTERNAL_TARGET_DO_NOT_LEAK",
+        "CHANGED_MARKUP_TARGET_DO_NOT_LEAK",
+        "MARKUP_INTERNAL_TARGET_DO_NOT_LEAK",
+        "MARKUP_UNSUPPORTED_TARGET_DO_NOT_LEAK",
+        "MARKUP_HEADER_TARGET_DO_NOT_LEAK",
+        "MARKUP_SHADOWED_ANCHOR_DO_NOT_LEAK",
+        "CHANGED_MARKUP_SHADOWED_ANCHOR_DO_NOT_LEAK",
+        "MARKUP_ANCHOR_DO_NOT_LEAK",
+        "MARKUP_DOCUMENT_LOCATION_DO_NOT_LEAK",
+        "MARKUP_TOOLTIP_DO_NOT_LEAK",
+        "MARKUP_TARGET_FRAME_DO_NOT_LEAK",
+        "MARKUP_DISPLAY_TEXT_DO_NOT_LEAK",
+        "MARKUP_HEADER_DISPLAY_DO_NOT_LEAK",
+        "rIdRENUMBERED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     noncanonical = tmp_path / "noncanonical.docx"
     strict_relationship = tmp_path / "strict-relationship.docx"
@@ -4659,6 +4813,114 @@ def _write_hyperlink_field_document(
             "</w:p></w:hdr>"
         ).encode(),
     }
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_hyperlink_markup_document(
+    path,
+    *,
+    include_markup: bool = True,
+    include_orphan_hyperlink_relationship: bool = False,
+    external_target: str = "https://MARKUP_EXTERNAL_TARGET_DO_NOT_LEAK.invalid/path",
+    external_relationship_id: str = "rIdExternal",
+    shadowed_anchor: str = "MARKUP_SHADOWED_ANCHOR_DO_NOT_LEAK",
+    word_namespace: str = W,
+    relationship_attribute_namespace: str = R,
+    relationship_namespace: str = PR,
+    hyperlink_relationship_type: str = _HYPERLINK_RELATIONSHIP_TYPE,
+) -> None:
+    """Write direct WordprocessingML hyperlink elements across two stories."""
+
+    body_markup = ""
+    header_markup = ""
+    relationship_entries = ""
+    header_relationship_entries = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                f'<w:hyperlink r:id="{external_relationship_id}" '
+                f'w:anchor="{shadowed_anchor}" '
+                'w:docLocation="MARKUP_DOCUMENT_LOCATION_DO_NOT_LEAK" '
+                'w:tooltip="MARKUP_TOOLTIP_DO_NOT_LEAK" '
+                'w:tgtFrame="MARKUP_TARGET_FRAME_DO_NOT_LEAK" w:history="true">'
+                "<w:r><w:t>MARKUP_DISPLAY_TEXT_DO_NOT_LEAK</w:t></w:r>"
+                "</w:hyperlink>",
+                '<w:hyperlink r:id="rIdInternal"><w:r><w:t>'
+                "INTERNAL_DISPLAY_DO_NOT_LEAK</w:t></w:r></w:hyperlink>",
+                '<w:hyperlink r:id="rIdUnsupported"><w:r><w:t>'
+                "UNSUPPORTED_DISPLAY_DO_NOT_LEAK</w:t></w:r></w:hyperlink>",
+                '<w:hyperlink w:anchor="MARKUP_ANCHOR_DO_NOT_LEAK"><w:r><w:t>'
+                "ANCHOR_DISPLAY_DO_NOT_LEAK</w:t></w:r></w:hyperlink>",
+                "<w:hyperlink><w:r><w:t>DEFAULT_DISPLAY_DO_NOT_LEAK</w:t></w:r>"
+                "</w:hyperlink>",
+            )
+        )
+        header_markup = (
+            '<w:hyperlink r:id="rIdHeaderExternal"><w:r><w:t>'
+            "MARKUP_HEADER_DISPLAY_DO_NOT_LEAK</w:t></w:r></w:hyperlink>"
+        )
+        relationship_entries = "".join(
+            (
+                f'<Relationship Id="{external_relationship_id}" '
+                f'Type="{hyperlink_relationship_type}" Target="{external_target}" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdInternal" '
+                f'Type="{hyperlink_relationship_type}" '
+                'Target="MARKUP_INTERNAL_TARGET_DO_NOT_LEAK.xml"/>',
+                '<Relationship Id="rIdUnsupported" '
+                'Type="urn:docfence:unsupported-relationship" '
+                'Target="https://MARKUP_UNSUPPORTED_TARGET_DO_NOT_LEAK.invalid" '
+                'TargetMode="External"/>',
+            )
+        )
+        header_relationship_entries = (
+            '<Relationship Id="rIdHeaderExternal" '
+            f'Type="{hyperlink_relationship_type}" '
+            'Target="https://MARKUP_HEADER_TARGET_DO_NOT_LEAK.invalid" '
+            'TargetMode="External"/>'
+        )
+    elif include_orphan_hyperlink_relationship:
+        relationship_entries = (
+            '<Relationship Id="rIdOrphan" '
+            f'Type="{hyperlink_relationship_type}" '
+            'Target="https://MARKUP_ORPHAN_TARGET_DO_NOT_LEAK.invalid" '
+            'TargetMode="External"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}"><w:body><w:p>'
+            f"{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
+    if relationship_entries:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{relationship_entries}</Relationships>"
+        ).encode()
+    if header_relationship_entries:
+        entries["word/_rels/header1.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{header_relationship_entries}</Relationships>"
+        ).encode()
+
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)

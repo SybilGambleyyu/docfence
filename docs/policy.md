@@ -70,6 +70,8 @@ starter policy.
 | `no_word_document_variable_field_changes` | `DFP046` | Word `DOCVARIABLE` field-reference inventory differs | Comparison |
 | `require_no_word_hyperlink_fields` | `DFP047` | Candidate has stored `HYPERLINK` field references | Candidate |
 | `no_word_hyperlink_field_changes` | `DFP048` | Word `HYPERLINK` field-reference inventory differs | Comparison |
+| `require_no_word_hyperlink_markup` | `DFP049` | Candidate has direct WordprocessingML `w:hyperlink` markup | Candidate |
+| `no_word_hyperlink_markup_changes` | `DFP050` | WordprocessingML hyperlink-markup inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -118,6 +120,8 @@ approved document or template intentionally retains document-variable state.
 intentionally retains stored `DOCVARIABLE` field references.
 `no_word_hyperlink_field_changes` provides the equivalent gate when it
 intentionally retains stored `HYPERLINK` field references.
+`no_word_hyperlink_markup_changes` provides the equivalent gate when it
+intentionally retains direct WordprocessingML hyperlink markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -564,8 +568,8 @@ value, or judges the safety or meaning of the stored state.
 
 ## Word HYPERLINK field scope
 
-`HYPERLINK` field codes are distinct from ordinary `w:hyperlink` relationship
-markup and from the external-source field inventory: a complete field code can
+`HYPERLINK` field codes are distinct from direct `w:hyperlink` markup and from
+the external-source field inventory: a complete field code can
 carry a URL, file location, or bookmark directly without a relationship. The
 inventory scans direct `w:fldSimple/@w:instr` instructions and complete complex
 pre-separator instruction sequences across supported stories, retaining current
@@ -586,6 +590,41 @@ such field codes. `no_word_hyperlink_field_changes` compares the private
 inventory signature to protect an approved baseline. Neither rule emits,
 resolves, follows, evaluates, or renders a destination, nor does it establish
 that a target is reachable, safe, or displayed by Word.
+
+## WordprocessingML hyperlink markup scope
+
+Direct `w:hyperlink` elements are a separate stored surface from both
+`HYPERLINK` field codes and the generic package relationship inventory. The
+inventory scans direct elements across every supported Word story. It counts an
+element only when the element itself is present: an unreferenced hyperlink
+relationship remains visible to the generic relationship inventory but does
+not become a direct-markup count.
+
+The inventory follows the element's documented stored precedence without
+following a target. If `r:id` is present, its relationship is the target and
+supersedes any `w:anchor`; that shadowed anchor is counted only as a stored
+attribute. Without `r:id`, a `w:anchor` produces an anchor-only count; with
+neither attribute, the element is counted as the documented current-document
+start form. Relationship-backed elements are classified from the referenced
+relationship's stored type and target mode: recognized hyperlink relationships
+with `External` and `Internal` target modes receive separate counts. A resolved
+relationship with another type or target mode is counted as unsupported
+relationship-backed markup rather than treated as a standard link target.
+
+The private signature includes the resolved relationship semantics and the
+complete direct element, so target, anchor, `w:docLocation`, tooltip, target
+frame, history, and display-markup rewrites remain visible even with unchanged
+public counts. Relationship IDs are normalized through their resolved semantics,
+so an ID renumbering alone remains quiet. Targets, anchors, locations, tooltips,
+frame names, history values, display text, relationship IDs, story paths, and
+fingerprints never appear in reports.
+
+`require_no_word_hyperlink_markup` fails whenever a candidate contains a
+direct `w:hyperlink` element. Use it for a handoff that must carry no such
+markup. `no_word_hyperlink_markup_changes` compares the private inventory
+signature for a controlled baseline. Neither rule resolves, retrieves, follows,
+validates, evaluates, or renders a target, and neither establishes that a
+relationship target is reachable, safe, or honored by a Word client.
 
 ## External Word document dependency scope
 

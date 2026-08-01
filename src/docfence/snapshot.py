@@ -42,6 +42,7 @@ from docfence.models import (
     WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
     WordHyperlinkFieldInventory,
+    WordHyperlinkMarkupInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
 )
@@ -116,6 +117,12 @@ _ALTERNATIVE_FORMAT_IMPORT_RELATIONSHIP_TYPES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officedocument/2006/relationships/afchunk",
         "http://purl.oclc.org/ooxml/officedocument/relationships/afchunk",
+    }
+)
+_HYPERLINK_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/hyperlink",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/hyperlink",
     }
 )
 _DOCUMENT_PROPERTY_RELATIONSHIP_TYPES: Final = {
@@ -577,6 +584,16 @@ class _HyperlinkFieldReference:
 
 
 @dataclass(frozen=True)
+class _HyperlinkMarkupReference:
+    """One private direct ``w:hyperlink`` element and target class."""
+
+    story_part: str
+    markup_signature: str
+    classification: str
+    relationship_backed_anchor_attribute: bool
+
+
+@dataclass(frozen=True)
 class _StoredDocumentVariable:
     """A validated stored variable, private until association is complete."""
 
@@ -730,6 +747,7 @@ def _load_package(
                 external_field_references,
                 document_variable_field_references,
                 hyperlink_field_references,
+                hyperlink_markup_references,
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -748,6 +766,9 @@ def _load_package(
             )
             word_hyperlink_fields = _word_hyperlink_field_inventory(
                 hyperlink_field_references
+            )
+            word_hyperlink_markup = _word_hyperlink_markup_inventory(
+                hyperlink_markup_references
             )
             modern_comment_metadata, modern_comment_metadata_parts = (
                 _modern_comment_metadata_inventory(
@@ -835,6 +856,7 @@ def _load_package(
         word_document_variables=word_document_variables,
         word_document_variable_fields=word_document_variable_fields,
         word_hyperlink_fields=word_hyperlink_fields,
+        word_hyperlink_markup=word_hyperlink_markup,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
@@ -3140,6 +3162,7 @@ def _story_snapshots(
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
     tuple[_HyperlinkFieldReference, ...],
+    tuple[_HyperlinkMarkupReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
@@ -3147,6 +3170,7 @@ def _story_snapshots(
     external_field_references: list[_ExternalFieldReference] = []
     document_variable_field_references: list[_DocumentVariableFieldReference] = []
     hyperlink_field_references: list[_HyperlinkFieldReference] = []
+    hyperlink_markup_references: list[_HyperlinkMarkupReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
@@ -3157,6 +3181,7 @@ def _story_snapshots(
             story_external_field_references,
             story_document_variable_field_references,
             story_hyperlink_field_references,
+            story_hyperlink_markup_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
@@ -3165,6 +3190,7 @@ def _story_snapshots(
             story_document_variable_field_references
         )
         hyperlink_field_references.extend(story_hyperlink_field_references)
+        hyperlink_markup_references.extend(story_hyperlink_markup_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -3181,6 +3207,7 @@ def _story_snapshots(
         tuple(external_field_references),
         tuple(document_variable_field_references),
         tuple(hyperlink_field_references),
+        tuple(hyperlink_markup_references),
         tuple(web_extension_control_references),
     )
 
@@ -3249,6 +3276,7 @@ def _snapshot_story(
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
     tuple[_HyperlinkFieldReference, ...],
+    tuple[_HyperlinkMarkupReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
@@ -3345,6 +3373,7 @@ def _snapshot_story(
         _external_field_references(field_instruction_references),
         _document_variable_field_references(field_instruction_references),
         _hyperlink_field_references(field_instruction_references),
+        _hyperlink_markup_references(root, part_key, relationships),
     )
 
 
@@ -4286,6 +4315,121 @@ def _word_hyperlink_field_inventory(
         dynamic_or_unparseable_hyperlink_field_count=counts[
             "dynamic_or_unparseable"
         ],
+        signature=_digest_records(records),
+    )
+
+
+def _hyperlink_markup_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_HyperlinkMarkupReference, ...]:
+    """Retain direct ``w:hyperlink`` semantics without exposing link material.
+
+    A relationship ID takes precedence over ``w:anchor`` in WordprocessingML.
+    The standard permits a hyperlink relationship target to be either internal
+    or external, so neither relationship-backed class is inferred from target
+    text. Attributes such as anchors, locations, tooltips, target frames, and
+    history remain in the element's private fingerprint only.
+    """
+
+    references: list[_HyperlinkMarkupReference] = []
+    for element in root.iter():
+        if not _is_word_element(element, "hyperlink"):
+            continue
+        relationship_id = _relationship_id_value(element)
+        anchor_present = _word_attribute_value(element, "anchor") is not None
+        if relationship_id is None:
+            classification = (
+                "anchor_only" if anchor_present else "default_document_start"
+            )
+            relationship_backed_anchor_attribute = False
+        else:
+            classification = _hyperlink_markup_relationship_classification(
+                relationships.get(relationship_id)
+            )
+            relationship_backed_anchor_attribute = anchor_present
+        references.append(
+            _HyperlinkMarkupReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                classification=classification,
+                relationship_backed_anchor_attribute=(
+                    relationship_backed_anchor_attribute
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _hyperlink_markup_relationship_classification(
+    relationship: _Relationship | None,
+) -> str:
+    """Classify only a resolved standard relationship's stored mode."""
+
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold()
+        not in _HYPERLINK_RELATIONSHIP_TYPES
+    ):
+        return "unsupported_relationship"
+    target_mode = relationship.target_mode.casefold()
+    if target_mode == "external":
+        return "external_relationship"
+    if target_mode == "internal":
+        return "internal_relationship"
+    return "unsupported_relationship"
+
+
+def _word_hyperlink_markup_inventory(
+    references: tuple[_HyperlinkMarkupReference, ...],
+) -> WordHyperlinkMarkupInventory:
+    """Aggregate direct hyperlink markup without emitting targets or labels."""
+
+    counts = {
+        "external_relationship": 0,
+        "internal_relationship": 0,
+        "unsupported_relationship": 0,
+        "anchor_only": 0,
+        "default_document_start": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    relationship_backed_anchor_attribute_count = 0
+    for reference in references:
+        counts[reference.classification] += 1
+        relationship_backed_anchor_attribute_count += int(
+            reference.relationship_backed_anchor_attribute
+        )
+        records.append(
+            (
+                "word_hyperlink_markup",
+                reference.story_part,
+                reference.markup_signature,
+                reference.classification,
+                str(reference.relationship_backed_anchor_attribute),
+            )
+        )
+
+    relationship_backed_count = sum(
+        counts[classification]
+        for classification in (
+            "external_relationship",
+            "internal_relationship",
+            "unsupported_relationship",
+        )
+    )
+    return WordHyperlinkMarkupInventory(
+        hyperlink_element_count=len(references),
+        hyperlink_story_count=len({reference.story_part for reference in references}),
+        relationship_backed_hyperlink_count=relationship_backed_count,
+        external_relationship_hyperlink_count=counts["external_relationship"],
+        internal_relationship_hyperlink_count=counts["internal_relationship"],
+        unsupported_relationship_hyperlink_count=counts["unsupported_relationship"],
+        anchor_only_hyperlink_count=counts["anchor_only"],
+        default_document_start_hyperlink_count=counts["default_document_start"],
+        relationship_backed_anchor_attribute_count=(
+            relationship_backed_anchor_attribute_count
+        ),
         signature=_digest_records(records),
     )
 

@@ -333,6 +333,53 @@ class WordHyperlinkFieldInventory:
 
 
 @dataclass(frozen=True)
+class WordHyperlinkMarkupInventory:
+    """Direct WordprocessingML ``w:hyperlink`` elements, aggregate only.
+
+    Relationship targets, local anchors, locations, tooltips, frame names,
+    display text, story paths, and fingerprints can reveal document context.
+    They remain in the private signature; public output reports only stored
+    target-mechanism and relationship-mode evidence.
+    """
+
+    hyperlink_element_count: int
+    hyperlink_story_count: int
+    relationship_backed_hyperlink_count: int
+    external_relationship_hyperlink_count: int
+    internal_relationship_hyperlink_count: int
+    unsupported_relationship_hyperlink_count: int
+    anchor_only_hyperlink_count: int
+    default_document_start_hyperlink_count: int
+    relationship_backed_anchor_attribute_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "hyperlink_element_count": self.hyperlink_element_count,
+            "hyperlink_story_count": self.hyperlink_story_count,
+            "relationship_backed_hyperlink_count": (
+                self.relationship_backed_hyperlink_count
+            ),
+            "external_relationship_hyperlink_count": (
+                self.external_relationship_hyperlink_count
+            ),
+            "internal_relationship_hyperlink_count": (
+                self.internal_relationship_hyperlink_count
+            ),
+            "unsupported_relationship_hyperlink_count": (
+                self.unsupported_relationship_hyperlink_count
+            ),
+            "anchor_only_hyperlink_count": self.anchor_only_hyperlink_count,
+            "default_document_start_hyperlink_count": (
+                self.default_document_start_hyperlink_count
+            ),
+            "relationship_backed_anchor_attribute_count": (
+                self.relationship_backed_anchor_attribute_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -681,6 +728,7 @@ class DocumentSnapshot:
     word_document_variables: WordDocumentVariableInventory
     word_document_variable_fields: WordDocumentVariableFieldInventory
     word_hyperlink_fields: WordHyperlinkFieldInventory
+    word_hyperlink_markup: WordHyperlinkMarkupInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -779,6 +827,7 @@ class DocumentSnapshot:
                 self.word_document_variable_fields.public_dict()
             ),
             "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
+            "word_hyperlink_markup": self.word_hyperlink_markup.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

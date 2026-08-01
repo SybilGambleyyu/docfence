@@ -2,6 +2,33 @@
 
 All notable changes are documented here.
 
+## 0.18.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct WordprocessingML
+  `w:hyperlink` markup, separate from both stored `HYPERLINK` field codes and
+  broad package relationship totals. An unreferenced hyperlink relationship is
+  not counted as direct markup.
+- Added `DFP049` to require a handoff with no direct hyperlink markup and
+  `DFP050` to protect an approved direct-markup baseline.
+- Reports now expose only aggregate element/story, relationship-backed,
+  external/internal/unsupported relationship, anchor-only,
+  current-document-start, and relationship-backed-anchor-attribute counts.
+  Relationship targets, anchors, locations, tooltips, frame names, history,
+  display text, relationship IDs, story paths, and fingerprints remain private.
+- Applies `r:id` precedence over `w:anchor`, distinguishes the documented
+  no-attribute current-document-start form, and supports Transitional and
+  Strict WordprocessingML/relationship namespaces. A recognized hyperlink
+  relationship may have an internal or external target mode; neither count is
+  a safety, reachability, rendering, or URL classification claim.
+- Private inventory signatures catch same-count relationship-target and markup
+  changes while normalizing relationship-ID renumbering with unchanged
+  semantics. The implementation does not resolve, retrieve, follow, validate,
+  evaluate, or render a link.
+- Added regression coverage for privacy redaction, policy/SARIF output,
+  relationship modes/type mismatch, anchor precedence, orphaned relationship
+  exclusion, header and Strict encodings, same-count target changes, and
+  relationship-ID renumbering stability.
+
 ## 0.17.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for stored Word `HYPERLINK`

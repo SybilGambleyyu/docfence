@@ -60,6 +60,8 @@ _RULES: Final = {
     "no_word_document_variable_field_changes": "DFP046",
     "require_no_word_hyperlink_fields": "DFP047",
     "no_word_hyperlink_field_changes": "DFP048",
+    "require_no_word_hyperlink_markup": "DFP049",
+    "no_word_hyperlink_markup_changes": "DFP050",
 }
 
 
@@ -343,6 +345,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_hyperlink_markup_changes") and (
+        before.word_hyperlink_markup.signature
+        != after.word_hyperlink_markup.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_hyperlink_markup_changes",
+                "Stored WordprocessingML hyperlink markup inventory changed.",
+                {
+                    "before": before.word_hyperlink_markup.public_dict(),
+                    "after": after.word_hyperlink_markup.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -601,6 +617,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_hyperlink_fields",
                 "Candidate contains stored HYPERLINK field references.",
                 after.word_hyperlink_fields.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_hyperlink_markup") and any(
+        after.word_hyperlink_markup.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_hyperlink_markup",
+                "Candidate contains stored WordprocessingML hyperlink markup.",
+                after.word_hyperlink_markup.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(
