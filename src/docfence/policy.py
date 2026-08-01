@@ -30,6 +30,8 @@ _RULES: Final = {
     "require_no_alternative_format_imports": "DFP016",
     "no_embedded_object_payload_changes": "DFP017",
     "no_alternative_format_import_changes": "DFP018",
+    "no_document_property_changes": "DFP019",
+    "require_no_custom_document_properties": "DFP020",
 }
 
 
@@ -204,6 +206,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
             )
         )
     if (
+        policy.enabled("no_document_property_changes")
+        and before.document_properties.signature != after.document_properties.signature
+    ):
+        findings.append(
+            _finding(
+                "no_document_property_changes",
+                "Document property inventory changed.",
+                {
+                    "before": before.document_properties.public_dict(),
+                    "after": after.document_properties.public_dict(),
+                },
+            )
+        )
+    if (
         policy.enabled("require_no_unresolved_revisions")
         and after.revisions.unresolved_count
     ):
@@ -278,6 +294,24 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                         after.alternative_format_import_anchor_count
                     ),
                     **after.alternative_format_imports.public_dict(),
+                },
+            )
+        )
+    if (
+        policy.enabled("require_no_custom_document_properties")
+        and after.document_properties.custom_property_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_custom_document_properties",
+                "Candidate contains stored custom document properties.",
+                {
+                    "custom_property_part_count": (
+                        after.document_properties.custom_property_part_count
+                    ),
+                    "custom_property_count": (
+                        after.document_properties.custom_property_count
+                    ),
                 },
             )
         )

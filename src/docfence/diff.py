@@ -417,6 +417,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.document_properties.signature != after.document_properties.signature:
+        changes.append(
+            Change(
+                kind="document_property_inventory_changed",
+                message="Stored document property inventory changed.",
+                details={
+                    "before": before.document_properties.public_dict(),
+                    "after": after.document_properties.public_dict(),
+                },
+            )
+        )
     if (
         before.settings_signature != after.settings_signature
         and before.track_revisions_enabled == after.track_revisions_enabled

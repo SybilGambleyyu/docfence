@@ -22,6 +22,7 @@ from typing import Final
 from docfence.errors import DocumentFormatError, DocumentSafetyError
 from docfence.models import (
     AlternativeFormatImportInventory,
+    DocumentPropertyInventory,
     DocumentSnapshot,
     EmbeddedObjectInventory,
     RelationshipInventory,
@@ -102,6 +103,71 @@ _ALTERNATIVE_FORMAT_IMPORT_RELATIONSHIP_TYPES: Final = frozenset(
         "http://purl.oclc.org/ooxml/officedocument/relationships/afchunk",
     }
 )
+_DOCUMENT_PROPERTY_RELATIONSHIP_TYPES: Final = {
+    (
+        "http://schemas.openxmlformats.org/package/2006/relationships/metadata/"
+        "core-properties"
+    ): "core",
+    (
+        "http://purl.oclc.org/ooxml/package/relationships/metadata/core-properties"
+    ): "core",
+    (
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "extended-properties"
+    ): "extended",
+    (
+        "http://purl.oclc.org/ooxml/officedocument/relationships/extendedproperties"
+    ): "extended",
+    (
+        "http://purl.oclc.org/ooxml/officedocument/relationships/extended-properties"
+    ): "extended",
+    (
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "custom-properties"
+    ): "custom",
+    (
+        "http://purl.oclc.org/ooxml/officedocument/relationships/customproperties"
+    ): "custom",
+    (
+        "http://purl.oclc.org/ooxml/officedocument/relationships/custom-properties"
+    ): "custom",
+}
+_DOCUMENT_PROPERTY_FALLBACK_PARTS: Final = {
+    "docProps/core.xml": "core",
+    "docProps/app.xml": "extended",
+    "docProps/custom.xml": "custom",
+}
+_DOCUMENT_PROPERTY_ROOTS: Final = {
+    "core": (
+        frozenset(
+            {
+                "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+                "http://purl.oclc.org/ooxml/package/metadata/core-properties",
+            }
+        ),
+        "coreProperties",
+    ),
+    "extended": (
+        frozenset(
+            {
+                "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+                "http://purl.oclc.org/ooxml/officeDocument/extendedProperties",
+                "http://purl.oclc.org/ooxml/officeDocument/extended-properties",
+            }
+        ),
+        "Properties",
+    ),
+    "custom": (
+        frozenset(
+            {
+                "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+                "http://purl.oclc.org/ooxml/officeDocument/customProperties",
+                "http://purl.oclc.org/ooxml/officeDocument/custom-properties",
+            }
+        ),
+        "Properties",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -177,6 +243,9 @@ def _load_package(
                     archive, members, relationship_maps, limits
                 )
             )
+            document_properties, document_property_parts = _document_property_inventory(
+                archive, members, relationship_maps, limits
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             stories, comment_count = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -192,7 +261,11 @@ def _load_package(
                 archive,
                 members,
                 stories,
-                embedded_object_parts | alternative_format_import_parts,
+                (
+                    embedded_object_parts
+                    | alternative_format_import_parts
+                    | document_property_parts
+                ),
                 limits,
             )
     except (DocumentFormatError, DocumentSafetyError):
@@ -216,6 +289,7 @@ def _load_package(
         styles=styles,
         embedded_objects=embedded_objects,
         alternative_format_imports=alternative_format_imports,
+        document_properties=document_properties,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -536,6 +610,97 @@ def _alternative_format_import_inventory(
     )
 
 
+def _document_property_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[DocumentPropertyInventory, frozenset[str]]:
+    part_names_by_kind = {"core": set(), "extended": set(), "custom": set()}
+    part_kinds: dict[str, str] = {}
+    records: list[tuple[str, ...]] = []
+
+    def add_part(kind: str, part_name: str) -> None:
+        existing_kind = part_kinds.get(part_name)
+        if existing_kind is not None and existing_kind != kind:
+            raise DocumentFormatError("document property parts are inconsistent")
+        part_kinds[part_name] = kind
+        part_names_by_kind[kind].add(part_name)
+
+    for part_name, kind in _DOCUMENT_PROPERTY_FALLBACK_PARTS.items():
+        if part_name in members:
+            add_part(kind, part_name)
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in relationships.values():
+            kind = _DOCUMENT_PROPERTY_RELATIONSHIP_TYPES.get(
+                relationship.relationship_type.casefold()
+            )
+            if kind is None:
+                continue
+            records.append(
+                (
+                    "document_property_relationship",
+                    kind,
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is not None:
+                add_part(kind, target)
+
+    value_counts = {"core": 0, "extended": 0, "custom": 0}
+    for kind, part_names in part_names_by_kind.items():
+        for part_name in sorted(part_names):
+            root = _read_xml(archive, members[part_name], limits)
+            _validate_document_property_root(root, kind)
+            if kind == "custom":
+                value_counts[kind] += _custom_property_count(root)
+            else:
+                value_counts[kind] += _document_property_value_count(root)
+            records.append(
+                (
+                    "document_property_part",
+                    kind,
+                    part_name,
+                    _fingerprint_element(root, relationship_maps.get(part_name, {})),
+                )
+            )
+
+    return (
+        DocumentPropertyInventory(
+            core_property_part_count=len(part_names_by_kind["core"]),
+            core_property_value_count=value_counts["core"],
+            extended_property_part_count=len(part_names_by_kind["extended"]),
+            extended_property_value_count=value_counts["extended"],
+            custom_property_part_count=len(part_names_by_kind["custom"]),
+            custom_property_count=value_counts["custom"],
+            signature=_digest_records(records),
+        ),
+        frozenset(part_kinds),
+    )
+
+
+def _validate_document_property_root(root: ET.Element, kind: str) -> None:
+    namespaces, expected_local_name = _DOCUMENT_PROPERTY_ROOTS[kind]
+    namespace, local_name = _qualified_name(root.tag)
+    if namespace not in namespaces or local_name != expected_local_name:
+        raise DocumentFormatError("document property part is invalid")
+
+
+def _document_property_value_count(root: ET.Element) -> int:
+    return sum(_element_has_text_value(child) for child in root)
+
+
+def _custom_property_count(root: ET.Element) -> int:
+    return sum(_local_name(child.tag) == "property" for child in root)
+
+
+def _element_has_text_value(element: ET.Element) -> bool:
+    return any((value or "").strip() for value in element.itertext())
+
+
 def _internal_relationship_target(
     source_part: str,
     relationship: _Relationship,
@@ -618,7 +783,7 @@ def _relationship_source_part(member_name: str) -> str:
     return "/".join([*parts[:-2], basename])
 
 
-def _digest_records(records: list[tuple[str, str, str, str]]) -> str:
+def _digest_records(records: list[tuple[str, ...]]) -> str:
     encoded = json.dumps(
         sorted(records), ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")

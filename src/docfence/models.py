@@ -95,6 +95,29 @@ class AlternativeFormatImportInventory:
 
 
 @dataclass(frozen=True)
+class DocumentPropertyInventory:
+    """Stored core, extended, and custom document-property evidence."""
+
+    core_property_part_count: int
+    core_property_value_count: int
+    extended_property_part_count: int
+    extended_property_value_count: int
+    custom_property_part_count: int
+    custom_property_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "core_property_part_count": self.core_property_part_count,
+            "core_property_value_count": self.core_property_value_count,
+            "extended_property_part_count": self.extended_property_part_count,
+            "extended_property_value_count": self.extended_property_value_count,
+            "custom_property_part_count": self.custom_property_part_count,
+            "custom_property_count": self.custom_property_count,
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -159,6 +182,7 @@ class DocumentSnapshot:
     styles: StyleInventory
     embedded_objects: EmbeddedObjectInventory
     alternative_format_imports: AlternativeFormatImportInventory
+    document_properties: DocumentPropertyInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -236,6 +260,7 @@ class DocumentSnapshot:
             "styles": self.styles.public_dict(),
             "embedded_objects": self.embedded_objects.public_dict(),
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
+            "document_properties": self.document_properties.public_dict(),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

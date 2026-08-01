@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.4.0 — 2026-08-01
+
+- Added separate privacy-safe inventories for core, extended, and custom OOXML
+  document-property parts, including aggregate part/value counts only.
+- Added `DFP019` to block document-property inventory changes and `DFP020` to
+  require that a candidate have no stored custom-property definitions.
+- Validated recognized document-property roots and removed recognized property
+  parts from the generic unclassified-payload inventory.
+- Added regression coverage for core/extended/custom property changes, physical
+  canonical property paths, Strict OOXML property variants, malformed property
+  roots, relationship-ID renumbering, policy results, and metadata-name/value
+  redaction.
+- Documented that core and extended counts include automatic metadata and do not
+  classify a property as personal, confidential, intentional, or safe.
+
 ## 0.3.0 — 2026-08-01
 
 - Added separate privacy-safe inventories for embedded OLE/package payloads,

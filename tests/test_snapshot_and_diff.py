@@ -29,6 +29,37 @@ _OLE_OBJECT_RELATIONSHIP_TYPE = (
 _PACKAGE_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
 )
+_CORE_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
+_EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
+_CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
+_STRICT_EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/extendedProperties"
+)
+_STRICT_CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/customProperties"
+)
+_CORE_PROPERTIES_NAMESPACE = (
+    "http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+)
+_EXTENDED_PROPERTIES_NAMESPACE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+)
+_CUSTOM_PROPERTIES_NAMESPACE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
+)
+_STRICT_EXTENDED_PROPERTIES_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/officeDocument/extendedProperties"
+)
+_STRICT_CUSTOM_PROPERTIES_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/officeDocument/customProperties"
+)
+_DUBLIN_CORE_NAMESPACE = "http://purl.org/dc/elements/1.1/"
+_DOCUMENT_PROPERTIES_VT_NAMESPACE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"
+)
+_STRICT_DOCUMENT_PROPERTIES_VT_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/officeDocument/docPropsVTypes"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -72,6 +103,14 @@ def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None
         "alternative_format_import_payload_part_count": 0,
     }
     assert public["alternative_format_import_anchor_count"] == 0
+    assert public["document_properties"] == {
+        "core_property_part_count": 0,
+        "core_property_value_count": 0,
+        "extended_property_part_count": 0,
+        "extended_property_value_count": 0,
+        "custom_property_part_count": 0,
+        "custom_property_count": 0,
+    }
     assert public["field_code_count"] == 1
     assert public["content_control_count"] == 1
     assert public["comment_anchor_count"] == 1
@@ -333,6 +372,109 @@ def test_alt_chunk_requires_a_matching_internal_import_relationship(tmp_path) ->
         load_snapshot(external_target)
     with pytest.raises(DocumentFormatError):
         load_snapshot(missing_target)
+
+
+def test_document_property_inventory_is_private_and_relationship_id_stable(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    value_changed = tmp_path / "value-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    unlinked = tmp_path / "unlinked.docx"
+    strict_properties = tmp_path / "strict-properties.docx"
+    malformed = tmp_path / "malformed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_document_property_document(before, include_properties=False)
+    _write_document_property_document(after)
+    _write_document_property_document(
+        value_changed, core_title="CORE_TITLE_CHANGED_DO_NOT_LEAK"
+    )
+    _write_document_property_document(renumbered, relationship_id_suffix="9")
+    _write_document_property_document(unlinked, include_property_relationships=False)
+    _write_document_property_document(strict_properties, strict_property_syntax=True)
+    _write_document_property_document(malformed, malformed_core=True)
+
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["document_properties"] == {
+        "core_property_part_count": 1,
+        "core_property_value_count": 2,
+        "extended_property_part_count": 1,
+        "extended_property_value_count": 2,
+        "custom_property_part_count": 1,
+        "custom_property_count": 2,
+    }
+    assert snapshot.unclassified_part_count == 1
+    assert (
+        load_snapshot(unlinked).public_dict()["document_properties"]
+        == (snapshot.public_dict()["document_properties"])
+    )
+    assert (
+        load_snapshot(strict_properties).public_dict()["document_properties"]
+        == (snapshot.public_dict()["document_properties"])
+    )
+
+    report = diff_documents(before, after)
+    assert "document_property_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    value_report = diff_documents(after, value_changed)
+    assert {change.kind for change in value_report.changes} == {
+        "document_property_inventory_changed"
+    }
+    assert diff_documents(after, renumbered).changes == ()
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(malformed)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  no_document_property_changes: true
+  require_no_custom_document_properties: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP019",
+        "DFP020",
+    }
+    assert {
+        finding.rule_id for finding in apply_policy(value_report, policy).findings
+    } == {"DFP019", "DFP020"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP020"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_DOCUMENT_PROPERTY_INVENTORY_CHANGED",
+        "DFP019",
+        "DFP020",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "CORE_CREATOR_DO_NOT_LEAK",
+        "CORE_TITLE_DO_NOT_LEAK",
+        "CORE_TITLE_CHANGED_DO_NOT_LEAK",
+        "EXTENDED_COMPANY_DO_NOT_LEAK",
+        "EXTENDED_MANAGER_DO_NOT_LEAK",
+        "CUSTOM_PROPERTY_NAME_DO_NOT_LEAK",
+        "CUSTOM_PROPERTY_VALUE_DO_NOT_LEAK",
+        "SECOND_CUSTOM_PROPERTY_NAME_DO_NOT_LEAK",
+        "SECOND_CUSTOM_PROPERTY_VALUE_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
 
 
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
@@ -690,6 +832,104 @@ def _write_embedded_content_document(
     }
     if include_import_payload:
         entries["word/afchunk1.html"] = import_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_document_property_document(
+    path,
+    *,
+    core_title: str = "CORE_TITLE_DO_NOT_LEAK",
+    relationship_id_suffix: str = "1",
+    include_properties: bool = True,
+    include_property_relationships: bool = True,
+    strict_property_syntax: bool = False,
+    malformed_core: bool = False,
+) -> None:
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    extended_relationship_type = (
+        _STRICT_EXTENDED_PROPERTIES_RELATIONSHIP_TYPE
+        if strict_property_syntax
+        else _EXTENDED_PROPERTIES_RELATIONSHIP_TYPE
+    )
+    custom_relationship_type = (
+        _STRICT_CUSTOM_PROPERTIES_RELATIONSHIP_TYPE
+        if strict_property_syntax
+        else _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE
+    )
+    extended_properties_namespace = (
+        _STRICT_EXTENDED_PROPERTIES_NAMESPACE
+        if strict_property_syntax
+        else _EXTENDED_PROPERTIES_NAMESPACE
+    )
+    custom_properties_namespace = (
+        _STRICT_CUSTOM_PROPERTIES_NAMESPACE
+        if strict_property_syntax
+        else _CUSTOM_PROPERTIES_NAMESPACE
+    )
+    document_properties_vt_namespace = (
+        _STRICT_DOCUMENT_PROPERTIES_VT_NAMESPACE
+        if strict_property_syntax
+        else _DOCUMENT_PROPERTIES_VT_NAMESPACE
+    )
+    if include_properties:
+        if include_property_relationships:
+            entries["_rels/.rels"] = (
+                f'<Relationships xmlns="{PR}">'
+                f'<Relationship Id="rIdCore{relationship_id_suffix}" '
+                f'Type="{_CORE_PROPERTIES_RELATIONSHIP_TYPE}" '
+                'Target="docProps/core.xml"/>'
+                f'<Relationship Id="rIdExtended{relationship_id_suffix}" '
+                f'Type="{extended_relationship_type}" '
+                'Target="docProps/app.xml"/>'
+                f'<Relationship Id="rIdCustom{relationship_id_suffix}" '
+                f'Type="{custom_relationship_type}" '
+                'Target="docProps/custom.xml"/>'
+                "</Relationships>"
+            ).encode()
+        entries["docProps/core.xml"] = (
+            b"<invalid/>"
+            if malformed_core
+            else (
+                f'<cp:coreProperties xmlns:cp="{_CORE_PROPERTIES_NAMESPACE}" '
+                f'xmlns:dc="{_DUBLIN_CORE_NAMESPACE}">'
+                "<dc:creator>CORE_CREATOR_DO_NOT_LEAK</dc:creator>"
+                f"<dc:title>{core_title}</dc:title>"
+                "</cp:coreProperties>"
+            ).encode()
+        )
+        entries["docProps/app.xml"] = (
+            f'<Properties xmlns="{extended_properties_namespace}">'
+            "<Company>EXTENDED_COMPANY_DO_NOT_LEAK</Company>"
+            "<Manager>EXTENDED_MANAGER_DO_NOT_LEAK</Manager>"
+            "</Properties>"
+        ).encode()
+        entries["docProps/custom.xml"] = (
+            f'<Properties xmlns="{custom_properties_namespace}" '
+            f'xmlns:vt="{document_properties_vt_namespace}">'
+            '<property fmtid="FMTID" pid="2" '
+            'name="CUSTOM_PROPERTY_NAME_DO_NOT_LEAK">'
+            "<vt:lpwstr>CUSTOM_PROPERTY_VALUE_DO_NOT_LEAK</vt:lpwstr>"
+            "</property>"
+            '<property fmtid="FMTID" pid="3" '
+            'name="SECOND_CUSTOM_PROPERTY_NAME_DO_NOT_LEAK">'
+            "<vt:lpwstr>SECOND_CUSTOM_PROPERTY_VALUE_DO_NOT_LEAK</vt:lpwstr>"
+            "</property>"
+            "</Properties>"
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

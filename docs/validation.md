@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.3 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.4 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -10,19 +10,22 @@ following properties:
   marks (including `w:specVanish`), stored style/default hidden-text
   declarations, fields, content controls, Track Changes, external
   relationships, custom XML, macros, embedded OLE/package/control payloads,
-  ActiveX control chains, alternative-format imports, and unclassified payload
-  changes are detected by the intended inventories;
+  ActiveX control chains, alternative-format imports, core/extended/custom
+  document properties (including Strict OOXML property variants), and
+  unclassified payload changes are detected by the intended inventories;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
-  underlying target and embedded/import payload remain quiet;
+  underlying target, embedded/import payload, and document-property state remain
+  quiet;
 - generated JSON, Markdown, and SARIF do not reproduce unique markers placed
   in visible/hidden text, reviewer metadata, comments, URLs, field instructions,
-  custom XML, macros, embedded/control payloads, alternative-format imports, or
-  opaque package parts;
+  custom XML, document-property names or values, macros, embedded/control
+  payloads, alternative-format imports, or opaque package parts;
 - policy failures return a nonzero CI status and SARIF uses no source location;
 - DTD/entity markup, unsafe ZIP member names, and `w:altChunk` markup without a
-  matching internal import relationship are rejected before reporting.
+  matching internal import relationship, plus malformed recognized
+  document-property roots, are rejected before reporting.
 
 The release check is:
 
@@ -46,6 +49,8 @@ is not a DocFence dependency and is not required at runtime.
 The suite does not claim layout equivalence, Word calculation behavior,
 style-inherited effective hiddenness, macro safety, embedded-payload safety,
 malware detection, alternative-format rendering/import behavior, or
-compatibility with every vendor extension. The style/default layer is a stored
-declaration inventory, not a renderer. Those limits are explicit in the 0.3
-contract; see the [threat model](threat-model.md).
+compatibility with every vendor extension. It also does not decide whether a
+document-property value is personal, confidential, intended, or safe to share.
+The style/default layer is a stored declaration inventory, not a renderer.
+Those limits are explicit in the 0.4 contract; see the
+[threat model](threat-model.md).

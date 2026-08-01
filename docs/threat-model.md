@@ -9,10 +9,11 @@ package. It is not a general-purpose malware sandbox or a renderer.
 The source document is treated as sensitive. Its body text, hidden text,
 comments, reviewer metadata, relationship targets, field instructions, style
 identifiers, custom XML, macro bytes, embedded-object bytes, and
-alternative-format-import bytes must not become DocFence report content. The
-report may be stored in CI artifacts, pasted into an issue, or uploaded to a
-SARIF consumer, so it is intentionally restricted to counts, fixed categories,
-booleans, and generic story kinds.
+alternative-format-import bytes, document-property names, and document-property
+values must not become DocFence report content. The report may be stored in CI
+artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
+intentionally restricted to counts, fixed categories, booleans, and generic
+story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -64,6 +65,12 @@ the already validated ZIP member map. A `w:altChunk` anchor must name a matching
 internal `aFChunk` relationship. These checks never interpret the target's
 payload bytes as an application document, script, image, or HTML.
 
+Core, extended, and custom property XML follows the same boundary. DocFence
+validates recognized property roots and fingerprints the full stored structure
+privately. It does not disclose a property name, value, path, relationship
+target, or digest. A count is evidence that stored metadata exists, not a
+classification of the metadata as personal or safe.
+
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
 and external tools are outside this contract.
@@ -83,7 +90,11 @@ or business effect. Embedded OLE/package/control evidence and alternative-format
 imports are separate inventories, but they are not decoded, rendered, imported,
 or scanned for malware. Recognized conventional folders make otherwise opaque
 payloads review-visible; they do not prove the payload is valid, safe, or used
-by Word.
+by Word. Core and extended document-property counts include automatic data such
+as timestamps, statistics, and application information. Their changes can be
+expected on a normal save; DocFence records them without interpreting their
+provenance or sensitivity. The custom-property candidate gate is limited to
+stored custom definitions and is not a general PII detector.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

@@ -40,6 +40,8 @@ starter policy.
 | `require_no_alternative_format_imports` | `DFP016` | Candidate has stored `aFChunk` import relationships, payloads, or `w:altChunk` anchors | Candidate |
 | `no_embedded_object_payload_changes` | `DFP017` | Embedded OLE/package/control inventory differs | Comparison |
 | `no_alternative_format_import_changes` | `DFP018` | Alternative-format import inventory or anchor count differs | Comparison |
+| `no_document_property_changes` | `DFP019` | Core, extended, or custom document-property inventory differs | Comparison |
+| `require_no_custom_document_properties` | `DFP020` | Candidate has stored custom document-property definitions | Candidate |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -61,8 +63,9 @@ can flag a media, metadata, or other opaque package mutation. A template that
 intentionally embeds a known payload can instead enable
 `no_embedded_object_payload_changes` or
 `no_alternative_format_import_changes` to preserve that baseline while blocking
-a later mutation. `word/styles.xml` is handled by the dedicated style inventory
-instead.
+a later mutation. `no_document_property_changes` gives the same controlled
+baseline option for document metadata. `word/styles.xml` is handled by the
+dedicated style inventory instead.
 
 ## Hidden-text scope
 
@@ -97,6 +100,27 @@ For every encountered `w:altChunk`, DocFence requires a matching internal
 standard `aFChunk` relationship whose target safely resolves to a stored package
 member. It does not decode, import, render, execute, or assess the safety of
 that payload. Findings and reports expose only aggregate counts.
+
+## Document-property scope
+
+DocFence inventories the standard core, extended, and custom document-property
+relationship types, plus the canonical `docProps/core.xml`, `docProps/app.xml`,
+and `docProps/custom.xml` paths when present. The property root must match the
+expected OOXML vocabulary. Reports contain only part and aggregate-value counts;
+property names, values, paths, relationship targets, and fingerprints remain
+private.
+
+Core and extended value counts cover direct property elements with stored text,
+including automatically maintained timestamps, statistics, application details,
+and template metadata. `no_document_property_changes` therefore detects a
+normal resave that updates one of those fields. Use it when that exact metadata
+delta matters at a controlled boundary, not as an assertion that every metadata
+change is suspicious.
+
+`require_no_custom_document_properties` is narrower: it fails only when the
+candidate contains stored custom-property definitions. It does not classify
+core or extended metadata as personal, confidential, user-authored, or safe.
+Custom property names and values are never emitted.
 
 ## CI example
 

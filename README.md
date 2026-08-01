@@ -5,9 +5,9 @@ files. It turns an opaque document diff into a reviewable, privacy-safe account
 of stored content-block changes and the review surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external relationships, custom XML,
-macros, embedded OLE/package/control payloads, OOXML alternative-format
-imports, headers, footers, notes, document settings, and otherwise
-unclassified package payloads.
+macros, core/extended/custom document properties, embedded OLE/package/control
+payloads, OOXML alternative-format imports, headers, footers, notes, document
+settings, and otherwise unclassified package payloads.
 
 It never opens Word, executes macros, follows links, renders a document, uploads
 source material, or writes a redline. By default, reports contain counts,
@@ -42,7 +42,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.3 focuses on Office Open XML Word documents and deliberately keeps a
+Version 0.4 focuses on Office Open XML Word documents and deliberately keeps a
 small, inspectable contract:
 
 - bounded `.docx` / `.docm` ZIP packages;
@@ -52,12 +52,12 @@ small, inspectable contract:
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, content-control, external-relationship, custom-XML, macro,
-  embedded OLE/package/control, alternative-format-import, and Track Changes
-  inventories;
+  core/extended/custom document-property, embedded OLE/package/control,
+  alternative-format-import, and Track Changes inventories;
 - `w:altChunk` anchors paired with an internal OOXML alternative-format-import
   relationship and its stored payload;
 - a generic alert for changed package payload outside those specialized
-  inventories (for example, media or metadata parts);
+  inventories (for example, media, thumbnails, or other opaque parts);
 - JSON, Markdown, and SARIF output with content redaction by design.
 
 The reader rejects symlinks, encrypted ZIP entries, duplicate or colliding
@@ -90,6 +90,15 @@ encountered `w:altChunk` must reference an internal standard `aFChunk`
 relationship; the target must resolve to a stored package member or parsing
 fails closed. The payload itself remains opaque and private.
 
+Document properties are likewise recorded without exposing their names or
+values. DocFence recognizes the standard core, extended, and custom property
+relationship types plus the canonical `docProps/core.xml`, `docProps/app.xml`,
+and `docProps/custom.xml` paths. Core and extended value counts report direct
+property elements containing stored text, including automatic dates, statistics,
+and application metadata. The custom count reports stored custom-property
+definitions even when a value is empty. It does not decide whether any value is
+personal, confidential, user-authored, or safe to share.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -116,15 +125,17 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_hidden_paragraph_marks: true
   require_no_embedded_objects: true
   require_no_alternative_format_imports: true
+  require_no_custom_document_properties: true
 ```
 
-When an established template intentionally contains one of those payloads, use
-the corresponding comparison gates to permit the known baseline but fail a
+When an established template intentionally contains one of those stored states,
+use the corresponding comparison gates to permit the known baseline but fail a
 later mutation:
 
 ```yaml
   no_embedded_object_payload_changes: true
   no_alternative_format_import_changes: true
+  no_document_property_changes: true
 ```
 
 YAML anchors, aliases, sequences, nested mappings, duplicate keys, unknown
@@ -137,9 +148,10 @@ DocFence keeps document material in memory only long enough to create private
 SHA-256 fingerprints. Public models and renderers intentionally omit package
 part names, paragraph content, reviewer identity, dates, comment content,
 relationship targets, field instructions, style identifiers and names, custom
-XML values, macro bytes, embedded and imported payload bytes, and all
-fingerprints. Regression tests place unique sensitive markers in each of those
-surfaces and assert that JSON, Markdown, and SARIF never reproduce them.
+XML values, document-property names and values, macro bytes, embedded and
+imported payload bytes, and all fingerprints. Regression tests place unique
+sensitive markers in each of those surfaces and assert that JSON, Markdown, and
+SARIF never reproduce them.
 
 This contract applies to DocFence's own reports. It cannot prevent a caller from
 printing a source path, retaining a source document, or independently logging
@@ -158,6 +170,8 @@ Microsoft also calls out [embedded files and objects](https://support.microsoft.
 as an inspectable hidden-data surface. The alternative-import boundary follows
 the Open XML SDK's [`w:altChunk` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.altchunk?view=openxml-3.0.1)
 and its package-part model for [embedded and import parts](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.packaging.maindocumentpart?view=openxml-3.0.1).
+Microsoft's [document-property guidance](https://support.microsoft.com/en-us/office/view-or-change-the-properties-for-an-office-file-21d604c2-481e-4379-8e54-1dd4622c6b75)
+and Document Inspector coverage inform the metadata boundary.
 
 ## Development
 
