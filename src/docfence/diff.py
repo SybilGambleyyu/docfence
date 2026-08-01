@@ -601,6 +601,19 @@ def _append_package_changes(
                 },
             )
         )
+    if before.word_object_links.signature != after.word_object_links.signature:
+        changes.append(
+            Change(
+                kind="word_object_link_inventory_changed",
+                message=(
+                    "Stored WordprocessingML linked-object-property inventory changed."
+                ),
+                details={
+                    "before": before.word_object_links.public_dict(),
+                    "after": after.word_object_links.public_dict(),
+                },
+            )
+        )
     if (
         before.word_permission_ranges.signature
         != after.word_permission_ranges.signature

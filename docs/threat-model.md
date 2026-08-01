@@ -51,6 +51,9 @@ image-data attributes, and story-part paths are sensitive package material too.
 Direct legacy VML linked-OLE sources, monikers, program, shape, and object
 identifiers, relationship IDs and targets, update metadata, field codes,
 markup, and story-part paths are sensitive package material too.
+Direct WordprocessingML linked-object-property program and shape identifiers,
+relationship IDs and targets, field codes, locking and update metadata, markup,
+and story-part paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
 selectors, custom-XML placement, and story-part paths are sensitive package
 material too. An editor value can be an email address, alias, or domain
@@ -497,6 +500,12 @@ retrieves a source, updates or activates an OLE object, or honors an automatic
 update flag. DocFence does not select Markup Compatibility branches, associate
 markers with rendered objects, deduplicate a visual object, resolve, retrieve,
 open, update, activate, evaluate, render, or execute an OLE object.
+Direct WordprocessingML linked-object-property counts are likewise stored-state
+evidence, not proof that a client selects a marker, associates it with a visual
+object, retrieves a source, updates or activates an OLE object, or honors a
+stored update mode. DocFence does not select Markup Compatibility branches,
+associate markers with rendered objects, deduplicate a visual object, resolve,
+retrieve, open, update, activate, evaluate, render, or execute an OLE object.
 Word editable-range counts are likewise stored-state evidence, not a statement
 that an individual is authenticated, a group resolves, a client will honor a
 boundary, an exact text/table region is editable, or a restriction is secure.

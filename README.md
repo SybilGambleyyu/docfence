@@ -11,7 +11,8 @@ click/hover/mouse-over hyperlink-action markup, direct DrawingML linked-picture
 `a:blip/@r:link` markup, legacy VML shape `href` markup, legacy VML external
 image-data `v:imagedata/@r:id` markup, legacy VML image-data hyperlink
 `v:imagedata/@r:href` markup, legacy Office VML linked-OLE
-`o:OLEObject Type="Link"` markup, external
+`o:OLEObject Type="Link"` markup, direct WordprocessingML linked-object-property
+`w:objectLink` markup, external
 relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
@@ -62,6 +63,9 @@ private too.
 Legacy VML linked-OLE sources, monikers, program, shape, and object identifiers,
 relationship IDs, update metadata, field codes, markup, and story-part paths
 are private too.
+WordprocessingML linked-object-property program and shape identifiers,
+relationship IDs and targets, field codes, locking and update metadata, markup,
+and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -92,7 +96,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.24 focuses on Office Open XML Word documents and templates and
+Version 0.25 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -108,6 +112,8 @@ deliberately keeps a small, inspectable contract:
   legacy VML `v:imagedata/@r:id` markup backed by an external relationship,
   legacy VML `v:imagedata/@r:href` hyperlink-target markup,
   legacy Office VML `o:OLEObject Type="Link"` linked-OLE markup,
+  direct WordprocessingML `w:object/w:objectLink` linked-object-property
+  markup,
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
@@ -487,6 +493,41 @@ approved marker baseline. The inventory never resolves, retrieves, opens,
 updates, activates, evaluates, renders, or executes an OLE object, and no count
 establishes that a client will honor it.
 
+WordprocessingML linked-object-property markup is a distinct, narrower
+compatibility surface. DocFence records every direct `w:objectLink` child of a
+`w:object` in supported Word stories, including duplicates and markers in
+Markup Compatibility branches. It does not select a branch, associate a marker
+with a rendered object, deduplicate a visual object, retrieve a source, or
+activate or update an OLE object. `w:objectEmbed`, legacy Office VML
+`o:OLEObject Type="Link"`, VML image data and shape links, DrawingML linked
+pictures, fields, and generic embedded-object relationship or payload totals
+remain separate inventories.
+
+When an `objectLink` carries `r:id`, DocFence classifies a standard
+OLE-object relationship by its stored external or internal target mode; every
+other resolved type or mode remains reviewable as unsupported evidence. The
+schema requires `r:id` and `w:updateMode`, but a direct marker missing the
+former remains a separate stored-evidence class and an absent or unexpected
+stored mode remains an unsupported-or-missing class. Only exact schema tokens
+`w:updateMode="always"` and `w:updateMode="onCall"` receive the named
+automatic and on-call aggregate counts. None of those counts predicts a client
+update, retrieval, activation, or render outcome.
+
+Public output exposes only aggregate marker/story, update-mode, and
+relationship-classification counts. Program and shape identifiers, relationship
+IDs and targets, field codes, locking metadata, markup, story paths, and
+fingerprints remain private. The full direct marker is privately fingerprinted,
+so same-count program, field-code, locking, update-mode, or target rewrites
+remain visible; relationship-ID renumbering with unchanged relationship
+semantics is quiet.
+
+`require_no_word_object_links` fails for every stored direct
+WordprocessingML linked-object-property marker, while
+`no_word_object_link_changes` protects an approved marker baseline. The
+inventory never resolves, retrieves, opens, updates, activates, evaluates,
+renders, or executes an OLE object, and no count establishes that a client will
+honor it.
+
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
 counts stored `w:mailMerge` configuration, external data and header source
@@ -863,6 +904,19 @@ with `Type="Link"` and `UpdateMode="Always"`, and a
 [linked OLE shape](https://forum.aspose.com/t/cannot-found-includepicture-field-type-via-doc-range-fields/277035)
 with `UpdateMode="OnCall"`. DocFence reports only bounded stored evidence from
 that markup, never a client update or retrieval outcome.
+The distinct WordprocessingML linked-object-property boundary follows the Open
+XML SDK's
+[`w:objectLink` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.objectlink?view=openxml-3.0.1),
+which identifies it as an Office 2007+ leaf element whose parent is
+`w:object` and exposes the `r:id`, program, field-code, locking, and
+update-mode attributes. The ISO 29500 schema's
+[`CT_ObjectLink` definition](https://github.com/dolanmiu/docx/blob/309b972e107b8cc12c65027d5161b7045e404b6c/ooxml-schemas/ISO-IEC29500-4_2016/wml.xsd#L1188-L1228)
+requires `r:id` and `updateMode` and enumerates `always` and `onCall`;
+the [Embedded Object Part contract](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Embedded_topic_ID0EA5BO.html)
+permits the standard OLE-object relationship target to be internal or external.
+The Microsoft API page's illustrative `updateMode="user"` is not promoted to a
+standard mode: DocFence keeps an absent or unexpected stored mode only as
+unsupported evidence, never as a client-behavior claim.
 The legacy VML boundary follows Microsoft's [`HRef` shape
 attribute](https://learn.microsoft.com/en-us/windows/win32/vml/href-attribute--shape--vml),
 which defines the URL used when a shape is clicked, and the W3C's

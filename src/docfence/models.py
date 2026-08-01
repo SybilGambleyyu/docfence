@@ -629,6 +629,55 @@ class WordVmlLinkedOleObjectInventory:
 
 
 @dataclass(frozen=True)
+class WordObjectLinkInventory:
+    """Direct WordprocessingML linked-object-property markup, aggregate only.
+
+    Relationship targets and IDs, program and shape identifiers, field codes,
+    markup, story paths, and fingerprints can reveal document context. Public
+    output reports only direct-marker, exact stored update-mode, and
+    relationship-classification counts; the private signature retains the
+    direct reviewed marker. A stored marker is not evidence that a Word client
+    will update, retrieve, activate, or otherwise honor an OLE object.
+    """
+
+    object_link_count: int
+    object_link_story_count: int
+    automatic_update_object_link_count: int
+    on_call_update_object_link_count: int
+    unsupported_or_missing_update_mode_object_link_count: int
+    external_standard_ole_object_relationship_object_link_count: int
+    internal_standard_ole_object_relationship_object_link_count: int
+    unsupported_relationship_object_link_count: int
+    without_relationship_id_object_link_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "object_link_count": self.object_link_count,
+            "object_link_story_count": self.object_link_story_count,
+            "automatic_update_object_link_count": (
+                self.automatic_update_object_link_count
+            ),
+            "on_call_update_object_link_count": self.on_call_update_object_link_count,
+            "unsupported_or_missing_update_mode_object_link_count": (
+                self.unsupported_or_missing_update_mode_object_link_count
+            ),
+            "external_standard_ole_object_relationship_object_link_count": (
+                self.external_standard_ole_object_relationship_object_link_count
+            ),
+            "internal_standard_ole_object_relationship_object_link_count": (
+                self.internal_standard_ole_object_relationship_object_link_count
+            ),
+            "unsupported_relationship_object_link_count": (
+                self.unsupported_relationship_object_link_count
+            ),
+            "without_relationship_id_object_link_count": (
+                self.without_relationship_id_object_link_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordPermissionRangeInventory:
     """Stored Word editable-range permission markup, aggregate only.
 
@@ -984,6 +1033,7 @@ class DocumentSnapshot:
     word_vml_external_images: WordVmlExternalImageInventory
     word_vml_image_hyperlinks: WordVmlImageHyperlinkInventory
     word_vml_linked_ole_objects: WordVmlLinkedOleObjectInventory
+    word_object_links: WordObjectLinkInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
@@ -1097,6 +1147,7 @@ class DocumentSnapshot:
             "word_vml_linked_ole_objects": (
                 self.word_vml_linked_ole_objects.public_dict()
             ),
+            "word_object_links": self.word_object_links.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),

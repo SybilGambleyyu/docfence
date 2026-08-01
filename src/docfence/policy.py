@@ -74,6 +74,8 @@ _RULES: Final = {
     "no_word_vml_image_hyperlink_changes": "DFP060",
     "require_no_word_vml_linked_ole_objects": "DFP061",
     "no_word_vml_linked_ole_object_changes": "DFP062",
+    "require_no_word_object_links": "DFP063",
+    "no_word_object_link_changes": "DFP064",
 }
 
 
@@ -454,6 +456,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_object_link_changes") and (
+        before.word_object_links.signature != after.word_object_links.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_object_link_changes",
+                "Stored WordprocessingML linked-object-property inventory changed.",
+                {
+                    "before": before.word_object_links.public_dict(),
+                    "after": after.word_object_links.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -782,6 +797,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_vml_linked_ole_objects",
                 "Candidate contains stored VML linked-OLE-object markup.",
                 after.word_vml_linked_ole_objects.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_object_links") and any(
+        after.word_object_links.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_object_links",
+                (
+                    "Candidate contains stored WordprocessingML "
+                    "linked-object-property markup."
+                ),
+                after.word_object_links.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

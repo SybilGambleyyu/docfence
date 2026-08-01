@@ -3863,6 +3863,206 @@ rules:
         assert marker not in rendered
 
 
+def test_word_object_link_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    target_changed = tmp_path / "target-changed.docx"
+    field_changed = tmp_path / "field-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    orphaned_relationship = tmp_path / "orphaned-relationship.docx"
+    unavailable_marker = tmp_path / "unavailable-marker.docx"
+    strict = tmp_path / "strict.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_word_object_link_document(before, include_markup=False)
+    _write_word_object_link_document(after)
+    _write_word_object_link_document(
+        target_changed,
+        external_target=(
+            "https://CHANGED_WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK.invalid/source"
+        ),
+    )
+    _write_word_object_link_document(
+        field_changed,
+        field_codes="CHANGED_WORD_OBJECT_LINK_FIELD_CODES_DO_NOT_LEAK",
+    )
+    _write_word_object_link_document(
+        renumbered,
+        external_relationship_id="rIdRENUMBERED_WORD_OBJECT_LINK_DO_NOT_LEAK",
+    )
+    _write_word_object_link_document(
+        orphaned_relationship,
+        include_markup=False,
+        include_orphan_ole_relationship=True,
+    )
+    _write_word_object_link_document(
+        unavailable_marker,
+        include_unavailable_link_marker=True,
+    )
+    _write_word_object_link_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        relationship_attribute_namespace=_STRICT_RELATIONSHIP_NAMESPACE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+        ole_object_relationship_type=_STRICT_OLE_OBJECT_RELATIONSHIP_TYPE,
+        image_relationship_type=_STRICT_IMAGE_RELATIONSHIP_TYPE,
+    )
+
+    expected_inventory = {
+        "object_link_count": 7,
+        "object_link_story_count": 2,
+        "automatic_update_object_link_count": 3,
+        "on_call_update_object_link_count": 2,
+        "unsupported_or_missing_update_mode_object_link_count": 2,
+        "external_standard_ole_object_relationship_object_link_count": 3,
+        "internal_standard_ole_object_relationship_object_link_count": 2,
+        "unsupported_relationship_object_link_count": 1,
+        "without_relationship_id_object_link_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    target_changed_snapshot = load_snapshot(target_changed)
+    field_changed_snapshot = load_snapshot(field_changed)
+    renumbered_snapshot = load_snapshot(renumbered)
+    assert after_snapshot.public_dict()["word_object_links"] == expected_inventory
+    assert after_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 7,
+        "external_relationship_count": 5,
+    }
+    assert after_snapshot.public_dict()["embedded_objects"] == {
+        "embedded_object_relationship_count": 6,
+        "embedded_object_part_count": 2,
+        "embedded_control_relationship_count": 0,
+        "embedded_control_part_count": 0,
+    }
+    assert before_snapshot.public_dict()["word_object_links"] == {
+        key: 0 for key in expected_inventory
+    }
+    orphaned_snapshot = load_snapshot(orphaned_relationship)
+    assert orphaned_snapshot.public_dict()["relationships"] == {
+        "relationship_count": 1,
+        "external_relationship_count": 1,
+    }
+    assert orphaned_snapshot.public_dict()["word_object_links"] == {
+        key: 0 for key in expected_inventory
+    }
+    with pytest.raises(DocumentFormatError, match="unavailable relationship"):
+        load_snapshot(unavailable_marker)
+    assert (
+        load_snapshot(strict).public_dict()["word_object_links"]
+        == expected_inventory
+    )
+    assert (
+        renumbered_snapshot.word_object_links.signature
+        == after_snapshot.word_object_links.signature
+    )
+    for inventory_name in (
+        "word_hyperlink_fields",
+        "word_hyperlink_markup",
+        "word_drawing_hyperlinks",
+        "word_drawing_linked_pictures",
+        "word_vml_hyperlinks",
+        "word_vml_external_images",
+        "word_vml_image_hyperlinks",
+        "word_vml_linked_ole_objects",
+    ):
+        assert not any(after_snapshot.public_dict()[inventory_name].values())
+
+    report = diff_documents(before, after)
+    assert "word_object_link_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_object_link_inventory_changed" in {
+        change.kind for change in diff_documents(after, target_changed).changes
+    }
+    assert "word_object_link_inventory_changed" in {
+        change.kind for change in diff_documents(after, field_changed).changes
+    }
+    assert "word_object_link_inventory_changed" not in {
+        change.kind for change in diff_documents(after, renumbered).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_object_links: true
+  no_word_object_link_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP063",
+        "DFP064",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, target_changed), policy
+        ).findings
+    } == {"DFP063", "DFP064"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, field_changed), policy
+        ).findings
+    } == {"DFP063", "DFP064"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP063"}
+
+    gated = apply_policy(report, policy)
+    target_changed_gated = apply_policy(diff_documents(after, target_changed), policy)
+    field_changed_gated = apply_policy(diff_documents(after, field_changed), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(target_changed_snapshot, "json"),
+            render_report(target_changed_gated, "sarif"),
+            render_profile(field_changed_snapshot, "markdown"),
+            render_report(field_changed_gated, "sarif"),
+            render_profile(renumbered_snapshot, "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_OBJECT_LINK_INVENTORY_CHANGED",
+        "DFP063",
+        "DFP064",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VISIBLE_DO_NOT_LEAK",
+        "HEADER_VISIBLE_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK",
+        "CHANGED_WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_INTERNAL_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_UNSUPPORTED_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_EMBED_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_UNPARENTED_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_HEADER_TARGET_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_INTERNAL_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_UNSUPPORTED_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_DUPLICATE_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_NO_ID_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_MISSING_MODE_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_EMBED_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_UNPARENTED_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_HEADER_PROGID_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_FIELD_CODES_DO_NOT_LEAK",
+        "CHANGED_WORD_OBJECT_LINK_FIELD_CODES_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_INTERNAL_PAYLOAD_DO_NOT_LEAK",
+        "WORD_OBJECT_LINK_HEADER_PAYLOAD_DO_NOT_LEAK",
+        "rIdRENUMBERED_WORD_OBJECT_LINK_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_word_vml_hyperlink_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -6470,6 +6670,172 @@ def _write_vml_linked_ole_object_document(
         )
         entries["word/embeddings/VML_LINKED_OLE_HEADER_TARGET_DO_NOT_LEAK.bin"] = (
             b"VML_LINKED_OLE_HEADER_PAYLOAD_DO_NOT_LEAK"
+        )
+    if relationship_entries:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{relationship_entries}</Relationships>"
+        ).encode()
+    if header_relationship_entries:
+        entries["word/_rels/header1.xml.rels"] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f"{header_relationship_entries}</Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_word_object_link_document(
+    path,
+    *,
+    include_markup: bool = True,
+    include_orphan_ole_relationship: bool = False,
+    include_unavailable_link_marker: bool = False,
+    external_target: str = (
+        "https://WORD_OBJECT_LINK_TARGET_DO_NOT_LEAK.invalid/source"
+    ),
+    field_codes: str = "WORD_OBJECT_LINK_FIELD_CODES_DO_NOT_LEAK",
+    external_relationship_id: str = "rIdWordObjectLinkExternal",
+    word_namespace: str = W,
+    relationship_attribute_namespace: str = R,
+    relationship_namespace: str = PR,
+    ole_object_relationship_type: str = _OLE_OBJECT_RELATIONSHIP_TYPE,
+    image_relationship_type: str = _IMAGE_RELATIONSHIP_TYPE,
+) -> None:
+    """Write direct WordprocessingML objectLink markers across Word stories."""
+
+    body_markup = ""
+    header_markup = ""
+    relationship_entries = ""
+    header_relationship_entries = ""
+    if include_markup:
+        body_markup = "".join(
+            (
+                "<w:r><w:object>"
+                f'<w:objectLink w:drawAspect="icon" r:id="{external_relationship_id}" '
+                'w:progId="WORD_OBJECT_LINK_PROGID_DO_NOT_LEAK" '
+                'w:shapeId="WORD_OBJECT_LINK_SHAPE_ID_DO_NOT_LEAK" '
+                f'w:fieldCodes="{field_codes}" w:lockedField="true" '
+                'w:updateMode="always"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectLink r:id="rIdWordObjectLinkInternal" '
+                'w:progId="WORD_OBJECT_LINK_INTERNAL_PROGID_DO_NOT_LEAK" '
+                'w:updateMode="onCall"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectLink r:id="rIdWordObjectLinkUnsupported" '
+                'w:progId="WORD_OBJECT_LINK_UNSUPPORTED_PROGID_DO_NOT_LEAK" '
+                'w:updateMode="user"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                f'<w:objectLink r:id="{external_relationship_id}" '
+                'w:progId="WORD_OBJECT_LINK_DUPLICATE_PROGID_DO_NOT_LEAK" '
+                'w:updateMode="always"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectLink w:progId="WORD_OBJECT_LINK_NO_ID_PROGID_DO_NOT_LEAK" '
+                'w:updateMode="always"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectLink r:id="rIdWordObjectLinkMissingMode" '
+                'w:progId="WORD_OBJECT_LINK_MISSING_MODE_PROGID_DO_NOT_LEAK"/>'
+                "</w:object></w:r>",
+                "<w:r><w:object>"
+                '<w:objectEmbed r:id="rIdWordObjectLinkEmbed" '
+                'w:progId="WORD_OBJECT_LINK_EMBED_PROGID_DO_NOT_LEAK"/>'
+                "</w:object></w:r>",
+                "<w:r>"
+                '<w:objectLink r:id="rIdWordObjectLinkUnparented" '
+                'w:progId="WORD_OBJECT_LINK_UNPARENTED_PROGID_DO_NOT_LEAK" '
+                'w:updateMode="always"/>'
+                "</w:r>",
+            )
+        )
+        if include_unavailable_link_marker:
+            body_markup += (
+                "<w:r><w:object>"
+                '<w:objectLink r:id="rIdUnavailableWordObjectLink" '
+                'w:updateMode="always"/>'
+                "</w:object></w:r>"
+            )
+        header_markup = (
+            "<w:r><w:object>"
+            '<w:objectLink r:id="rIdWordObjectLinkHeader" '
+            'w:progId="WORD_OBJECT_LINK_HEADER_PROGID_DO_NOT_LEAK" '
+            'w:updateMode="onCall"/>'
+            "</w:object></w:r>"
+        )
+        relationship_entries = "".join(
+            (
+                f'<Relationship Id="{external_relationship_id}" '
+                f'Type="{ole_object_relationship_type}" Target="{external_target}" '
+                'TargetMode="External"/>',
+                '<Relationship Id="rIdWordObjectLinkInternal" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="embeddings/WORD_OBJECT_LINK_INTERNAL_TARGET_DO_NOT_LEAK.bin"/>',
+                '<Relationship Id="rIdWordObjectLinkUnsupported" '
+                f'Type="{image_relationship_type}" '
+                'Target="https://WORD_OBJECT_LINK_UNSUPPORTED_TARGET_DO_NOT_LEAK.'
+                'invalid/image.png" TargetMode="External"/>',
+                '<Relationship Id="rIdWordObjectLinkMissingMode" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="https://WORD_OBJECT_LINK_MISSING_MODE_TARGET_DO_NOT_LEAK.'
+                'invalid/source" TargetMode="External"/>',
+                '<Relationship Id="rIdWordObjectLinkEmbed" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="https://WORD_OBJECT_LINK_EMBED_TARGET_DO_NOT_LEAK.'
+                'invalid/source" TargetMode="External"/>',
+                '<Relationship Id="rIdWordObjectLinkUnparented" '
+                f'Type="{ole_object_relationship_type}" '
+                'Target="https://WORD_OBJECT_LINK_UNPARENTED_TARGET_DO_NOT_LEAK.'
+                'invalid/source" TargetMode="External"/>',
+            )
+        )
+        header_relationship_entries = (
+            '<Relationship Id="rIdWordObjectLinkHeader" '
+            f'Type="{ole_object_relationship_type}" '
+            'Target="embeddings/WORD_OBJECT_LINK_HEADER_TARGET_DO_NOT_LEAK.bin"/>'
+        )
+    elif include_orphan_ole_relationship:
+        relationship_entries = (
+            '<Relationship Id="rIdWordObjectLinkOrphan" '
+            f'Type="{ole_object_relationship_type}" '
+            'Target="https://WORD_OBJECT_LINK_ORPHAN_TARGET_DO_NOT_LEAK.'
+            'invalid/source" '
+            'TargetMode="External"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}">'
+            f"<w:body><w:p>{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_attribute_namespace}">'
+            f"<w:p>{header_markup}"
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
+        ).encode(),
+    }
+    if include_markup:
+        entries["word/embeddings/WORD_OBJECT_LINK_INTERNAL_TARGET_DO_NOT_LEAK.bin"] = (
+            b"WORD_OBJECT_LINK_INTERNAL_PAYLOAD_DO_NOT_LEAK"
+        )
+        entries["word/embeddings/WORD_OBJECT_LINK_HEADER_TARGET_DO_NOT_LEAK.bin"] = (
+            b"WORD_OBJECT_LINK_HEADER_PAYLOAD_DO_NOT_LEAK"
         )
     if relationship_entries:
         entries["word/_rels/document.xml.rels"] = (
