@@ -36,6 +36,8 @@ _RULES: Final = {
     "no_mail_merge_changes": "DFP022",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
+    "require_no_external_document_dependencies": "DFP025",
+    "no_external_document_dependency_changes": "DFP026",
 }
 
 
@@ -249,6 +251,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_external_document_dependency_changes") and (
+        before.external_document_dependencies.signature
+        != after.external_document_dependencies.signature
+    ):
+        findings.append(
+            _finding(
+                "no_external_document_dependency_changes",
+                "External Word document dependency inventory changed.",
+                {
+                    "before": before.external_document_dependencies.public_dict(),
+                    "after": after.external_document_dependencies.public_dict(),
+                },
+            )
+        )
     if (
         policy.enabled("require_no_unresolved_revisions")
         and after.revisions.unresolved_count
@@ -363,6 +379,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_data_bindings",
                 "Candidate contains stored content-control data bindings.",
                 after.data_bindings.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_external_document_dependencies") and any(
+        after.external_document_dependencies.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_external_document_dependencies",
+                "Candidate contains stored external Word document dependencies.",
+                after.external_document_dependencies.public_dict(),
             )
         )
     if (

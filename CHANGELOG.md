@@ -2,6 +2,27 @@
 
 All notable changes are documented here.
 
+## 0.7.0 — 2026-08-01
+
+- Added a separate privacy-safe inventory for three standard external Word
+  document dependency families: attached templates, master-document
+  subdocuments, and frameset source files.
+- Added `DFP025` to require that a candidate contain no recognized external
+  Word document dependency state and `DFP026` to block dependency-inventory
+  changes against a controlled baseline.
+- Validates expected conventional and Strict relationship types, direct anchors,
+  and `TargetMode="External"`; malformed recognized state fails closed while
+  residual recognized relationships remain explicit review evidence.
+- Discovers Settings and Web Settings parts from main or glossary documents,
+  keeps the conventional Settings path as a compatibility fallback, and
+  privately fingerprints an involved Web Settings part to make ID renumbering
+  quiet without losing frame-layout/source changes.
+- Added conventional, Strict, glossary-linked-settings, orphaned-relationship,
+  target-change, relationship-ID-stability, malformed-state, policy, SARIF, and
+  redaction regression coverage. Profiled a reconstructed open-source thesis
+  template package with a real attached-template relationship as a compatibility
+  smoke test.
+
 ## 0.6.0 — 2026-08-01
 
 - Added a separate privacy-safe inventory for direct Word content-control XML

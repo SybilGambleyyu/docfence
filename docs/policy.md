@@ -46,6 +46,8 @@ starter policy.
 | `no_mail_merge_changes` | `DFP022` | Mail-merge inventory differs | Comparison |
 | `require_no_data_bindings` | `DFP023` | Candidate has stored content-control data bindings | Candidate |
 | `no_data_binding_changes` | `DFP024` | Content-control data-binding inventory differs | Comparison |
+| `require_no_external_document_dependencies` | `DFP025` | Candidate has stored attached-template, subdocument, or frameset-source dependency state | Candidate |
+| `no_external_document_dependency_changes` | `DFP026` | External Word document dependency inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -71,8 +73,10 @@ a later mutation. `no_document_property_changes` gives the same controlled
 baseline option for document metadata, and `no_mail_merge_changes` does so for
 mail-merge configuration and recipient state. `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
-custom XML. `word/styles.xml` is handled by the dedicated style inventory
-instead.
+custom XML. `no_external_document_dependency_changes` does the same for a
+controlled template that deliberately retains an attached template, master
+subdocument, or frameset source. `word/styles.xml` is handled by the dedicated
+style inventory instead.
 
 ## Hidden-text scope
 
@@ -189,6 +193,38 @@ custom XML data/properties payloads. It therefore catches a mutation to an
 identified bound data part without exposing it. It does not make an unscoped
 XPath binding identify a target; use `no_custom_xml_changes` as well when every
 custom XML mutation must block a handoff.
+
+## External Word document dependency scope
+
+DocFence distinguishes three standardized external-document dependencies from
+the generic external-relationship inventory:
+
+- an `attachedTemplate` relationship from a Document Settings part and its
+  direct `w:attachedTemplate` anchor;
+- a `subDocument` relationship from the main document and its `w:subDoc`
+  anchor; and
+- a `frame` relationship from a linked Web Settings part and its direct
+  `w:frame/w:sourceFileName` anchor.
+
+It discovers Settings and Web Settings parts through conventional or Strict
+relationships from the main or glossary document, with the conventional
+`word/settings.xml` Settings path retained as a compatibility fallback. The
+expected relationship type and `TargetMode="External"` are required for every
+recognized relationship and direct anchor. Invalid recognized state fails
+closed. A recognized relationship is still counted without an anchor, because
+it retains a stored external target that a handoff may need to review.
+
+`require_no_external_document_dependencies` fails when any of the six public
+counts is nonzero. `no_external_document_dependency_changes` compares private
+relationship semantics and anchor markup. For a linked Web Settings part with
+frame dependency state, it fingerprints the complete part privately so an
+otherwise cosmetic frame change remains review-visible while relationship-ID
+renumbering alone stays quiet. Public reports never show a target, relationship
+ID, part path, frame name, or fingerprint.
+
+These rules do not retrieve a template, open a subdocument, resolve a frame,
+render any external content, or determine whether Word will reach the target.
+They are stored-state controls, not a network or malware-analysis engine.
 
 ## CI example
 

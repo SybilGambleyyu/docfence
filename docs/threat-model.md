@@ -13,7 +13,8 @@ alternative-format-import bytes, document-property names, and document-property
 values, mail-merge configuration, source/header targets, connection strings,
 queries, field mappings, recipient data, data-binding XPath expressions,
 namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
-values must not become DocFence report content. The report may be stored in CI
+values, external template/subdocument/frame-source targets, and frame names
+must not become DocFence report content. The report may be stored in CI
 artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
 intentionally restricted to counts, fixed categories, booleans, and generic
 story kinds.
@@ -92,6 +93,20 @@ properties root; malformed recognized state fails closed. A binding whose
 storage ID cannot be associated with a discovered part remains a counted review
 signal rather than causing DocFence to guess a target.
 
+External Word document dependencies receive the same private-digest treatment.
+DocFence recognizes attached-template relationships from discovered Document
+Settings parts, subdocument relationships from the main document, and frame
+relationships from discovered Web Settings parts. It checks their direct Word
+anchors and requires the standard relationship type and `External` target mode.
+Settings and Web Settings parts are discovered through conventional or Strict
+relationships from the main or glossary document; the conventional
+`word/settings.xml` Settings path is also retained for compatibility. A linked
+Web Settings part with frame dependency state is fingerprinted privately and
+removed from the generic opaque-payload inventory, so relationship-ID rewriting
+does not create report churn while a stored layout or source change remains
+visible. DocFence never resolves, retrieves, opens, authenticates to, imports,
+or renders a template, subdocument, or frame target.
+
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
 and external tools are outside this contract.
@@ -122,7 +137,12 @@ the recipient records or connection details a package may retain. Content-contro
 data-binding counts are stored-state evidence, not proof that a given XPath
 selects a node, that Word will update the visible control, or that an unscoped
 mapping uses any particular custom XML part. DocFence does not evaluate XPath,
-resolve XML namespaces, or calculate rich-text mappings.
+resolve XML namespaces, or calculate rich-text mappings. Attached-template,
+subdocument, and frameset counts are likewise stored-state evidence, not proof
+that Word will retrieve a target, that an external document exists, or that any
+external content is safe. DocFence does not validate a target's scheme, follow
+a redirected resource, determine its effective contents, or emulate Word's
+template, master-document, or frameset behavior.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

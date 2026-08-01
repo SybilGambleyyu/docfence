@@ -56,6 +56,34 @@ _STRICT_CUSTOM_XML_RELATIONSHIP_TYPE = (
 _STRICT_CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/customXmlProps"
 )
+_ATTACHED_TEMPLATE_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+    "attachedTemplate"
+)
+_SUBDOCUMENT_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/subDocument"
+)
+_FRAME_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/frame"
+)
+_WEB_SETTINGS_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings"
+)
+_STRICT_ATTACHED_TEMPLATE_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate"
+)
+_STRICT_SUBDOCUMENT_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/subDocument"
+)
+_STRICT_FRAME_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/frame"
+)
+_STRICT_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/settings"
+)
+_STRICT_WEB_SETTINGS_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/webSettings"
+)
 _CUSTOM_XML_DATA_PROPERTIES_NAMESPACE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/customXml"
 )
@@ -807,6 +835,164 @@ def test_data_binding_rejects_invalid_referenced_custom_xml_properties(
         load_snapshot(external_properties_target)
 
 
+def test_external_document_dependency_inventory_is_private_and_stable(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    target_changed = tmp_path / "target-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    strict_dependencies = tmp_path / "strict-dependencies.docx"
+    orphaned = tmp_path / "orphaned.docx"
+    wrong_attached_template_type = tmp_path / "wrong-attached-template-type.docx"
+    internal_dependencies = tmp_path / "internal-dependencies.docx"
+    wrong_frame_type = tmp_path / "wrong-frame-type.docx"
+    external_web_settings = tmp_path / "external-web-settings.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_external_document_dependency_document(before, include_dependencies=False)
+    _write_external_document_dependency_document(after)
+    _write_external_document_dependency_document(
+        target_changed,
+        subdocument_target="https://example.invalid/SUBDOCUMENT_CHANGED_DO_NOT_LEAK",
+    )
+    _write_external_document_dependency_document(renumbered, relationship_id_suffix="9")
+    _write_external_document_dependency_document(
+        strict_dependencies, strict_syntax=True
+    )
+    _write_external_document_dependency_document(orphaned, include_anchors=False)
+    _write_external_document_dependency_document(
+        wrong_attached_template_type,
+        attached_template_relationship_type=_OLE_OBJECT_RELATIONSHIP_TYPE,
+    )
+    _write_external_document_dependency_document(
+        internal_dependencies, dependency_target_mode="Internal"
+    )
+    _write_external_document_dependency_document(
+        wrong_frame_type,
+        frame_relationship_type=_OLE_OBJECT_RELATIONSHIP_TYPE,
+    )
+    _write_external_document_dependency_document(
+        external_web_settings,
+        web_settings_target_mode="External",
+    )
+
+    expected_inventory = {
+        "attached_template_anchor_count": 1,
+        "attached_template_relationship_count": 1,
+        "subdocument_anchor_count": 1,
+        "subdocument_relationship_count": 1,
+        "frame_source_anchor_count": 1,
+        "frame_relationship_count": 1,
+    }
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["external_document_dependencies"] == (
+        expected_inventory
+    )
+    assert (
+        load_snapshot(strict_dependencies).public_dict()[
+            "external_document_dependencies"
+        ]
+        == expected_inventory
+    )
+    assert load_snapshot(orphaned).public_dict()["external_document_dependencies"] == {
+        "attached_template_anchor_count": 0,
+        "attached_template_relationship_count": 1,
+        "subdocument_anchor_count": 0,
+        "subdocument_relationship_count": 1,
+        "frame_source_anchor_count": 0,
+        "frame_relationship_count": 1,
+    }
+
+    report = diff_documents(before, after)
+    assert {
+        "external_relationships_changed",
+        "external_document_dependency_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    assert {
+        "external_relationships_changed",
+        "external_document_dependency_inventory_changed",
+    } <= {change.kind for change in diff_documents(after, target_changed).changes}
+    assert diff_documents(after, renumbered).changes == ()
+    for invalid_document in (
+        wrong_attached_template_type,
+        internal_dependencies,
+        wrong_frame_type,
+        external_web_settings,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(invalid_document)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_external_document_dependencies: true
+  no_external_document_dependency_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP025",
+        "DFP026",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP025"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, orphaned), policy).findings
+    } == {"DFP025", "DFP026"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_EXTERNAL_DOCUMENT_DEPENDENCY_INVENTORY_CHANGED",
+        "DFP025",
+        "DFP026",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "ATTACHED_TEMPLATE_DO_NOT_LEAK",
+        "SUBDOCUMENT_DO_NOT_LEAK",
+        "SUBDOCUMENT_CHANGED_DO_NOT_LEAK",
+        "FRAME_SOURCE_DO_NOT_LEAK",
+        "FRAME_NAME_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_external_document_dependency_discovers_glossary_settings(tmp_path) -> None:
+    before = tmp_path / "glossary-before.docx"
+    renumbered = tmp_path / "glossary-renumbered.docx"
+    strict = tmp_path / "glossary-strict.docx"
+    _write_glossary_attached_template_document(before)
+    _write_glossary_attached_template_document(renumbered, relationship_id_suffix="9")
+    _write_glossary_attached_template_document(strict, strict_syntax=True)
+
+    expected_inventory = {
+        "attached_template_anchor_count": 1,
+        "attached_template_relationship_count": 1,
+        "subdocument_anchor_count": 0,
+        "subdocument_relationship_count": 0,
+        "frame_source_anchor_count": 0,
+        "frame_relationship_count": 0,
+    }
+    assert load_snapshot(before).public_dict()["external_document_dependencies"] == (
+        expected_inventory
+    )
+    assert load_snapshot(strict).public_dict()["external_document_dependencies"] == (
+        expected_inventory
+    )
+    assert diff_documents(before, renumbered).changes == ()
+
+
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
     before = tmp_path / "approved.docx"
     after = tmp_path / "candidate.docm"
@@ -1276,6 +1462,215 @@ def _write_data_binding_document(
                 f'ds:itemID="{item_id}"/>'
             ).encode()
         )
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_external_document_dependency_document(
+    path,
+    *,
+    relationship_id_suffix: str = "1",
+    include_dependencies: bool = True,
+    include_anchors: bool = True,
+    strict_syntax: bool = False,
+    attached_template_target: str = (
+        "https://example.invalid/ATTACHED_TEMPLATE_DO_NOT_LEAK"
+    ),
+    subdocument_target: str = "https://example.invalid/SUBDOCUMENT_DO_NOT_LEAK",
+    frame_target: str = "https://example.invalid/FRAME_SOURCE_DO_NOT_LEAK",
+    attached_template_relationship_type: str = _ATTACHED_TEMPLATE_RELATIONSHIP_TYPE,
+    subdocument_relationship_type: str = _SUBDOCUMENT_RELATIONSHIP_TYPE,
+    frame_relationship_type: str = _FRAME_RELATIONSHIP_TYPE,
+    dependency_target_mode: str = "External",
+    web_settings_target_mode: str = "Internal",
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    relationship_namespace = _STRICT_RELATIONSHIP_NAMESPACE if strict_syntax else R
+    attached_template_type = (
+        _STRICT_ATTACHED_TEMPLATE_RELATIONSHIP_TYPE
+        if strict_syntax
+        else attached_template_relationship_type
+    )
+    subdocument_type = (
+        _STRICT_SUBDOCUMENT_RELATIONSHIP_TYPE
+        if strict_syntax
+        else subdocument_relationship_type
+    )
+    frame_type = (
+        _STRICT_FRAME_RELATIONSHIP_TYPE if strict_syntax else frame_relationship_type
+    )
+    web_settings_type = (
+        _STRICT_WEB_SETTINGS_RELATIONSHIP_TYPE
+        if strict_syntax
+        else _WEB_SETTINGS_RELATIONSHIP_TYPE
+    )
+    attached_template_id = f"rIdAttachedTemplate{relationship_id_suffix}"
+    subdocument_id = f"rIdSubdocument{relationship_id_suffix}"
+    frame_id = f"rIdFrame{relationship_id_suffix}"
+    dependency_target_mode_attribute = (
+        f' TargetMode="{dependency_target_mode}"'
+        if dependency_target_mode != "Internal"
+        else ""
+    )
+    web_settings_target_mode_attribute = (
+        f' TargetMode="{web_settings_target_mode}"'
+        if web_settings_target_mode != "Internal"
+        else ""
+    )
+    include_dependency_anchors = include_dependencies and include_anchors
+    attached_template_markup = (
+        f'<w:attachedTemplate r:id="{attached_template_id}"/>'
+        if include_dependency_anchors
+        else ""
+    )
+    subdocument_markup = (
+        f'<w:subDoc r:id="{subdocument_id}"/>' if include_dependency_anchors else ""
+    )
+    frame_source_markup = (
+        f'<w:sourceFileName r:id="{frame_id}"/>' if include_dependency_anchors else ""
+    )
+    web_settings_override = (
+        '<Override PartName="/word/webSettings.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.'
+        'wordprocessingml.webSettings+xml"/>'
+        if include_dependencies
+        else ""
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{web_settings_override}"
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            f"{subdocument_markup}"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_dependencies:
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="rIdSettings{relationship_id_suffix}" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/settings" Target="settings.xml"/>'
+            f'<Relationship Id="{subdocument_id}" Type="{subdocument_type}" '
+            f'Target="{subdocument_target}"{dependency_target_mode_attribute}/>'
+            f'<Relationship Id="rIdWebSettings{relationship_id_suffix}" '
+            f'Type="{web_settings_type}" Target="webSettings.xml"'
+            f"{web_settings_target_mode_attribute}/>"
+            "</Relationships>"
+        ).encode()
+        entries["word/settings.xml"] = (
+            f'<w:settings xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}">{attached_template_markup}'
+            "</w:settings>"
+        ).encode()
+        entries["word/_rels/settings.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{attached_template_id}" '
+            f'Type="{attached_template_type}" Target="{attached_template_target}"'
+            f"{dependency_target_mode_attribute}/>"
+            "</Relationships>"
+        ).encode()
+        entries["word/webSettings.xml"] = (
+            f'<w:webSettings xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}"><w:frameset><w:frame>'
+            '<w:name w:val="FRAME_NAME_DO_NOT_LEAK"/>'
+            f"{frame_source_markup}"
+            "</w:frame></w:frameset></w:webSettings>"
+        ).encode()
+        entries["word/_rels/webSettings.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{frame_id}" Type="{frame_type}" '
+            f'Target="{frame_target}"{dependency_target_mode_attribute}/>'
+            "</Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_glossary_attached_template_document(
+    path, *, relationship_id_suffix: str = "1", strict_syntax: bool = False
+) -> None:
+    attached_template_id = f"rIdGlossaryTemplate{relationship_id_suffix}"
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    relationship_namespace = _STRICT_RELATIONSHIP_NAMESPACE if strict_syntax else R
+    settings_relationship_type = (
+        _STRICT_DOCUMENT_SETTINGS_RELATIONSHIP_TYPE
+        if strict_syntax
+        else "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
+    )
+    attached_template_relationship_type = (
+        _STRICT_ATTACHED_TEMPLATE_RELATIONSHIP_TYPE
+        if strict_syntax
+        else _ATTACHED_TEMPLATE_RELATIONSHIP_TYPE
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            '<Override PartName="/word/glossary/document.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.'
+            'wordprocessingml.document.glossaryDocument+xml"/>'
+            '<Override PartName="/word/glossary/glossarySettings.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.'
+            'wordprocessingml.settings+xml"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/_rels/document.xml.rels": (
+            f'<Relationships xmlns="{PR}">'
+            '<Relationship Id="rIdGlossary" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/glossaryDocument" Target="glossary/document.xml"/>'
+            "</Relationships>"
+        ).encode(),
+        "word/glossary/document.xml": (
+            f'<w:glossaryDocument xmlns:w="{word_namespace}"><w:docParts><w:docPart>'
+            "<w:docPartBody><w:p><w:r><w:t>GLOSSARY_DO_NOT_LEAK</w:t>"
+            "</w:r></w:p></w:docPartBody></w:docPart></w:docParts>"
+            "</w:glossaryDocument>"
+        ).encode(),
+        "word/glossary/_rels/document.xml.rels": (
+            f'<Relationships xmlns="{PR}">'
+            '<Relationship Id="rIdSettings" '
+            f'Type="{settings_relationship_type}" '
+            'Target="glossarySettings.xml"/>'
+            "</Relationships>"
+        ).encode(),
+        "word/glossary/glossarySettings.xml": (
+            f'<w:settings xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}">'
+            f'<w:attachedTemplate r:id="{attached_template_id}"/>'
+            "</w:settings>"
+        ).encode(),
+        "word/glossary/_rels/glossarySettings.xml.rels": (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{attached_template_id}" '
+            f'Type="{attached_template_relationship_type}" '
+            'Target="https://example.invalid/GLOSSARY_TEMPLATE_DO_NOT_LEAK" '
+            'TargetMode="External"/>'
+            "</Relationships>"
+        ).encode(),
+    }
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

@@ -26,6 +26,7 @@ from docfence.models import (
     DocumentPropertyInventory,
     DocumentSnapshot,
     EmbeddedObjectInventory,
+    ExternalDocumentDependencyInventory,
     MailMergeInventory,
     RelationshipInventory,
     RevisionInventory,
@@ -210,6 +211,42 @@ _CUSTOM_XML_DATA_PROPERTIES_NAMESPACES: Final = frozenset(
         "http://purl.oclc.org/ooxml/officeDocument/customXml",
     }
 )
+_ATTACHED_TEMPLATE_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "attachedtemplate",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/attachedtemplate",
+    }
+)
+_SUBDOCUMENT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "subdocument",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/subdocument",
+    }
+)
+_FRAME_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/frame",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/frame",
+    }
+)
+_DOCUMENT_SETTINGS_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/settings",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/settings",
+    }
+)
+_WEB_SETTINGS_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "websettings",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/websettings",
+    }
+)
+_SETTINGS_SOURCE_PARTS: Final = frozenset(
+    {"word/document.xml", "word/glossary/document.xml"}
+)
 
 
 @dataclass(frozen=True)
@@ -311,6 +348,15 @@ def _load_package(
                 relationship_maps,
                 limits,
             )
+            (
+                external_document_dependencies,
+                external_document_dependency_parts,
+            ) = _external_document_dependency_inventory(
+                archive,
+                members,
+                relationship_maps,
+                limits,
+            )
             settings_enabled, settings_signature = _settings_inventory(
                 archive, members, relationship_maps, limits
             )
@@ -327,6 +373,7 @@ def _load_package(
                     | alternative_format_import_parts
                     | document_property_parts
                     | mail_merge_parts
+                    | external_document_dependency_parts
                 ),
                 limits,
             )
@@ -354,6 +401,7 @@ def _load_package(
         document_properties=document_properties,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
+        external_document_dependencies=external_document_dependencies,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -904,6 +952,259 @@ def _validate_mail_merge_relationship(
         raise DocumentFormatError("mail merge markup is invalid")
     if expected_target_mode == "internal":
         _internal_relationship_target("word/settings.xml", relationship, members)
+
+
+def _external_document_dependency_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[ExternalDocumentDependencyInventory, frozenset[str]]:
+    """Inventory standard external Word document dependencies without targets.
+
+    Word uses three explicit relationship families to incorporate or consult a
+    different document package: an attached template, master-document
+    subdocuments, and frameset source files.  Every recognized relationship is
+    required to remain external; DocFence only fingerprints its semantics and
+    never resolves or retrieves the target.
+    """
+
+    records: list[tuple[str, ...]] = []
+    attached_template_anchor_count = 0
+    attached_template_relationship_count = 0
+    subdocument_anchor_count = 0
+    subdocument_relationship_count = 0
+    frame_source_anchor_count = 0
+    frame_relationship_count = 0
+    dependency_part_names: set[str] = set()
+
+    for settings_part in _linked_document_settings_parts(members, relationship_maps):
+        settings_relationships = relationship_maps.get(settings_part, {})
+        has_attached_template_dependency = False
+        for relationship in _relationships_with_types(
+            settings_relationships, _ATTACHED_TEMPLATE_RELATIONSHIP_TYPES
+        ):
+            _validate_external_document_dependency_relationship(relationship)
+            attached_template_relationship_count += 1
+            has_attached_template_dependency = True
+            records.append(
+                (
+                    "attached_template_relationship",
+                    settings_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+        settings_root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(settings_root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        for element in settings_root:
+            if not _is_word_element(element, "attachedTemplate"):
+                continue
+            _validate_external_document_dependency_anchor(
+                element,
+                settings_relationships,
+                _ATTACHED_TEMPLATE_RELATIONSHIP_TYPES,
+            )
+            attached_template_anchor_count += 1
+            has_attached_template_dependency = True
+            records.append(
+                (
+                    "attached_template_anchor",
+                    settings_part,
+                    _fingerprint_element(element, settings_relationships),
+                )
+            )
+
+        if has_attached_template_dependency and settings_part != "word/settings.xml":
+            dependency_part_names.add(settings_part)
+            records.append(
+                (
+                    "attached_template_settings",
+                    settings_part,
+                    _fingerprint_element(settings_root, settings_relationships),
+                )
+            )
+
+    main_document_part = "word/document.xml"
+    main_document_relationships = relationship_maps.get(main_document_part, {})
+    for relationship in _relationships_with_types(
+        main_document_relationships, _SUBDOCUMENT_RELATIONSHIP_TYPES
+    ):
+        _validate_external_document_dependency_relationship(relationship)
+        subdocument_relationship_count += 1
+        records.append(
+            (
+                "subdocument_relationship",
+                main_document_part,
+                *relationship.canonical_value(),
+            )
+        )
+
+    main_document_root = _read_xml(archive, members[main_document_part], limits)
+    if not _is_word_element(main_document_root, "document"):
+        raise DocumentFormatError("document story is invalid")
+    for element in main_document_root.iter():
+        if not _is_word_element(element, "subDoc"):
+            continue
+        _validate_external_document_dependency_anchor(
+            element,
+            main_document_relationships,
+            _SUBDOCUMENT_RELATIONSHIP_TYPES,
+        )
+        subdocument_anchor_count += 1
+        records.append(
+            (
+                "subdocument_anchor",
+                main_document_part,
+                _fingerprint_element(element, main_document_relationships),
+            )
+        )
+
+    for web_settings_part in _linked_web_settings_parts(members, relationship_maps):
+        web_settings_relationships = relationship_maps.get(web_settings_part, {})
+        has_frame_dependency = False
+        for relationship in _relationships_with_types(
+            web_settings_relationships, _FRAME_RELATIONSHIP_TYPES
+        ):
+            _validate_external_document_dependency_relationship(relationship)
+            frame_relationship_count += 1
+            has_frame_dependency = True
+            records.append(
+                (
+                    "frame_relationship",
+                    web_settings_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+        web_settings_root = _read_xml(archive, members[web_settings_part], limits)
+        if not _is_word_element(web_settings_root, "webSettings"):
+            raise DocumentFormatError("web settings are invalid")
+        for frame in web_settings_root.iter():
+            if not _is_word_element(frame, "frame"):
+                continue
+            for element in frame:
+                if not _is_word_element(element, "sourceFileName"):
+                    continue
+                _validate_external_document_dependency_anchor(
+                    element,
+                    web_settings_relationships,
+                    _FRAME_RELATIONSHIP_TYPES,
+                )
+                frame_source_anchor_count += 1
+                has_frame_dependency = True
+                records.append(
+                    (
+                        "frame_source_anchor",
+                        web_settings_part,
+                        _fingerprint_element(element, web_settings_relationships),
+                    )
+                )
+
+        if has_frame_dependency:
+            dependency_part_names.add(web_settings_part)
+            records.append(
+                (
+                    "frame_web_settings",
+                    web_settings_part,
+                    _fingerprint_element(web_settings_root, web_settings_relationships),
+                )
+            )
+
+    return (
+        ExternalDocumentDependencyInventory(
+            attached_template_anchor_count=attached_template_anchor_count,
+            attached_template_relationship_count=attached_template_relationship_count,
+            subdocument_anchor_count=subdocument_anchor_count,
+            subdocument_relationship_count=subdocument_relationship_count,
+            frame_source_anchor_count=frame_source_anchor_count,
+            frame_relationship_count=frame_relationship_count,
+            signature=_digest_records(records),
+        ),
+        frozenset(dependency_part_names),
+    )
+
+
+def _relationships_with_types(
+    relationships: dict[str, _Relationship], expected_types: frozenset[str]
+) -> list[_Relationship]:
+    return sorted(
+        (
+            relationship
+            for relationship in relationships.values()
+            if relationship.relationship_type.casefold() in expected_types
+        ),
+        key=lambda relationship: relationship.canonical_value(),
+    )
+
+
+def _linked_document_settings_parts(
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> tuple[str, ...]:
+    """Return discovered Settings parts, retaining Word's canonical fallback."""
+
+    part_names: set[str] = set()
+    if "word/settings.xml" in members:
+        part_names.add("word/settings.xml")
+    for source_part in _SETTINGS_SOURCE_PARTS:
+        if source_part not in members:
+            continue
+        for relationship in _relationships_with_types(
+            relationship_maps.get(source_part, {}),
+            _DOCUMENT_SETTINGS_RELATIONSHIP_TYPES,
+        ):
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError("document settings relationships are invalid")
+            part_names.add(target)
+    return tuple(sorted(part_names))
+
+
+def _linked_web_settings_parts(
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> tuple[str, ...]:
+    """Return Web Settings parts explicitly linked from supported sources."""
+
+    part_names: set[str] = set()
+    for source_part in _SETTINGS_SOURCE_PARTS:
+        if source_part not in members:
+            continue
+        for relationship in _relationships_with_types(
+            relationship_maps.get(source_part, {}),
+            _WEB_SETTINGS_RELATIONSHIP_TYPES,
+        ):
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError("web settings relationships are invalid")
+            part_names.add(target)
+    return tuple(sorted(part_names))
+
+
+def _validate_external_document_dependency_relationship(
+    relationship: _Relationship,
+) -> None:
+    if relationship.target_mode.casefold() != "external":
+        raise DocumentFormatError(
+            "external document dependency relationships are invalid"
+        )
+
+
+def _validate_external_document_dependency_anchor(
+    element: ET.Element,
+    relationships: dict[str, _Relationship],
+    expected_types: frozenset[str],
+) -> None:
+    relationship_id = _relationship_id_value(element)
+    relationship = relationships.get(relationship_id) if relationship_id else None
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold() not in expected_types
+        or relationship.target_mode.casefold() != "external"
+    ):
+        raise DocumentFormatError("external document dependency markup is invalid")
 
 
 def _data_binding_inventory(

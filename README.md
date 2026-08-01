@@ -7,9 +7,9 @@ tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external relationships, custom XML,
 macros, core/extended/custom document properties, mail-merge configuration and
 recipient-data state, data-bound content controls and their referenced custom
-XML state, embedded OLE/package/control payloads, OOXML alternative-format
-imports, headers, footers, notes, document settings, and otherwise unclassified
-package payloads.
+XML state, external document dependencies, embedded OLE/package/control
+payloads, OOXML alternative-format imports, headers, footers, notes, document
+settings, and otherwise unclassified package payloads.
 
 It never opens Word, executes macros, follows links, renders a document, uploads
 source material, or writes a redline. By default, reports contain counts,
@@ -44,7 +44,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.6 focuses on Office Open XML Word documents and deliberately keeps a
+Version 0.7 focuses on Office Open XML Word documents and deliberately keeps a
 small, inspectable contract:
 
 - bounded `.docx` / `.docm` ZIP packages;
@@ -55,8 +55,9 @@ small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, content-control, external-relationship, custom-XML, macro,
   core/extended/custom document-property, mail-merge, content-control
-  data-binding, embedded OLE/package/control, alternative-format-import, and
-  Track Changes inventories;
+  data-binding, attached-template/master-subdocument/frameset-source external
+  document dependency, embedded OLE/package/control, alternative-format-import,
+  and Track Changes inventories;
 - `w:altChunk` anchors paired with an internal OOXML alternative-format-import
   relationship and its stored payload;
 - a generic alert for changed package payload outside those specialized
@@ -122,6 +123,20 @@ reported, but DocFence deliberately does not guess which part Word might choose
 from its XPath. It does not evaluate XPath, update a control, or render the
 result.
 
+External Word document dependencies are recorded separately from the generic
+external-relationship count. DocFence recognizes an attached template in a
+Document Settings part, `w:subDoc` anchors in the main document, and
+`w:sourceFileName` anchors inside frames in a linked Web Settings part. It
+discovers Settings and Web Settings parts from either the main or glossary
+document, retaining Word's conventional `word/settings.xml` fallback. Reports
+show only paired anchor and relationship counts for attached templates,
+subdocuments, and frame sources; they never include targets, relationship IDs,
+part paths, frame names, or fingerprints. Recognized dependency relationships
+and their direct anchors must use the expected type and `TargetMode="External"`
+or parsing fails closed. A residual recognized relationship remains visible even
+when no current anchor names it. DocFence never retrieves, opens, imports,
+renders, authenticates to, or judges the safety of any dependency target.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -151,6 +166,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_custom_document_properties: true
   require_no_mail_merge: true
   require_no_data_bindings: true
+  require_no_external_document_dependencies: true
 ```
 
 When an established template intentionally contains one of those stored states,
@@ -163,6 +179,7 @@ later mutation:
   no_document_property_changes: true
   no_mail_merge_changes: true
   no_data_binding_changes: true
+  no_external_document_dependency_changes: true
 ```
 
 YAML anchors, aliases, sequences, nested mappings, duplicate keys, unknown
@@ -178,9 +195,9 @@ relationship targets, field instructions, style identifiers and names, custom
 XML values, document-property names and values, mail-merge configuration and
 recipient data, data-binding XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
-and all fingerprints. Regression tests place unique sensitive markers in each
-of those surfaces and assert that JSON, Markdown, and SARIF never reproduce
-them.
+external template/subdocument/frame-source targets, and all fingerprints.
+Regression tests place unique sensitive markers in each of those surfaces and
+assert that JSON, Markdown, and SARIF never reproduce them.
 
 This contract applies to DocFence's own reports. It cannot prevent a caller from
 printing a source path, retaining a source document, or independently logging
@@ -211,6 +228,16 @@ and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api
 which maps content-control text to document XML data. An independent
 [OOXML reference-corpus fixture](https://loadfix.github.io/ooxml-reference-corpus/case/docx__custom-xml-part.html)
 was profiled as a compatibility smoke test.
+The external-document-dependency boundary follows the OOXML
+[Document Template](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Document_topic_ID0E1IDK.html),
+[Master Documents and Subdocuments](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Master_topic_ID0E2SDK.html),
+and [Framesets](https://ooxml.info/docs/11/11.5/) contracts. Microsoft also
+documents the attached-template relationship behavior, while
+[MITRE ATT&CK T1221](https://attack.mitre.org/techniques/T1221/) describes
+template injection as an abuse of document template references. A reconstructed
+package from the open-source [XJTU thesis Office
+template](https://github.com/obster-y/XJTU-thesis-Office/tree/master/%E6%A8%A1%E6%9D%BF%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E-docx)
+was profiled as an attached-template compatibility smoke test.
 
 ## Development
 

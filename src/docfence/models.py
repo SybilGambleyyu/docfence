@@ -174,6 +174,31 @@ class DataBindingInventory:
 
 
 @dataclass(frozen=True)
+class ExternalDocumentDependencyInventory:
+    """Stored references to external Word document packages."""
+
+    attached_template_anchor_count: int
+    attached_template_relationship_count: int
+    subdocument_anchor_count: int
+    subdocument_relationship_count: int
+    frame_source_anchor_count: int
+    frame_relationship_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "attached_template_anchor_count": self.attached_template_anchor_count,
+            "attached_template_relationship_count": (
+                self.attached_template_relationship_count
+            ),
+            "subdocument_anchor_count": self.subdocument_anchor_count,
+            "subdocument_relationship_count": self.subdocument_relationship_count,
+            "frame_source_anchor_count": self.frame_source_anchor_count,
+            "frame_relationship_count": self.frame_relationship_count,
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -241,6 +266,7 @@ class DocumentSnapshot:
     document_properties: DocumentPropertyInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
+    external_document_dependencies: ExternalDocumentDependencyInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -321,6 +347,9 @@ class DocumentSnapshot:
             "document_properties": self.document_properties.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
+            "external_document_dependencies": (
+                self.external_document_dependencies.public_dict()
+            ),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

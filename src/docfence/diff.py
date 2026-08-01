@@ -451,6 +451,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.external_document_dependencies.signature
+        != after.external_document_dependencies.signature
+    ):
+        changes.append(
+            Change(
+                kind="external_document_dependency_inventory_changed",
+                message="Stored external Word document dependency inventory changed.",
+                details={
+                    "before": before.external_document_dependencies.public_dict(),
+                    "after": after.external_document_dependencies.public_dict(),
+                },
+            )
+        )
+    if (
         before.settings_signature != after.settings_signature
         and before.track_revisions_enabled == after.track_revisions_enabled
     ):
