@@ -428,6 +428,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.mail_merge.signature != after.mail_merge.signature:
+        changes.append(
+            Change(
+                kind="mail_merge_inventory_changed",
+                message="Stored mail-merge inventory changed.",
+                details={
+                    "before": before.mail_merge.public_dict(),
+                    "after": after.mail_merge.public_dict(),
+                },
+            )
+        )
     if (
         before.settings_signature != after.settings_signature
         and before.track_revisions_enabled == after.track_revisions_enabled

@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.5.0 — 2026-08-01
+
+- Added a separate privacy-safe inventory for Word mail-merge configuration,
+  external data/header-source relationships, and internal recipient-data parts.
+- Added `DFP021` to require that a candidate contain no stored mail-merge state
+  and `DFP022` to block mail-merge inventory changes against a controlled
+  baseline.
+- Validated direct mail-merge source, header-source, and recipient-data
+  references against their required relationship types and target modes;
+  malformed recognized state fails closed.
+- Removed recognized recipient-data parts from the generic unclassified-payload
+  inventory while retaining their private payload comparison.
+- Added regression coverage for conventional and Strict relationships, both
+  documented recipient-data relationship spellings, query and recipient changes,
+  orphaned source relationships, relationship-ID renumbering, malformed
+  references, policy results, and redaction.
+
 ## 0.4.0 — 2026-08-01
 
 - Added separate privacy-safe inventories for core, extended, and custom OOXML

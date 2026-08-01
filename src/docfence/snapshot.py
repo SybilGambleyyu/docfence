@@ -25,6 +25,7 @@ from docfence.models import (
     DocumentPropertyInventory,
     DocumentSnapshot,
     EmbeddedObjectInventory,
+    MailMergeInventory,
     RelationshipInventory,
     RevisionInventory,
     StorySnapshot,
@@ -168,6 +169,31 @@ _DOCUMENT_PROPERTY_ROOTS: Final = {
         "Properties",
     ),
 }
+_MAIL_MERGE_DATA_SOURCE_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "mailmergesource",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/mailmergesource",
+    }
+)
+_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "mailmergeheadersource",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/mailmergeheadersource",
+    }
+)
+_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "recipientdata",
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "mailmergerecipientdata",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/recipientdata",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/"
+        "mailmergerecipientdata",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -246,6 +272,9 @@ def _load_package(
             document_properties, document_property_parts = _document_property_inventory(
                 archive, members, relationship_maps, limits
             )
+            mail_merge, mail_merge_parts = _mail_merge_inventory(
+                archive, members, relationship_maps, limits
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             stories, comment_count = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -265,6 +294,7 @@ def _load_package(
                     embedded_object_parts
                     | alternative_format_import_parts
                     | document_property_parts
+                    | mail_merge_parts
                 ),
                 limits,
             )
@@ -290,6 +320,7 @@ def _load_package(
         embedded_objects=embedded_objects,
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
+        mail_merge=mail_merge,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -699,6 +730,147 @@ def _custom_property_count(root: ET.Element) -> int:
 
 def _element_has_text_value(element: ET.Element) -> bool:
     return any((value or "").strip() for value in element.itertext())
+
+
+def _mail_merge_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[MailMergeInventory, frozenset[str]]:
+    """Inventory mail-merge state without exposing source or recipient data."""
+
+    records: list[tuple[str, ...]] = []
+    recipient_data_parts: set[str] = set()
+    data_source_relationship_count = 0
+    header_source_relationship_count = 0
+    recipient_data_relationship_count = 0
+    settings_relationships = relationship_maps.get("word/settings.xml", {})
+
+    for relationship in sorted(
+        settings_relationships.values(), key=lambda value: value.canonical_value()
+    ):
+        relationship_type = relationship.relationship_type.casefold()
+        if relationship_type in _MAIL_MERGE_DATA_SOURCE_RELATIONSHIP_TYPES:
+            if relationship.target_mode.casefold() != "external":
+                raise DocumentFormatError("mail merge relationships are invalid")
+            data_source_relationship_count += 1
+            records.append(("mail_merge_data_source", *relationship.canonical_value()))
+        elif relationship_type in _MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPES:
+            if relationship.target_mode.casefold() != "external":
+                raise DocumentFormatError("mail merge relationships are invalid")
+            header_source_relationship_count += 1
+            records.append(
+                ("mail_merge_header_source", *relationship.canonical_value())
+            )
+        elif relationship_type in _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPES:
+            target = _internal_relationship_target(
+                "word/settings.xml", relationship, members
+            )
+            if target is None:
+                raise DocumentFormatError("mail merge relationships are invalid")
+            recipient_data_relationship_count += 1
+            recipient_data_parts.add(target)
+            records.append(
+                ("mail_merge_recipient_data", *relationship.canonical_value())
+            )
+
+    configuration_count = 0
+    settings_member = members.get("word/settings.xml")
+    if settings_member is not None:
+        root = _read_xml(archive, settings_member, limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        configurations = [
+            child for child in root if _is_word_element(child, "mailMerge")
+        ]
+        configuration_count = len(configurations)
+        for configuration in configurations:
+            _validate_mail_merge_configuration(
+                configuration, settings_relationships, members
+            )
+            records.append(
+                (
+                    "mail_merge_configuration",
+                    _fingerprint_element(configuration, settings_relationships),
+                )
+            )
+
+    part_names = frozenset(recipient_data_parts)
+    return (
+        MailMergeInventory(
+            configuration_count=configuration_count,
+            data_source_relationship_count=data_source_relationship_count,
+            header_source_relationship_count=header_source_relationship_count,
+            recipient_data_relationship_count=recipient_data_relationship_count,
+            recipient_data_part_count=len(part_names),
+            signature=_payload_inventory_signature(
+                records, part_names, archive, members, limits
+            ),
+        ),
+        part_names,
+    )
+
+
+def _validate_mail_merge_configuration(
+    configuration: ET.Element,
+    relationships: dict[str, _Relationship],
+    members: dict[str, zipfile.ZipInfo],
+) -> None:
+    for child in configuration:
+        if _is_word_element(child, "dataSource"):
+            _validate_mail_merge_relationship(
+                child,
+                relationships,
+                members,
+                _MAIL_MERGE_DATA_SOURCE_RELATIONSHIP_TYPES,
+                "external",
+            )
+        elif _is_word_element(child, "headerSource"):
+            _validate_mail_merge_relationship(
+                child,
+                relationships,
+                members,
+                _MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPES,
+                "external",
+            )
+        elif _is_word_element(child, "odso"):
+            for odso_child in child:
+                if _is_word_element(odso_child, "src"):
+                    _validate_mail_merge_relationship(
+                        odso_child,
+                        relationships,
+                        members,
+                        _MAIL_MERGE_DATA_SOURCE_RELATIONSHIP_TYPES,
+                        "external",
+                    )
+                elif _is_word_element(odso_child, "recipientData"):
+                    _validate_mail_merge_relationship(
+                        odso_child,
+                        relationships,
+                        members,
+                        _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPES,
+                        "internal",
+                    )
+
+
+def _validate_mail_merge_relationship(
+    element: ET.Element,
+    relationships: dict[str, _Relationship],
+    members: dict[str, zipfile.ZipInfo],
+    expected_types: frozenset[str],
+    expected_target_mode: str,
+) -> None:
+    relationship_id = _relationship_id_value(element)
+    relationship = relationships.get(relationship_id) if relationship_id else None
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold() not in expected_types
+        or relationship.target_mode.casefold() != expected_target_mode
+    ):
+        raise DocumentFormatError("mail merge markup is invalid")
+    if expected_target_mode == "internal":
+        _internal_relationship_target("word/settings.xml", relationship, members)
 
 
 def _internal_relationship_target(

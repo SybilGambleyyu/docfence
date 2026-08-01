@@ -10,10 +10,11 @@ The source document is treated as sensitive. Its body text, hidden text,
 comments, reviewer metadata, relationship targets, field instructions, style
 identifiers, custom XML, macro bytes, embedded-object bytes, and
 alternative-format-import bytes, document-property names, and document-property
-values must not become DocFence report content. The report may be stored in CI
-artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
-intentionally restricted to counts, fixed categories, booleans, and generic
-story kinds.
+values, mail-merge configuration, source/header targets, connection strings,
+queries, field mappings, and recipient data must not become DocFence report
+content. The report may be stored in CI artifacts, pasted into an issue, or
+uploaded to a SARIF consumer, so it is intentionally restricted to counts,
+fixed categories, booleans, and generic story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -71,6 +72,14 @@ privately. It does not disclose a property name, value, path, relationship
 target, or digest. A count is evidence that stored metadata exists, not a
 classification of the metadata as personal or safe.
 
+Mail-merge configuration and recipient-data parts use the same private-digest
+approach. Recognized data and header sources must be external relationships;
+recognized recipient data must be an internal stored target. DocFence validates
+that direct recognized references use those modes but never opens a source,
+executes a query, interprets a connection string, or parses recipient values
+for public output. Orphaned recognized relationships remain visible as aggregate
+state because they can still retain an external target or recipient payload.
+
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
 and external tools are outside this contract.
@@ -94,7 +103,10 @@ by Word. Core and extended document-property counts include automatic data such
 as timestamps, statistics, and application information. Their changes can be
 expected on a normal save; DocFence records them without interpreting their
 provenance or sensitivity. The custom-property candidate gate is limited to
-stored custom definitions and is not a general PII detector.
+stored custom definitions and is not a general PII detector. Mail-merge counts
+are stored-state evidence, not proof that Word will access a source, run a
+query, or merge recipients. DocFence does not identify, classify, or disclose
+the recipient records or connection details a package may retain.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

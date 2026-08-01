@@ -29,6 +29,25 @@ _OLE_OBJECT_RELATIONSHIP_TYPE = (
 _PACKAGE_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
 )
+_MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeSource"
+_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeHeaderSource"
+_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/mailMergeRecipientData"
+_RECIPIENT_DATA_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/recipientData"
+)
+_STRICT_MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeSource"
+)
+_STRICT_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeHeaderSource"
+)
+_STRICT_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeRecipientData"
+)
+_STRICT_WORD_NAMESPACE = "http://purl.oclc.org/ooxml/wordprocessingml/main"
+_STRICT_RELATIONSHIP_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships"
+)
 _CORE_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
 _EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
 _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
@@ -477,6 +496,142 @@ rules:
         assert marker not in rendered
 
 
+def test_mail_merge_inventory_is_private_and_relationship_id_stable(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    query_changed = tmp_path / "query-changed.docx"
+    recipient_changed = tmp_path / "recipient-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    strict_mail_merge = tmp_path / "strict-mail-merge.docx"
+    recipient_data_alias = tmp_path / "recipient-data-alias.docx"
+    orphaned = tmp_path / "orphaned.docx"
+    wrong_source_type = tmp_path / "wrong-source-type.docx"
+    internal_source = tmp_path / "internal-source.docx"
+    external_recipient = tmp_path / "external-recipient.docx"
+    missing_recipient = tmp_path / "missing-recipient.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_mail_merge_document(before, include_mail_merge=False)
+    _write_mail_merge_document(after)
+    _write_mail_merge_document(
+        query_changed, query="MAIL_MERGE_QUERY_CHANGED_DO_NOT_LEAK"
+    )
+    _write_mail_merge_document(
+        recipient_changed,
+        recipient_value="MAIL_MERGE_RECIPIENT_CHANGED_DO_NOT_LEAK",
+    )
+    _write_mail_merge_document(renumbered, relationship_id_suffix="9")
+    _write_mail_merge_document(strict_mail_merge, strict_syntax=True)
+    _write_mail_merge_document(
+        recipient_data_alias,
+        recipient_relationship_type=_RECIPIENT_DATA_RELATIONSHIP_TYPE,
+    )
+    _write_mail_merge_document(orphaned, include_configuration=False)
+    _write_mail_merge_document(
+        wrong_source_type,
+        source_relationship_type=_OLE_OBJECT_RELATIONSHIP_TYPE,
+    )
+    _write_mail_merge_document(internal_source, source_target_mode="Internal")
+    _write_mail_merge_document(external_recipient, recipient_target_mode="External")
+    _write_mail_merge_document(missing_recipient, include_recipient_part=False)
+
+    snapshot = load_snapshot(after)
+    expected_inventory = {
+        "mail_merge_configuration_count": 1,
+        "mail_merge_data_source_relationship_count": 2,
+        "mail_merge_header_source_relationship_count": 1,
+        "mail_merge_recipient_data_relationship_count": 1,
+        "mail_merge_recipient_data_part_count": 1,
+    }
+    assert snapshot.public_dict()["mail_merge"] == expected_inventory
+    assert snapshot.unclassified_part_count == 1
+    assert (
+        load_snapshot(strict_mail_merge).public_dict()["mail_merge"]
+        == expected_inventory
+    )
+    assert (
+        load_snapshot(recipient_data_alias).public_dict()["mail_merge"]
+        == expected_inventory
+    )
+    assert load_snapshot(orphaned).public_dict()["mail_merge"] == {
+        **expected_inventory,
+        "mail_merge_configuration_count": 0,
+    }
+
+    report = diff_documents(before, after)
+    assert {
+        "external_relationships_changed",
+        "mail_merge_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    assert {change.kind for change in diff_documents(after, query_changed).changes} == {
+        "document_settings_changed",
+        "mail_merge_inventory_changed",
+    }
+    assert {
+        change.kind for change in diff_documents(after, recipient_changed).changes
+    } == {"mail_merge_inventory_changed"}
+    assert diff_documents(after, renumbered).changes == ()
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(wrong_source_type)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(internal_source)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(external_recipient)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(missing_recipient)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_mail_merge: true
+  no_mail_merge_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP021",
+        "DFP022",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP021"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, orphaned), policy).findings
+    } == {"DFP021", "DFP022"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_MAIL_MERGE_INVENTORY_CHANGED",
+        "DFP021",
+        "DFP022",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "MAIL_MERGE_DATA_SOURCE_DO_NOT_LEAK",
+        "MAIL_MERGE_HEADER_SOURCE_DO_NOT_LEAK",
+        "MAIL_MERGE_QUERY_DO_NOT_LEAK",
+        "MAIL_MERGE_QUERY_CHANGED_DO_NOT_LEAK",
+        "MAIL_MERGE_UDL_DO_NOT_LEAK",
+        "MAIL_MERGE_TABLE_DO_NOT_LEAK",
+        "MAIL_MERGE_FIELD_NAME_DO_NOT_LEAK",
+        "MAIL_MERGE_FIELD_MAPPING_DO_NOT_LEAK",
+        "MAIL_MERGE_RECIPIENT_DO_NOT_LEAK",
+        "MAIL_MERGE_RECIPIENT_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
     before = tmp_path / "approved.docx"
     after = tmp_path / "candidate.docm"
@@ -832,6 +987,122 @@ def _write_embedded_content_document(
     }
     if include_import_payload:
         entries["word/afchunk1.html"] = import_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_mail_merge_document(
+    path,
+    *,
+    query: str = "MAIL_MERGE_QUERY_DO_NOT_LEAK",
+    recipient_value: str = "MAIL_MERGE_RECIPIENT_DO_NOT_LEAK",
+    relationship_id_suffix: str = "1",
+    include_mail_merge: bool = True,
+    include_configuration: bool = True,
+    include_recipient_part: bool = True,
+    strict_syntax: bool = False,
+    source_relationship_type: str = _MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE,
+    source_target_mode: str = "External",
+    recipient_target_mode: str = "Internal",
+    recipient_relationship_type: str = _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE,
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    relationship_namespace = _STRICT_RELATIONSHIP_NAMESPACE if strict_syntax else R
+    data_source_relationship_type = (
+        _STRICT_MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE
+        if strict_syntax
+        else source_relationship_type
+    )
+    header_source_relationship_type = (
+        _STRICT_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE
+        if strict_syntax
+        else _MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE
+    )
+    recipient_data_relationship_type = (
+        _STRICT_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE
+        if strict_syntax
+        else recipient_relationship_type
+    )
+    source_id = f"rIdSource{relationship_id_suffix}"
+    odso_source_id = f"rIdOdsoSource{relationship_id_suffix}"
+    header_id = f"rIdHeader{relationship_id_suffix}"
+    recipient_id = f"rIdRecipient{relationship_id_suffix}"
+    source_target = (
+        "mailMergeSource.bin"
+        if source_target_mode == "Internal"
+        else "file:///private/MAIL_MERGE_DATA_SOURCE_DO_NOT_LEAK"
+    )
+    recipient_target = "recipientData.xml"
+    source_target_mode_attribute = (
+        f' TargetMode="{source_target_mode}"'
+        if source_target_mode != "Internal"
+        else ""
+    )
+    recipient_target_mode_attribute = (
+        f' TargetMode="{recipient_target_mode}"'
+        if recipient_target_mode != "Internal"
+        else ""
+    )
+    configuration = ""
+    if include_configuration:
+        configuration = f"""<w:mailMerge>
+  <w:mainDocumentType w:val="formLetters"/>
+  <w:dataSource r:id="{source_id}"/>
+  <w:headerSource r:id="{header_id}"/>
+  <w:query w:val="{query}"/>
+  <w:odso>
+    <w:udl w:val="MAIL_MERGE_UDL_DO_NOT_LEAK"/>
+    <w:table w:val="MAIL_MERGE_TABLE_DO_NOT_LEAK"/>
+    <w:src r:id="{odso_source_id}"/>
+    <w:fieldMapData>
+      <w:name w:val="MAIL_MERGE_FIELD_NAME_DO_NOT_LEAK"/>
+      <w:mappedName w:val="MAIL_MERGE_FIELD_MAPPING_DO_NOT_LEAK"/>
+    </w:fieldMapData>
+    <w:recipientData r:id="{recipient_id}"/>
+  </w:odso>
+</w:mailMerge>"""
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_mail_merge:
+        entries["word/settings.xml"] = (
+            f'<w:settings xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}">{configuration}</w:settings>'
+        ).encode()
+        entries["word/_rels/settings.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{source_id}" Type="{data_source_relationship_type}" '
+            f'Target="{source_target}"{source_target_mode_attribute}/>'
+            f'<Relationship Id="{odso_source_id}" '
+            f'Type="{data_source_relationship_type}" '
+            'Target="file:///private/MAIL_MERGE_DATA_SOURCE_DO_NOT_LEAK" '
+            'TargetMode="External"/>'
+            f'<Relationship Id="{header_id}" Type="{header_source_relationship_type}" '
+            'Target="file:///private/MAIL_MERGE_HEADER_SOURCE_DO_NOT_LEAK" '
+            'TargetMode="External"/>'
+            f'<Relationship Id="{recipient_id}" '
+            f'Type="{recipient_data_relationship_type}" '
+            f'Target="{recipient_target}"{recipient_target_mode_attribute}/>'
+            "</Relationships>"
+        ).encode()
+        if include_recipient_part:
+            entries["word/recipientData.xml"] = (
+                f'<w:recipients xmlns:w="{word_namespace}">'
+                '<w:recipientData><w:active w:val="0"/>'
+                f'<w:hash w:val="{recipient_value}"/>'
+                "</w:recipientData></w:recipients>"
+            ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

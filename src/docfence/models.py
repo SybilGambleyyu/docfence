@@ -118,6 +118,33 @@ class DocumentPropertyInventory:
 
 
 @dataclass(frozen=True)
+class MailMergeInventory:
+    """Stored mail-merge configuration and recipient-data evidence."""
+
+    configuration_count: int
+    data_source_relationship_count: int
+    header_source_relationship_count: int
+    recipient_data_relationship_count: int
+    recipient_data_part_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "mail_merge_configuration_count": self.configuration_count,
+            "mail_merge_data_source_relationship_count": (
+                self.data_source_relationship_count
+            ),
+            "mail_merge_header_source_relationship_count": (
+                self.header_source_relationship_count
+            ),
+            "mail_merge_recipient_data_relationship_count": (
+                self.recipient_data_relationship_count
+            ),
+            "mail_merge_recipient_data_part_count": (self.recipient_data_part_count),
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -183,6 +210,7 @@ class DocumentSnapshot:
     embedded_objects: EmbeddedObjectInventory
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
+    mail_merge: MailMergeInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -261,6 +289,7 @@ class DocumentSnapshot:
             "embedded_objects": self.embedded_objects.public_dict(),
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
+            "mail_merge": self.mail_merge.public_dict(),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

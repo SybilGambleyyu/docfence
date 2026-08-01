@@ -42,6 +42,8 @@ starter policy.
 | `no_alternative_format_import_changes` | `DFP018` | Alternative-format import inventory or anchor count differs | Comparison |
 | `no_document_property_changes` | `DFP019` | Core, extended, or custom document-property inventory differs | Comparison |
 | `require_no_custom_document_properties` | `DFP020` | Candidate has stored custom document-property definitions | Candidate |
+| `require_no_mail_merge` | `DFP021` | Candidate has stored mail-merge configuration, source, or recipient-data state | Candidate |
+| `no_mail_merge_changes` | `DFP022` | Mail-merge inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -64,8 +66,9 @@ intentionally embeds a known payload can instead enable
 `no_embedded_object_payload_changes` or
 `no_alternative_format_import_changes` to preserve that baseline while blocking
 a later mutation. `no_document_property_changes` gives the same controlled
-baseline option for document metadata. `word/styles.xml` is handled by the
-dedicated style inventory instead.
+baseline option for document metadata, and `no_mail_merge_changes` does so for
+mail-merge configuration and recipient state. `word/styles.xml` is handled by
+the dedicated style inventory instead.
 
 ## Hidden-text scope
 
@@ -121,6 +124,35 @@ change is suspicious.
 candidate contains stored custom-property definitions. It does not classify
 core or extended metadata as personal, confidential, user-authored, or safe.
 Custom property names and values are never emitted.
+
+## Mail-merge scope
+
+DocFence inventories direct `w:mailMerge` settings plus recognized external
+`mailMergeSource` and `mailMergeHeaderSource` relationships from
+`word/settings.xml`. It also inventories recognized internal recipient-data
+relationships and their stored target parts. Both documented recipient-data
+relationship spellings are accepted, so conventional and Strict OOXML packages
+can be compared without treating a relationship-ID rewrite as a mutation.
+
+For an encountered direct `w:dataSource`, `w:headerSource`, ODSO `w:src`, or
+ODSO `w:recipientData` reference, the relationship must have the required type
+and target mode. Internal recipient targets must resolve to a stored package
+part. Invalid recognized mail-merge markup fails closed. A recognized stored
+source or recipient relationship is still inventoried even when no current
+`w:mailMerge` element references it, because a residual relationship remains a
+review surface.
+
+`require_no_mail_merge` is a candidate-state gate: it fails if any of those
+aggregate counts is nonzero. `no_mail_merge_changes` compares a private
+signature of the mail-merge configuration, relationship semantics, and
+recipient-data payloads. Public reports show only aggregate counts. Connection
+strings, queries, table names, field mappings, source/header targets,
+relationship IDs, recipient bytes, and fingerprints are never emitted.
+
+These rules do not connect to a data source, execute a query, select a
+recipient, or decide whether mail-merge state is expected, safe, personal, or
+malicious. Use a clean-handoff gate when no mail merge should remain; use a
+controlled baseline when an approved template legitimately retains it.
 
 ## CI example
 

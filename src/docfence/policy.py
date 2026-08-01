@@ -32,6 +32,8 @@ _RULES: Final = {
     "no_alternative_format_import_changes": "DFP018",
     "no_document_property_changes": "DFP019",
     "require_no_custom_document_properties": "DFP020",
+    "require_no_mail_merge": "DFP021",
+    "no_mail_merge_changes": "DFP022",
 }
 
 
@@ -219,6 +221,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_mail_merge_changes") and (
+        before.mail_merge.signature != after.mail_merge.signature
+    ):
+        findings.append(
+            _finding(
+                "no_mail_merge_changes",
+                "Mail-merge inventory changed.",
+                {
+                    "before": before.mail_merge.public_dict(),
+                    "after": after.mail_merge.public_dict(),
+                },
+            )
+        )
     if (
         policy.enabled("require_no_unresolved_revisions")
         and after.revisions.unresolved_count
@@ -313,6 +328,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                         after.document_properties.custom_property_count
                     ),
                 },
+            )
+        )
+    if policy.enabled("require_no_mail_merge") and any(
+        after.mail_merge.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_mail_merge",
+                "Candidate contains stored mail-merge configuration or data state.",
+                after.mail_merge.public_dict(),
             )
         )
     if (
