@@ -2,6 +2,27 @@
 
 All notable changes are documented here.
 
+## 0.14.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for Word editable-range
+  `w:permStart` / `w:permEnd` markup across supported document stories.
+- Added `DFP041` to require a handoff with no stored editable-range permission
+  markup and `DFP042` to protect an approved range-permission baseline.
+- Reports now expose aggregate marker, paired/unpaired-range, individual-editor
+  assignment, predefined-group, table-column-selector, and custom-XML-placement
+  counts only. Individual editor values, marker IDs, exact column values, part
+  paths, and fingerprints remain private.
+- Accepts Word's predefined editing-group vocabulary and Transitional/Strict
+  Word namespaces. It validates recognized marker leaf shape, required IDs,
+  allowed attributes, group values, column syntax, placement values, and
+  unambiguous per-story IDs. Unmatched start/end markers are inventoried as
+  stored review state rather than presented as effective authorization.
+- Privately detects same-count editor-identity or range-shape changes without
+  exposing identities or claiming that an editor is authenticated, currently
+  authorized, or able to edit a document. Added regression coverage for
+  privacy redaction, policy/SARIF output, multiple stories, Strict OOXML,
+  unmatched markers, and malformed markup.
+
 ## 0.13.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for stored Word

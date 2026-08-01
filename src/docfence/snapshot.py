@@ -39,6 +39,7 @@ from docfence.models import (
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
+    WordPermissionRangeInventory,
     WordProtectionInventory,
 )
 
@@ -254,6 +255,27 @@ _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES: Final = frozenset(
 )
 _WORD_PROTECTION_TRUE_VALUES: Final = frozenset({"1", "true", "on"})
 _WORD_PROTECTION_FALSE_VALUES: Final = frozenset({"0", "false", "off"})
+_WORD_PERMISSION_START_ATTRIBUTE_NAMES: Final = frozenset(
+    {"id", "ed", "edGrp", "colFirst", "colLast", "displacedByCustomXml"}
+)
+_WORD_PERMISSION_END_ATTRIBUTE_NAMES: Final = frozenset(
+    {"id", "displacedByCustomXml"}
+)
+_WORD_PERMISSION_EDITOR_GROUPS: Final = frozenset(
+    {
+        "none",
+        "everyone",
+        "administrators",
+        "contributors",
+        "editors",
+        "owners",
+        "current",
+    }
+)
+_WORD_PERMISSION_DISPLACED_BY_CUSTOM_XML_VALUES: Final = frozenset(
+    {"next", "prev"}
+)
+_WORD_PERMISSION_COLUMN_VALUE: Final = re.compile(r"^[0-9]+$")
 _SENSITIVITY_LABEL_GUID: Final = re.compile(
     r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
     r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}$"
@@ -538,6 +560,14 @@ class _ComplexFieldState:
     accepts_instructions: bool = True
 
 
+@dataclass(frozen=True)
+class _WordPermissionMarker:
+    """A validated range-permission boundary retained only while loading."""
+
+    ordinal: int
+    identifier: str
+
+
 def load_snapshot(
     document: str | Path, *, limits: PackageLimits = DEFAULT_LIMITS
 ) -> DocumentSnapshot:
@@ -625,6 +655,13 @@ def _load_package(
                 members,
                 relationship_maps,
                 document_settings_parts,
+                limits,
+            )
+            word_permission_ranges = _word_permission_range_inventory(
+                archive,
+                members,
+                content_types,
+                relationship_maps,
                 limits,
             )
             mail_merge, mail_merge_parts = _mail_merge_inventory(
@@ -731,6 +768,7 @@ def _load_package(
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
         word_protection=word_protection,
+        word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
         external_fields=external_fields,
@@ -3762,6 +3800,183 @@ def _word_protection_attribute_enabled(
         value is not None
         and value.strip().casefold() in _WORD_PROTECTION_TRUE_VALUES
     )
+
+
+def _word_permission_range_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> WordPermissionRangeInventory:
+    """Inventory editable-range markup without exposing editor identities.
+
+    Word stores individual editors in ``w:ed`` and predefined application
+    groups in ``w:edGrp`` on ``w:permStart``.  The former can contain an email
+    address, alias, or domain identity.  Marker IDs, editor values, exact table
+    columns, and placement stay solely in the private element fingerprints.
+
+    An unmatched marker is still stored review state, so it is counted rather
+    than treated as an effective permission or discarded.  Exact duplicate
+    boundary IDs in one story are rejected because they make a pairing
+    ambiguous.
+    """
+
+    records: list[tuple[str, ...]] = []
+    permission_range_story_count = 0
+    permission_start_count = 0
+    permission_end_count = 0
+    paired_permission_range_count = 0
+    unpaired_permission_start_count = 0
+    unpaired_permission_end_count = 0
+    individual_editor_assignment_count = 0
+    editor_group_assignment_count = 0
+    editor_group_counts = {group: 0 for group in _WORD_PERMISSION_EDITOR_GROUPS}
+    table_column_permission_range_start_count = 0
+    custom_xml_displaced_permission_marker_count = 0
+
+    for part_key, kind in _discover_story_parts(members, content_types):
+        root = _read_xml(archive, members[part_key], limits)
+        if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
+            raise DocumentFormatError("document story is invalid")
+
+        relationships = relationship_maps.get(part_key, {})
+        starts: dict[str, _WordPermissionMarker] = {}
+        ends: dict[str, _WordPermissionMarker] = {}
+        marker_ordinal = 0
+
+        for element in root.iter():
+            if _is_word_element(element, "permStart"):
+                attributes = _validate_word_permission_range_element(
+                    element, "permStart"
+                )
+                identifier = attributes["id"]
+                if identifier in starts:
+                    raise DocumentFormatError("Word permission range is invalid")
+                marker = _WordPermissionMarker(marker_ordinal, identifier)
+                starts[identifier] = marker
+                permission_start_count += 1
+                if "ed" in attributes:
+                    individual_editor_assignment_count += 1
+                editor_group = attributes.get("edGrp")
+                if editor_group is not None:
+                    editor_group_assignment_count += 1
+                    editor_group_counts[editor_group] += 1
+                if "colFirst" in attributes or "colLast" in attributes:
+                    table_column_permission_range_start_count += 1
+            elif _is_word_element(element, "permEnd"):
+                attributes = _validate_word_permission_range_element(
+                    element, "permEnd"
+                )
+                identifier = attributes["id"]
+                if identifier in ends:
+                    raise DocumentFormatError("Word permission range is invalid")
+                marker = _WordPermissionMarker(marker_ordinal, identifier)
+                ends[identifier] = marker
+                permission_end_count += 1
+            else:
+                continue
+
+            if "displacedByCustomXml" in attributes:
+                custom_xml_displaced_permission_marker_count += 1
+            records.append(
+                (
+                    "word_permission_marker",
+                    part_key,
+                    str(marker.ordinal),
+                    _fingerprint_element(element, relationships),
+                )
+            )
+            marker_ordinal += 1
+
+        if marker_ordinal:
+            permission_range_story_count += 1
+        for marker in starts.values():
+            end = ends.get(marker.identifier)
+            if end is not None and end.ordinal > marker.ordinal:
+                paired_permission_range_count += 1
+            else:
+                unpaired_permission_start_count += 1
+        for marker in ends.values():
+            start = starts.get(marker.identifier)
+            if start is None or start.ordinal >= marker.ordinal:
+                unpaired_permission_end_count += 1
+
+    return WordPermissionRangeInventory(
+        permission_range_story_count=permission_range_story_count,
+        permission_start_count=permission_start_count,
+        permission_end_count=permission_end_count,
+        paired_permission_range_count=paired_permission_range_count,
+        unpaired_permission_start_count=unpaired_permission_start_count,
+        unpaired_permission_end_count=unpaired_permission_end_count,
+        individual_editor_assignment_count=individual_editor_assignment_count,
+        editor_group_assignment_count=editor_group_assignment_count,
+        editor_group_none_count=editor_group_counts["none"],
+        editor_group_everyone_count=editor_group_counts["everyone"],
+        editor_group_administrators_count=editor_group_counts["administrators"],
+        editor_group_contributors_count=editor_group_counts["contributors"],
+        editor_group_editors_count=editor_group_counts["editors"],
+        editor_group_owners_count=editor_group_counts["owners"],
+        editor_group_current_count=editor_group_counts["current"],
+        table_column_permission_range_start_count=(
+            table_column_permission_range_start_count
+        ),
+        custom_xml_displaced_permission_marker_count=(
+            custom_xml_displaced_permission_marker_count
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _validate_word_permission_range_element(
+    element: ET.Element, expected_local_name: str
+) -> dict[str, str]:
+    """Validate the narrow, standard range-permission leaf shape."""
+
+    allowed_attribute_names = (
+        _WORD_PERMISSION_START_ATTRIBUTE_NAMES
+        if expected_local_name == "permStart"
+        else _WORD_PERMISSION_END_ATTRIBUTE_NAMES
+    )
+    if (
+        not _is_word_element(element, expected_local_name)
+        or list(element)
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("Word permission range is invalid")
+
+    attributes: dict[str, str] = {}
+    for attribute, value in element.attrib.items():
+        namespace, local_name = _qualified_name(attribute)
+        if (
+            namespace not in _WORD_NAMESPACES
+            or local_name not in allowed_attribute_names
+            or local_name in attributes
+        ):
+            raise DocumentFormatError("Word permission range is invalid")
+        attributes[local_name] = value
+
+    if "id" not in attributes:
+        raise DocumentFormatError("Word permission range is invalid")
+    if expected_local_name == "permStart":
+        editor_group = attributes.get("edGrp")
+        if (
+            editor_group is not None
+            and editor_group not in _WORD_PERMISSION_EDITOR_GROUPS
+        ):
+            raise DocumentFormatError("Word permission range is invalid")
+        for attribute_name in ("colFirst", "colLast"):
+            value = attributes.get(attribute_name)
+            if value is not None and not _WORD_PERMISSION_COLUMN_VALUE.fullmatch(value):
+                raise DocumentFormatError("Word permission range is invalid")
+
+    displacement = attributes.get("displacedByCustomXml")
+    if (
+        displacement is not None
+        and displacement not in _WORD_PERMISSION_DISPLACED_BY_CUSTOM_XML_VALUES
+    ):
+        raise DocumentFormatError("Word permission range is invalid")
+    return attributes
 
 
 def _styles_inventory(

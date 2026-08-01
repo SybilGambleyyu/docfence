@@ -52,6 +52,8 @@ _RULES: Final = {
     "no_package_digital_signature_changes": "DFP038",
     "require_no_word_protection": "DFP039",
     "no_word_protection_changes": "DFP040",
+    "require_no_word_permission_ranges": "DFP041",
+    "no_word_permission_range_changes": "DFP042",
 }
 
 
@@ -279,6 +281,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_permission_range_changes") and (
+        before.word_permission_ranges.signature
+        != after.word_permission_ranges.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_permission_range_changes",
+                "Stored Word editable-range permission inventory changed.",
+                {
+                    "before": before.word_permission_ranges.public_dict(),
+                    "after": after.word_permission_ranges.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_mail_merge_changes") and (
         before.mail_merge.signature != after.mail_merge.signature
     ):
@@ -497,6 +513,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_protection",
                 "Candidate contains stored Word editing or write-protection state.",
                 after.word_protection.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_permission_ranges") and any(
+        after.word_permission_ranges.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_permission_ranges",
+                "Candidate contains stored Word editable-range permission markup.",
+                after.word_permission_ranges.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

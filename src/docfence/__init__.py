@@ -1,6 +1,6 @@
 """DocFence: local-first DOCX change assurance."""
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 from docfence.diff import diff_documents
 from docfence.snapshot import load_snapshot

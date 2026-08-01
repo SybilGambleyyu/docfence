@@ -2243,6 +2243,250 @@ def test_word_protection_discovery_and_invalid_markup(tmp_path) -> None:
             load_snapshot(document)
 
 
+def test_word_permission_range_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    editor_changed = tmp_path / "editor-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_word_permission_range_document(before)
+    _write_word_permission_range_document(
+        after,
+        body_markup=(
+            '<w:permStart w:id="range-identity" '
+            'w:ed="RANGE_EDITOR_EMAIL_DO_NOT_LEAK" '
+            'w:displacedByCustomXml="next"/>'
+            '<w:permEnd w:id="range-identity"/>'
+            '<w:permStart w:id="range-everyone" w:edGrp="everyone"/>'
+            '<w:permEnd w:id="range-everyone" '
+            'w:displacedByCustomXml="prev"/>'
+            '<w:permStart w:id="range-table" w:edGrp="editors" '
+            'w:colFirst="1" w:colLast="3"/>'
+            '<w:permEnd w:id="range-table"/>'
+            '<w:permStart w:id="range-unpaired" '
+            'w:ed="RANGE_SECOND_EDITOR_DO_NOT_LEAK" w:edGrp="owners"/>'
+            '<w:permEnd w:id="range-lone-end"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        editor_changed,
+        body_markup=(
+            '<w:permStart w:id="range-identity" '
+            'w:ed="RANGE_EDITOR_CHANGED_DO_NOT_LEAK" '
+            'w:displacedByCustomXml="next"/>'
+            '<w:permEnd w:id="range-identity"/>'
+            '<w:permStart w:id="range-everyone" w:edGrp="everyone"/>'
+            '<w:permEnd w:id="range-everyone" '
+            'w:displacedByCustomXml="prev"/>'
+            '<w:permStart w:id="range-table" w:edGrp="editors" '
+            'w:colFirst="1" w:colLast="3"/>'
+            '<w:permEnd w:id="range-table"/>'
+            '<w:permStart w:id="range-unpaired" '
+            'w:ed="RANGE_SECOND_EDITOR_DO_NOT_LEAK" w:edGrp="owners"/>'
+            '<w:permEnd w:id="range-lone-end"/>'
+        ),
+    )
+
+    expected_inventory = {
+        "permission_range_story_count": 1,
+        "permission_start_count": 4,
+        "permission_end_count": 4,
+        "paired_permission_range_count": 3,
+        "unpaired_permission_start_count": 1,
+        "unpaired_permission_end_count": 1,
+        "individual_editor_assignment_count": 2,
+        "editor_group_assignment_count": 3,
+        "editor_group_none_count": 0,
+        "editor_group_everyone_count": 1,
+        "editor_group_administrators_count": 0,
+        "editor_group_contributors_count": 0,
+        "editor_group_editors_count": 1,
+        "editor_group_owners_count": 1,
+        "editor_group_current_count": 0,
+        "table_column_permission_range_start_count": 1,
+        "custom_xml_displaced_permission_marker_count": 2,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert after_snapshot.public_dict()["word_permission_ranges"] == expected_inventory
+    assert before_snapshot.public_dict()["word_permission_ranges"] == {
+        key: 0 for key in expected_inventory
+    }
+
+    report = diff_documents(before, after)
+    assert "word_permission_range_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "word_permission_range_inventory_changed" in {
+        change.kind for change in diff_documents(after, editor_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_word_permission_ranges: true
+  no_word_permission_range_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP041",
+        "DFP042",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, editor_changed), policy
+        ).findings
+    } == {"DFP041", "DFP042"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_PERMISSION_RANGE_INVENTORY_CHANGED",
+        "DFP041",
+        "DFP042",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "RANGE_EDITOR_EMAIL_DO_NOT_LEAK",
+        "RANGE_SECOND_EDITOR_DO_NOT_LEAK",
+        "RANGE_EDITOR_CHANGED_DO_NOT_LEAK",
+        "range-identity",
+        "range-everyone",
+        "range-table",
+        "range-unpaired",
+        "range-lone-end",
+    ):
+        assert marker not in rendered
+
+
+def test_word_permission_range_discovery_and_invalid_markup(tmp_path) -> None:
+    multi_story = tmp_path / "multi-story.docx"
+    strict = tmp_path / "strict.docx"
+    unmatched = tmp_path / "unmatched.docx"
+    missing_identifier = tmp_path / "missing-identifier.docx"
+    duplicate_start_identifier = tmp_path / "duplicate-start-identifier.docx"
+    duplicate_end_identifier = tmp_path / "duplicate-end-identifier.docx"
+    invalid_group = tmp_path / "invalid-group.docx"
+    invalid_column = tmp_path / "invalid-column.docx"
+    invalid_displacement = tmp_path / "invalid-displacement.docx"
+    unsupported_attribute = tmp_path / "unsupported-attribute.docx"
+    nonleaf = tmp_path / "nonleaf.docx"
+
+    _write_word_permission_range_document(
+        multi_story,
+        body_markup=(
+            '<w:permStart w:id="shared" w:edGrp="current"/>'
+            '<w:permEnd w:id="shared"/>'
+        ),
+        header_markup=(
+            '<w:permStart w:id="shared" w:edGrp="administrators"/>'
+            '<w:permEnd w:id="shared"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        strict,
+        word_namespace=_STRICT_WORD_NAMESPACE,
+        body_markup=(
+            '<w:permStart w:id="strict-range" w:edGrp="contributors" '
+            'w:colFirst="0"/><w:permEnd w:id="strict-range"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        unmatched,
+        body_markup=(
+            '<w:permEnd w:id="end-before-start"/>'
+            '<w:permStart w:id="end-before-start" w:edGrp="none"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        missing_identifier, body_markup='<w:permStart w:edGrp="everyone"/>'
+    )
+    _write_word_permission_range_document(
+        duplicate_start_identifier,
+        body_markup=(
+            '<w:permStart w:id="same"/><w:permStart w:id="same"/>'
+            '<w:permEnd w:id="same"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        duplicate_end_identifier,
+        body_markup=(
+            '<w:permStart w:id="same"/><w:permEnd w:id="same"/>'
+            '<w:permEnd w:id="same"/>'
+        ),
+    )
+    _write_word_permission_range_document(
+        invalid_group, body_markup='<w:permStart w:id="one" w:edGrp="guests"/>'
+    )
+    _write_word_permission_range_document(
+        invalid_column,
+        body_markup='<w:permStart w:id="one" w:colFirst="-1"/>',
+    )
+    _write_word_permission_range_document(
+        invalid_displacement,
+        body_markup='<w:permEnd w:id="one" w:displacedByCustomXml="later"/>',
+    )
+    _write_word_permission_range_document(
+        unsupported_attribute,
+        body_markup='<w:permStart w:id="one" w:futurePermission="1"/>',
+    )
+    _write_word_permission_range_document(
+        nonleaf,
+        body_markup='<w:permStart w:id="one"><w:unexpected/></w:permStart>',
+    )
+
+    multi_story_snapshot = load_snapshot(multi_story)
+    assert (
+        multi_story_snapshot.word_permission_ranges.permission_range_story_count
+        == 2
+    )
+    assert (
+        multi_story_snapshot.word_permission_ranges.paired_permission_range_count == 2
+    )
+    assert multi_story_snapshot.word_permission_ranges.editor_group_current_count == 1
+    assert (
+        multi_story_snapshot.word_permission_ranges.editor_group_administrators_count
+        == 1
+    )
+    strict_snapshot = load_snapshot(strict)
+    assert strict_snapshot.word_permission_ranges.paired_permission_range_count == 1
+    assert (
+        strict_snapshot.word_permission_ranges.editor_group_contributors_count == 1
+    )
+    unmatched_snapshot = load_snapshot(unmatched)
+    assert (
+        unmatched_snapshot.word_permission_ranges.paired_permission_range_count == 0
+    )
+    assert (
+        unmatched_snapshot.word_permission_ranges.unpaired_permission_start_count
+        == 1
+    )
+    assert unmatched_snapshot.word_permission_ranges.unpaired_permission_end_count == 1
+
+    for document in (
+        missing_identifier,
+        duplicate_start_identifier,
+        duplicate_end_identifier,
+        invalid_group,
+        invalid_column,
+        invalid_displacement,
+        unsupported_attribute,
+        nonleaf,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
     template = tmp_path / "review-template.dotx"
     macro_template = tmp_path / "review-template.dotm"
@@ -3471,6 +3715,41 @@ def _write_word_protection_document(
             f'<Relationships xmlns="{PR}"><Relationship Id="rIdSettings1" '
             f'Type="{settings_relationship_type}" Target="{target}"'
             f"{target_mode_attribute}/></Relationships>"
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_word_permission_range_document(
+    path,
+    *,
+    body_markup: str = "",
+    header_markup: str | None = None,
+    word_namespace: str = W,
+) -> None:
+    """Write a small story fixture containing optional editable-range markup."""
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body><w:p>'
+            f"{body_markup}"
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if header_markup is not None:
+        entries["word/header1.xml"] = (
+            f'<w:hdr xmlns:w="{word_namespace}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            "</w:p></w:hdr>"
         ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:

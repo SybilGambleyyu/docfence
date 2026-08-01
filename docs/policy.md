@@ -62,6 +62,8 @@ starter policy.
 | `no_package_digital_signature_changes` | `DFP038` | OPC package digital-signature inventory differs | Comparison |
 | `require_no_word_protection` | `DFP039` | Candidate has stored Word editing or write-protection state | Candidate |
 | `no_word_protection_changes` | `DFP040` | Word editing/write-protection inventory differs | Comparison |
+| `require_no_word_permission_ranges` | `DFP041` | Candidate has stored Word editable-range permission markup | Candidate |
+| `no_word_permission_range_changes` | `DFP042` | Word editable-range permission inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -102,6 +104,8 @@ label or its related legacy metadata.
 a template that intentionally retains approved OPC package-signature material.
 `no_word_protection_changes` provides the equivalent gate when an approved
 template intentionally retains Word editing/write-protection state.
+`no_word_permission_range_changes` provides the equivalent gate when an
+approved template intentionally retains editable-range permission markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -455,6 +459,41 @@ These rules do not validate password construction, derive or recover a
 password, estimate password or algorithm strength, bypass a restriction,
 determine the effective settings after Word/compatibility behavior, decrypt a
 file, or decide whether the stored protection is a security control.
+
+## Word editable-range permission scope
+
+Word stores editable-region boundaries as `w:permStart` and `w:permEnd` in
+document stories. A start can carry an individual editor value in `w:ed`, a
+predefined application group in `w:edGrp`, and optional table-column selectors;
+an end is paired with its start by the stored ID. Individual editor values can
+be email addresses, aliases, or domain identities, so DocFence never emits
+them. It also never emits marker IDs, exact column values, story paths, or
+fingerprints.
+
+The inventory scans every supported body, header, footer, footnote, endnote,
+comment, and glossary story in either Word namespace. Recognized markers must
+be Word-namespace leaves with a required ID and only their standard attributes.
+Predefined groups must use the `none`, `everyone`, `administrators`,
+`contributors`, `editors`, `owners`, or `current` vocabulary. Column selectors
+must be nonnegative decimal syntax, custom-XML placement must be `next` or
+`prev`, and duplicate start or end IDs within one story fail closed because the
+pairing would be ambiguous.
+
+Public output contains only aggregate start/end, paired/unpaired,
+individual-editor, predefined-group, table-column-selector, and
+custom-XML-placement counts. A raw marker change, including a same-count editor
+identity rewrite, remains visible through the private inventory signature.
+Unmatched boundaries are reported as stored markup; DocFence does not infer
+that they grant an effective permission. Similarly, it records both `w:ed` and
+`w:edGrp` when both are stored but does not resolve Word's client-specific
+precedence behavior.
+
+`require_no_word_permission_ranges` fails whenever a candidate stores any
+recognized range-permission marker, including an unmatched marker.
+`no_word_permission_range_changes` compares the private inventory signature to
+protect a controlled baseline. Neither rule authenticates a person, resolves a
+group, proves that an editor is currently authorized, calculates editable
+content, or makes an encryption or security claim.
 
 ## External Word document dependency scope
 

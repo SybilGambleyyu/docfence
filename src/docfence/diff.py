@@ -464,6 +464,20 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.word_permission_ranges.signature
+        != after.word_permission_ranges.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_permission_range_inventory_changed",
+                message="Stored Word editable-range permission inventory changed.",
+                details={
+                    "before": before.word_permission_ranges.public_dict(),
+                    "after": after.word_permission_ranges.public_dict(),
+                },
+            )
+        )
     if before.mail_merge.signature != after.mail_merge.signature:
         changes.append(
             Change(

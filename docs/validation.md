@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.13 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.14 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -76,6 +76,13 @@ following properties:
   counts; same-count hash/verifier rewrites; JSON/Markdown/SARIF redaction;
   policy findings; duplicate leaves; malformed roots/leaves; unsupported
   attributes; invalid edit/boolean values; and external Settings relationships;
+- Word editable-range permission markup is separately inventoried across body,
+  header, footer, note, comment, and glossary stories. Tests cover aggregate
+  marker/pairing/individual-editor/predefined-group/table-column/custom-XML
+  placement counts; same-count editor-identity rewrites; JSON/Markdown/SARIF
+  redaction; policy findings; Transitional and Strict namespaces; unmatched
+  boundaries; and malformed marker leaves, IDs, attributes, groups, columns,
+  placement values, and duplicate per-story boundaries;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -98,6 +105,8 @@ following properties:
   URIs, signing times, comments, provider data, relationship IDs, and paths,
   Word protection hashes, salts, verifier values, cryptographic provider and
   algorithm fields, and Settings-part paths,
+  editable-range marker IDs, individual editor identities, exact table-column
+  selectors, placement values, and story paths,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -117,7 +126,9 @@ following properties:
   certificate relationship topology are rejected before reporting. Malformed
   recognized Word protection element structure, attributes, edit values,
   booleans, duplicate leaves, and external Settings relationships are rejected
-  before reporting.
+  before reporting. Malformed recognized Word editable-range leaves, IDs,
+  attributes, groups, column selectors, placement values, and duplicate
+  per-story boundaries are rejected before reporting.
 
 The release check is:
 
@@ -193,5 +204,7 @@ revocation or timestamps, establish signer identity, determine coverage, or
 make an Office trust decision. It does not validate Word password-verifier
 construction or strength, recover or test a password, bypass a Word
 restriction, infer effective enforcement, or treat Word protection as
-encryption/security. Those limits are explicit in the 0.13 contract; see the
+encryption/security. It does not authenticate a stored editable-range editor,
+resolve a group, calculate an editable region, or infer effective range
+authorization. Those limits are explicit in the 0.14 contract; see the
 [threat model](threat-model.md).

@@ -9,7 +9,8 @@ style/default declarations, field codes, external-source field instructions,
 external relationships, custom XML, macros, core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
-Word editing/write-protection state and password-verifier material,
+Word editing/write-protection state, editable-range permission markup, and
+password-verifier material,
 data-bound
 content controls and their referenced custom XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
@@ -32,6 +33,8 @@ Package signer/certificate material, signing times and comments, signature
 values, signed-reference targets, and signature-part paths are private too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are private too.
+Editable-range marker IDs, individual editor identities, and exact table-column
+selectors are private too.
 
 ```bash
 python -m pip install docfence
@@ -60,7 +63,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.13 focuses on Office Open XML Word documents and templates and
+Version 0.14 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -73,6 +76,7 @@ deliberately keeps a small, inspectable contract:
   custom-XML, macro,
   core/extended/custom document-property, sensitivity-label metadata, OPC
   package digital-signature material, Word editing/write-protection state,
+  editable-range permission markup,
   mail-merge, content-control
   data-binding, modern-comment metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -186,6 +190,31 @@ state—not encryption or an assurance that Word will enforce a restriction.
 DocFence does not validate password construction or strength, try or recover a
 password, determine effective enforcement, bypass a restriction, or make a
 security claim about either protection feature.
+
+Editable-range permission markup has a separate inventory because a protected
+Word document can retain exceptions for selected text or table columns. A
+`w:permStart` marker can store an individual editor in `w:ed` or a predefined
+group in `w:edGrp`, with the corresponding `w:permEnd` linked by its marker ID.
+DocFence recognizes these markers across every supported document story,
+including Transitional and Strict Word namespaces. It validates their leaf
+shape, required IDs, known attributes, predefined group values, nonnegative
+column-selector syntax, placement values, and unambiguous IDs within a story.
+
+Reports expose only aggregate start/end, paired/unpaired, individual-editor,
+predefined-group, table-column-selector, and custom-XML-placement counts. Raw
+editor identities, marker IDs, exact columns, part paths, and fingerprints stay
+private. The full marker shape is privately fingerprinted so a same-count
+identity or range rewrite remains review-visible. `w:ed` and `w:edGrp` are
+stored attributes, not evidence that an identity is authenticated or presently
+authorized; when both appear, Word behavior can prefer the individual editor.
+Unmatched markers are counted as stored review state, not presented as an
+effective permission. `require_no_word_permission_ranges` fails for any stored
+range-permission marker, while `no_word_permission_range_changes` protects an
+approved baseline.
+
+This inventory does not authenticate editors, resolve groups, determine whether
+a client will honor a marker, calculate the exact editable text or table cells,
+or decide whether a document is secure.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -311,6 +340,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_sensitivity_label_metadata: true
   require_no_package_digital_signatures: true
   require_no_word_protection: true
+  require_no_word_permission_ranges: true
   require_no_external_document_dependencies: true
 ```
 
@@ -331,6 +361,7 @@ later mutation:
   no_sensitivity_label_metadata_changes: true
   no_package_digital_signature_changes: true
   no_word_protection_changes: true
+  no_word_permission_range_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -364,6 +395,8 @@ URIs, signing times, comments, provider data, relationship IDs, and part paths
 remain private as well.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths remain private as well.
+Editable-range marker IDs, individual editor identities, exact table-column
+selectors, and part paths remain private as well.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -464,6 +497,13 @@ Both make the critical boundary explicit: editing/write protection is not
 encryption or a security verdict. Microsoft also documents stored
 [password-verifier salt](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.writeprotection.salt?view=openxml-3.0.1)
 behavior, which is why DocFence keeps those fields out of reports.
+The editable-range boundary follows the Open XML SDK's
+[`w:permStart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permstart?view=openxml-3.0.1)
+and [`w:permEnd` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.permend?view=openxml-3.0.1),
+plus Microsoft's guidance on [allowing changes to selected protected-document
+parts](https://support.microsoft.com/en-us/word/allow-changes-to-parts-of-a-protected-word-document),
+which can grant editing to everyone or named individuals. The individual
+identity is therefore review-sensitive package data, not report output.
 
 ## Development
 

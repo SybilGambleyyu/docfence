@@ -34,6 +34,10 @@ identifiers, reference URIs, signing times, comments, provider data,
 relationship IDs, and signature-part paths are sensitive package material too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are sensitive package material too.
+Word editable-range marker IDs, individual editor values, exact table-column
+selectors, custom-XML placement, and story-part paths are sensitive package
+material too. An editor value can be an email address, alias, or domain
+identity.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -129,6 +133,20 @@ fingerprints remain private. A same-count verifier rewrite is therefore
 review-visible without putting password-verifier material in a CI artifact.
 This treats all cryptographic-looking fields as opaque package data: DocFence
 does not decode, interpret, or emit them as password verifiers.
+
+Word editable-range permission markup receives a separate private-digest
+treatment. DocFence scans supported Word stories for `w:permStart` and
+`w:permEnd`, accepts Transitional and Strict Word namespaces, and validates the
+standard leaf shape, required IDs, attribute vocabulary, predefined editor
+groups, decimal column-selector syntax, and custom-XML placement values.
+Duplicate start or end IDs in one story fail closed because they would make a
+pair ambiguous. Marker IDs, individual editor values, exact columns, placement,
+and story paths stay private. Public output exposes only aggregate marker,
+paired/unpaired, individual-editor, predefined-group, table-column-selector,
+and custom-XML-placement counts. Full marker shape is privately fingerprinted,
+so an identity-only or same-count range rewrite remains review-visible.
+Unmatched boundaries are retained as stored markup rather than discarded or
+presented as effective authorization.
 
 Mail-merge configuration and recipient-data parts use the same private-digest
 approach. Recognized data and header sources must be external relationships;
@@ -274,6 +292,12 @@ password construction or verifier completeness, derive or recover passwords,
 estimate password/algorithm strength, bypass a restriction, resolve the
 standard-versus-Word behavior of omitted enforcement, or make a security
 decision from `w:documentProtection` or `w:writeProtection`.
+Word editable-range counts are likewise stored-state evidence, not a statement
+that an individual is authenticated, a group resolves, a client will honor a
+boundary, an exact text/table region is editable, or a restriction is secure.
+DocFence does not authenticate editors, resolve `w:ed` or `w:edGrp`, calculate
+editable content, emulate Word precedence when both attributes are present, or
+make an authorization, encryption, or security decision from range markup.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

@@ -227,6 +227,62 @@ class WordProtectionInventory:
 
 
 @dataclass(frozen=True)
+class WordPermissionRangeInventory:
+    """Stored Word editable-range permission markup, aggregate only.
+
+    Individual editor values can be email addresses, aliases, or domain
+    identities. They remain inside the private signature; the public contract
+    reports only marker, pairing, and predefined-group categories.
+    """
+
+    permission_range_story_count: int
+    permission_start_count: int
+    permission_end_count: int
+    paired_permission_range_count: int
+    unpaired_permission_start_count: int
+    unpaired_permission_end_count: int
+    individual_editor_assignment_count: int
+    editor_group_assignment_count: int
+    editor_group_none_count: int
+    editor_group_everyone_count: int
+    editor_group_administrators_count: int
+    editor_group_contributors_count: int
+    editor_group_editors_count: int
+    editor_group_owners_count: int
+    editor_group_current_count: int
+    table_column_permission_range_start_count: int
+    custom_xml_displaced_permission_marker_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "permission_range_story_count": self.permission_range_story_count,
+            "permission_start_count": self.permission_start_count,
+            "permission_end_count": self.permission_end_count,
+            "paired_permission_range_count": self.paired_permission_range_count,
+            "unpaired_permission_start_count": self.unpaired_permission_start_count,
+            "unpaired_permission_end_count": self.unpaired_permission_end_count,
+            "individual_editor_assignment_count": (
+                self.individual_editor_assignment_count
+            ),
+            "editor_group_assignment_count": self.editor_group_assignment_count,
+            "editor_group_none_count": self.editor_group_none_count,
+            "editor_group_everyone_count": self.editor_group_everyone_count,
+            "editor_group_administrators_count": self.editor_group_administrators_count,
+            "editor_group_contributors_count": self.editor_group_contributors_count,
+            "editor_group_editors_count": self.editor_group_editors_count,
+            "editor_group_owners_count": self.editor_group_owners_count,
+            "editor_group_current_count": self.editor_group_current_count,
+            "table_column_permission_range_start_count": (
+                self.table_column_permission_range_start_count
+            ),
+            "custom_xml_displaced_permission_marker_count": (
+                self.custom_xml_displaced_permission_marker_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class MailMergeInventory:
     """Stored mail-merge configuration and recipient-data evidence."""
 
@@ -516,6 +572,7 @@ class DocumentSnapshot:
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
     word_protection: WordProtectionInventory
+    word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
@@ -606,6 +663,7 @@ class DocumentSnapshot:
                 self.package_digital_signatures.public_dict()
             ),
             "word_protection": self.word_protection.public_dict(),
+            "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),

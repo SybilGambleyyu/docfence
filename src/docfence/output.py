@@ -59,6 +59,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
         )
     )
     lines.extend(_word_protection_section(document.get("word_protection", {})))
+    lines.extend(
+        _word_permission_range_section(document.get("word_permission_ranges", {}))
+    )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
@@ -93,6 +96,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_sensitivity_label_comparison(before, after))
     lines.extend(_package_digital_signature_comparison(before, after))
     lines.extend(_word_protection_comparison(before, after))
+    lines.extend(_word_permission_range_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
@@ -276,6 +280,10 @@ def _word_protection_section(value: object) -> list[str]:
     return _inventory_section("Word editing and write-protection inventory", value)
 
 
+def _word_permission_range_section(value: object) -> list[str]:
+    return _inventory_section("Word editable-range permission inventory", value)
+
+
 def _mail_merge_section(value: object) -> list[str]:
     return _inventory_section("Mail-merge inventory", value)
 
@@ -368,6 +376,16 @@ def _word_protection_comparison(
         "Word editing and write-protection inventory",
         before.get("word_protection", {}),
         after.get("word_protection", {}),
+    )
+
+
+def _word_permission_range_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Word editable-range permission inventory",
+        before.get("word_permission_ranges", {}),
+        after.get("word_permission_ranges", {}),
     )
 
 
