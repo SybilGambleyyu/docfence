@@ -145,6 +145,35 @@ class MailMergeInventory:
 
 
 @dataclass(frozen=True)
+class DataBindingInventory:
+    """Stored content-control-to-custom-XML mapping evidence."""
+
+    binding_count: int
+    binding_with_store_item_id_count: int
+    binding_without_store_item_id_count: int
+    referenced_custom_xml_part_count: int
+    unmatched_store_item_id_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "data_binding_count": self.binding_count,
+            "data_binding_with_store_item_id_count": (
+                self.binding_with_store_item_id_count
+            ),
+            "data_binding_without_store_item_id_count": (
+                self.binding_without_store_item_id_count
+            ),
+            "data_binding_referenced_custom_xml_part_count": (
+                self.referenced_custom_xml_part_count
+            ),
+            "data_binding_unmatched_store_item_id_count": (
+                self.unmatched_store_item_id_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -211,6 +240,7 @@ class DocumentSnapshot:
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
     mail_merge: MailMergeInventory
+    data_bindings: DataBindingInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -290,6 +320,7 @@ class DocumentSnapshot:
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
+            "data_bindings": self.data_bindings.public_dict(),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

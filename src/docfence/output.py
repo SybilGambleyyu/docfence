@@ -53,6 +53,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_document_property_section(document.get("document_properties", {})))
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
+    lines.extend(_data_binding_section(document.get("data_bindings", {})))
     return "\n".join(lines) + "\n"
 
 
@@ -68,6 +69,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_alternative_format_import_comparison(before, after))
     lines.extend(_document_property_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
+    lines.extend(_data_binding_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
         lines.append("No stored changes detected by the supported inventories.")
@@ -236,6 +238,10 @@ def _mail_merge_section(value: object) -> list[str]:
     return _inventory_section("Mail-merge inventory", value)
 
 
+def _data_binding_section(value: object) -> list[str]:
+    return _inventory_section("Content-control data-binding inventory", value)
+
+
 def _inventory_section(title: str, value: object) -> list[str]:
     inventory = _mapping(value)
     lines = [f"## {title}", "", "| Field | Value |", "| --- | ---: |"]
@@ -280,6 +286,16 @@ def _mail_merge_comparison(
         "Mail-merge inventory",
         before.get("mail_merge", {}),
         after.get("mail_merge", {}),
+    )
+
+
+def _data_binding_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Content-control data-binding inventory",
+        before.get("data_bindings", {}),
+        after.get("data_bindings", {}),
     )
 
 

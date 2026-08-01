@@ -6,9 +6,10 @@ of stored content-block changes and the review surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external relationships, custom XML,
 macros, core/extended/custom document properties, mail-merge configuration and
-recipient-data state, embedded OLE/package/control payloads, OOXML
-alternative-format imports, headers, footers, notes, document settings, and
-otherwise unclassified package payloads.
+recipient-data state, data-bound content controls and their referenced custom
+XML state, embedded OLE/package/control payloads, OOXML alternative-format
+imports, headers, footers, notes, document settings, and otherwise unclassified
+package payloads.
 
 It never opens Word, executes macros, follows links, renders a document, uploads
 source material, or writes a redline. By default, reports contain counts,
@@ -43,7 +44,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.5 focuses on Office Open XML Word documents and deliberately keeps a
+Version 0.6 focuses on Office Open XML Word documents and deliberately keeps a
 small, inspectable contract:
 
 - bounded `.docx` / `.docm` ZIP packages;
@@ -53,9 +54,9 @@ small, inspectable contract:
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, content-control, external-relationship, custom-XML, macro,
-  core/extended/custom document-property, mail-merge, embedded
-  OLE/package/control, alternative-format-import, and Track Changes
-  inventories;
+  core/extended/custom document-property, mail-merge, content-control
+  data-binding, embedded OLE/package/control, alternative-format-import, and
+  Track Changes inventories;
 - `w:altChunk` anchors paired with an internal OOXML alternative-format-import
   relationship and its stored payload;
 - a generic alert for changed package payload outside those specialized
@@ -109,6 +110,18 @@ that direct source/header/recipient references use the expected relationship
 types and target modes, but does not connect to a data source, run a query, or
 interpret recipient records.
 
+Data-bound content controls are recorded separately from the general content
+control and custom-XML inventories. DocFence recognizes direct standard
+`w:sdtPr/w:dataBinding` declarations and safely associates a nonempty
+`w:storeItemID` with an in-package custom XML data part only through its
+standard internal custom-XML-properties relationship. Reports show aggregate
+binding, identifier-presence, referenced-part, and unmatched-identifier counts
+only. They never include XPath expressions, namespace-prefix mappings, storage
+IDs, part names, or custom XML values. A binding without a storage ID is still
+reported, but DocFence deliberately does not guess which part Word might choose
+from its XPath. It does not evaluate XPath, update a control, or render the
+result.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -137,6 +150,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_alternative_format_imports: true
   require_no_custom_document_properties: true
   require_no_mail_merge: true
+  require_no_data_bindings: true
 ```
 
 When an established template intentionally contains one of those stored states,
@@ -148,6 +162,7 @@ later mutation:
   no_alternative_format_import_changes: true
   no_document_property_changes: true
   no_mail_merge_changes: true
+  no_data_binding_changes: true
 ```
 
 YAML anchors, aliases, sequences, nested mappings, duplicate keys, unknown
@@ -161,9 +176,11 @@ SHA-256 fingerprints. Public models and renderers intentionally omit package
 part names, paragraph content, reviewer identity, dates, comment content,
 relationship targets, field instructions, style identifiers and names, custom
 XML values, document-property names and values, mail-merge configuration and
-recipient data, macro bytes, embedded and imported payload bytes, and all
-fingerprints. Regression tests place unique sensitive markers in each of those
-surfaces and assert that JSON, Markdown, and SARIF never reproduce them.
+recipient data, data-binding XPath expressions, prefix mappings, storage IDs,
+referenced custom XML values, macro bytes, embedded and imported payload bytes,
+and all fingerprints. Regression tests place unique sensitive markers in each
+of those surfaces and assert that JSON, Markdown, and SARIF never reproduce
+them.
 
 This contract applies to DocFence's own reports. It cannot prevent a caller from
 printing a source path, retaining a source document, or independently logging
@@ -188,6 +205,12 @@ The mail-merge boundary follows the Open XML SDK's
 [`w:odso` model](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.datasourceobject?view=openxml-3.0.1)
 and Microsoft's documentation that accepting a linked mail-merge source can
 [run its SQL query](https://support.microsoft.com/en-us/word/you-receive-the-opening-this-will-run-the-following-sql-command-message-when-you-open-a-word-mail-me).
+The data-binding boundary follows the Open XML SDK's
+[`w:dataBinding` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.databinding?view=openxml-3.0.1)
+and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api/word.xmlmapping),
+which maps content-control text to document XML data. An independent
+[OOXML reference-corpus fixture](https://loadfix.github.io/ooxml-reference-corpus/case/docx__custom-xml-part.html)
+was profiled as a compatibility smoke test.
 
 ## Development
 

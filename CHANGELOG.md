@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.6.0 — 2026-08-01
+
+- Added a separate privacy-safe inventory for direct Word content-control XML
+  mappings, storage-ID presence, matched custom XML data parts, and unmatched
+  storage identifiers.
+- Added `DFP023` to require that a candidate contain no recognized data-binding
+  declarations and `DFP024` to block data-binding inventory changes against a
+  controlled baseline.
+- Privately fingerprints mapping declarations and, when a storage ID can be
+  associated safely, the paired custom XML data and properties payloads without
+  exposing XPath expressions, prefix mappings, storage IDs, part names, or
+  values.
+- Validates recognized custom XML properties relationships and roots used for
+  binding association; malformed internal associations fail closed while an
+  unmatched storage ID remains explicit review evidence.
+- Added conventional, Strict, established Word-legacy root-vocabulary, unscoped,
+  unmatched, relationship-ID-stability, malformed-association, policy, SARIF,
+  and redaction regression coverage. Profiled an independent public OOXML
+  reference-corpus data-binding package as a compatibility smoke test.
+
 ## 0.5.0 — 2026-08-01
 
 - Added a separate privacy-safe inventory for Word mail-merge configuration,

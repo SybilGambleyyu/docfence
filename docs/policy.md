@@ -44,6 +44,8 @@ starter policy.
 | `require_no_custom_document_properties` | `DFP020` | Candidate has stored custom document-property definitions | Candidate |
 | `require_no_mail_merge` | `DFP021` | Candidate has stored mail-merge configuration, source, or recipient-data state | Candidate |
 | `no_mail_merge_changes` | `DFP022` | Mail-merge inventory differs | Comparison |
+| `require_no_data_bindings` | `DFP023` | Candidate has stored content-control data bindings | Candidate |
+| `no_data_binding_changes` | `DFP024` | Content-control data-binding inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -67,8 +69,10 @@ intentionally embeds a known payload can instead enable
 `no_alternative_format_import_changes` to preserve that baseline while blocking
 a later mutation. `no_document_property_changes` gives the same controlled
 baseline option for document metadata, and `no_mail_merge_changes` does so for
-mail-merge configuration and recipient state. `word/styles.xml` is handled by
-the dedicated style inventory instead.
+mail-merge configuration and recipient state. `no_data_binding_changes` does
+the same for a controlled template whose content controls intentionally map to
+custom XML. `word/styles.xml` is handled by the dedicated style inventory
+instead.
 
 ## Hidden-text scope
 
@@ -153,6 +157,38 @@ These rules do not connect to a data source, execute a query, select a
 recipient, or decide whether mail-merge state is expected, safe, personal, or
 malicious. Use a clean-handoff gate when no mail merge should remain; use a
 controlled baseline when an approved template legitimately retains it.
+
+## Content-control data-binding scope
+
+DocFence inventories direct standard `w:dataBinding` children of a structured
+document tag's `w:sdtPr` properties in recognized Word document stories. This
+is a mapping declaration, not an XPath engine: DocFence does not select a node,
+replace visible content, resolve a rich-text mapping, or claim what Word will
+display.
+
+For a nonempty `w:storeItemID`, DocFence discovers the associated custom XML
+data part only through a standard internal `customXmlProps` relationship and a
+valid `ds:datastoreItem` storage identifier. Conventional and Strict OOXML
+relationship forms are accepted, along with both the current
+`customXmlDataProps` root vocabulary and the established Word `customXml`
+spelling found in real packages. A malformed recognized properties relationship
+or properties root fails closed. A storage ID with no discovered associated part
+is not treated as a parser error: it is counted as unmatched review evidence.
+
+A binding can omit `w:storeItemID`; Word may then search custom XML parts using
+the XPath. DocFence counts it as a binding without a storage ID but deliberately
+does not guess the selected part. The public inventory reports aggregate binding
+counts, referenced custom-XML part counts, and unmatched-ID counts only.
+XPath expressions, prefix mappings, storage IDs, part names, data values, and
+private fingerprints are never emitted.
+
+`require_no_data_bindings` fails whenever the candidate has at least one
+recognized mapping declaration. `no_data_binding_changes` compares the private
+mapping declarations and, for bindings with a discovered storage ID, the paired
+custom XML data/properties payloads. It therefore catches a mutation to an
+identified bound data part without exposing it. It does not make an unscoped
+XPath binding identify a target; use `no_custom_xml_changes` as well when every
+custom XML mutation must block a handoff.
 
 ## CI example
 

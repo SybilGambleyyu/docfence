@@ -34,6 +34,8 @@ _RULES: Final = {
     "require_no_custom_document_properties": "DFP020",
     "require_no_mail_merge": "DFP021",
     "no_mail_merge_changes": "DFP022",
+    "require_no_data_bindings": "DFP023",
+    "no_data_binding_changes": "DFP024",
 }
 
 
@@ -234,6 +236,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_data_binding_changes") and (
+        before.data_bindings.signature != after.data_bindings.signature
+    ):
+        findings.append(
+            _finding(
+                "no_data_binding_changes",
+                "Content-control data-binding inventory changed.",
+                {
+                    "before": before.data_bindings.public_dict(),
+                    "after": after.data_bindings.public_dict(),
+                },
+            )
+        )
     if (
         policy.enabled("require_no_unresolved_revisions")
         and after.revisions.unresolved_count
@@ -338,6 +353,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_mail_merge",
                 "Candidate contains stored mail-merge configuration or data state.",
                 after.mail_merge.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_data_bindings") and (
+        after.data_bindings.binding_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_data_bindings",
+                "Candidate contains stored content-control data bindings.",
+                after.data_bindings.public_dict(),
             )
         )
     if (

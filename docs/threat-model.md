@@ -11,10 +11,12 @@ comments, reviewer metadata, relationship targets, field instructions, style
 identifiers, custom XML, macro bytes, embedded-object bytes, and
 alternative-format-import bytes, document-property names, and document-property
 values, mail-merge configuration, source/header targets, connection strings,
-queries, field mappings, and recipient data must not become DocFence report
-content. The report may be stored in CI artifacts, pasted into an issue, or
-uploaded to a SARIF consumer, so it is intentionally restricted to counts,
-fixed categories, booleans, and generic story kinds.
+queries, field mappings, recipient data, data-binding XPath expressions,
+namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
+values must not become DocFence report content. The report may be stored in CI
+artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
+intentionally restricted to counts, fixed categories, booleans, and generic
+story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -80,6 +82,16 @@ executes a query, interprets a connection string, or parses recipient values
 for public output. Orphaned recognized relationships remain visible as aggregate
 state because they can still retain an external target or recipient payload.
 
+Content-control data-binding declarations and the custom XML data/properties
+parts associated through an in-package storage ID use the same private-digest
+approach. The public inventory exposes only aggregate counts. DocFence does not
+emit or evaluate an XPath expression, namespace-prefix mapping, storage ID,
+part name, or custom XML value. A standard custom XML-properties relationship
+used to identify a bound data part must be internal and point to a valid storage
+properties root; malformed recognized state fails closed. A binding whose
+storage ID cannot be associated with a discovered part remains a counted review
+signal rather than causing DocFence to guess a target.
+
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
 and external tools are outside this contract.
@@ -106,7 +118,11 @@ provenance or sensitivity. The custom-property candidate gate is limited to
 stored custom definitions and is not a general PII detector. Mail-merge counts
 are stored-state evidence, not proof that Word will access a source, run a
 query, or merge recipients. DocFence does not identify, classify, or disclose
-the recipient records or connection details a package may retain.
+the recipient records or connection details a package may retain. Content-control
+data-binding counts are stored-state evidence, not proof that a given XPath
+selects a node, that Word will update the visible control, or that an unscoped
+mapping uses any particular custom XML part. DocFence does not evaluate XPath,
+resolve XML namespaces, or calculate rich-text mappings.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

@@ -22,6 +22,7 @@ from typing import Final
 from docfence.errors import DocumentFormatError, DocumentSafetyError
 from docfence.models import (
     AlternativeFormatImportInventory,
+    DataBindingInventory,
     DocumentPropertyInventory,
     DocumentSnapshot,
     EmbeddedObjectInventory,
@@ -194,6 +195,21 @@ _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPES: Final = frozenset(
         "mailmergerecipientdata",
     }
 )
+_CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/"
+        "customxmlprops",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/customxmlprops",
+    }
+)
+_CUSTOM_XML_DATA_PROPERTIES_NAMESPACES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officeDocument/2006/customXmlDataProps",
+        "http://purl.oclc.org/ooxml/officeDocument/customXmlDataProps",
+        "http://schemas.openxmlformats.org/officeDocument/2006/customXml",
+        "http://purl.oclc.org/ooxml/officeDocument/customXml",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -204,6 +220,15 @@ class _Relationship:
 
     def canonical_value(self) -> tuple[str, str, str]:
         return (self.relationship_type, self.target_mode.casefold(), self.target)
+
+
+@dataclass(frozen=True)
+class _DataBindingReference:
+    """One private standard Word data-binding declaration in a story."""
+
+    story_part: str
+    store_item_id: str | None
+    signature: str
 
 
 def load_snapshot(
@@ -276,8 +301,15 @@ def _load_package(
                 archive, members, relationship_maps, limits
             )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
-            stories, comment_count = _story_snapshots(
+            stories, comment_count, data_binding_references = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
+            )
+            data_bindings = _data_binding_inventory(
+                archive,
+                members,
+                data_binding_references,
+                relationship_maps,
+                limits,
             )
             settings_enabled, settings_signature = _settings_inventory(
                 archive, members, relationship_maps, limits
@@ -321,6 +353,7 @@ def _load_package(
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
         mail_merge=mail_merge,
+        data_bindings=data_bindings,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -873,6 +906,169 @@ def _validate_mail_merge_relationship(
         _internal_relationship_target("word/settings.xml", relationship, members)
 
 
+def _data_binding_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    references: tuple[_DataBindingReference, ...],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> DataBindingInventory:
+    """Inventory standard content-control XML mappings without exposing data.
+
+    A data binding can omit its store item identifier, in which case Word may
+    choose a matching custom XML part itself.  DocFence records that fact but
+    does not evaluate the binding XPath or infer the chosen data part.
+    """
+
+    if not references:
+        return DataBindingInventory(
+            binding_count=0,
+            binding_with_store_item_id_count=0,
+            binding_without_store_item_id_count=0,
+            referenced_custom_xml_part_count=0,
+            unmatched_store_item_id_count=0,
+            signature=_payload_inventory_signature(
+                [], frozenset(), archive, members, limits
+            ),
+        )
+
+    store_items = _custom_xml_store_items(archive, members, relationship_maps, limits)
+    records: list[tuple[str, ...]] = []
+    referenced_data_parts: set[str] = set()
+    referenced_inventory_parts: set[str] = set()
+    with_store_item_id_count = 0
+    without_store_item_id_count = 0
+    unmatched_store_item_id_count = 0
+
+    for reference in references:
+        if reference.store_item_id is None:
+            without_store_item_id_count += 1
+            records.append(
+                (
+                    "data_binding",
+                    reference.story_part,
+                    reference.signature,
+                    "without_store_item_id",
+                )
+            )
+            continue
+
+        with_store_item_id_count += 1
+        matches = store_items.get(_normalize_store_item_id(reference.store_item_id), ())
+        if not matches:
+            unmatched_store_item_id_count += 1
+            records.append(
+                (
+                    "data_binding",
+                    reference.story_part,
+                    reference.signature,
+                    "unmatched_store_item_id",
+                )
+            )
+            continue
+
+        records.append(
+            (
+                "data_binding",
+                reference.story_part,
+                reference.signature,
+                "matched_store_item_id",
+            )
+        )
+        for data_part, properties_part in matches:
+            referenced_data_parts.add(data_part)
+            referenced_inventory_parts.update((data_part, properties_part))
+
+    part_names = frozenset(referenced_inventory_parts)
+    return DataBindingInventory(
+        binding_count=len(references),
+        binding_with_store_item_id_count=with_store_item_id_count,
+        binding_without_store_item_id_count=without_store_item_id_count,
+        referenced_custom_xml_part_count=len(referenced_data_parts),
+        unmatched_store_item_id_count=unmatched_store_item_id_count,
+        signature=_payload_inventory_signature(
+            records, part_names, archive, members, limits
+        ),
+    )
+
+
+def _custom_xml_store_items(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> dict[str, tuple[tuple[str, str], ...]]:
+    """Return private custom-XML storage ID associations discovered in-package."""
+
+    by_store_item_id: dict[str, list[tuple[str, str]]] = {}
+    for data_part, relationships in sorted(relationship_maps.items()):
+        if not _is_custom_xml_data_part(data_part, members):
+            continue
+        for relationship in relationships.values():
+            if (
+                relationship.relationship_type.casefold()
+                not in _CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPES
+            ):
+                continue
+            if relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError(
+                    "custom XML properties relationships are invalid"
+                )
+            properties_part = _internal_relationship_target(
+                data_part, relationship, members
+            )
+            if properties_part is None:
+                raise DocumentFormatError(
+                    "custom XML properties relationships are invalid"
+                )
+            root = _read_xml(archive, members[properties_part], limits)
+            store_item_id = _custom_xml_properties_store_item_id(root)
+            if store_item_id is None:
+                raise DocumentFormatError("custom XML properties parts are invalid")
+            normalized_store_item_id = _normalize_store_item_id(store_item_id)
+            if normalized_store_item_id in by_store_item_id:
+                raise DocumentFormatError("custom XML storage identifiers are invalid")
+            by_store_item_id[normalized_store_item_id] = [(data_part, properties_part)]
+
+    return {
+        store_item_id: tuple(sorted(matches))
+        for store_item_id, matches in by_store_item_id.items()
+    }
+
+
+def _is_custom_xml_data_part(
+    part_name: str, members: dict[str, zipfile.ZipInfo]
+) -> bool:
+    return (
+        part_name in members
+        and part_name.startswith("customXml/")
+        and "/_rels/" not in part_name
+        and not part_name.endswith(".rels")
+    )
+
+
+def _custom_xml_properties_store_item_id(root: ET.Element) -> str | None:
+    namespace, local_name = _qualified_name(root.tag)
+    if (
+        namespace not in _CUSTOM_XML_DATA_PROPERTIES_NAMESPACES
+        or local_name != "datastoreItem"
+    ):
+        return None
+    for attribute, value in root.attrib.items():
+        attribute_namespace, local_name = _qualified_name(attribute)
+        if (
+            attribute_namespace in _CUSTOM_XML_DATA_PROPERTIES_NAMESPACES
+            and local_name == "itemID"
+            and value.strip()
+        ):
+            return value.strip()
+    return None
+
+
+def _normalize_store_item_id(value: str) -> str:
+    return value.strip().casefold()
+
+
 def _internal_relationship_target(
     source_part: str,
     relationship: _Relationship,
@@ -968,20 +1164,22 @@ def _story_snapshots(
     content_types: dict[str, str],
     relationship_maps: dict[str, dict[str, _Relationship]],
     limits: PackageLimits,
-) -> tuple[tuple[StorySnapshot, ...], int]:
+) -> tuple[tuple[StorySnapshot, ...], int, tuple[_DataBindingReference, ...]]:
     stories: list[StorySnapshot] = []
+    data_binding_references: list[_DataBindingReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
         root = _read_xml(archive, members[part_key], limits)
-        story = _snapshot_story(
+        story, story_data_binding_references = _snapshot_story(
             root, part_key, kind, relationship_maps.get(part_key, {})
         )
         stories.append(story)
+        data_binding_references.extend(story_data_binding_references)
         if kind == "comment":
             comment_count += _count_word_elements(root, "comment")
     if not any(story.kind == "body" for story in stories):
         raise DocumentFormatError("package does not contain a document story")
-    return tuple(stories), comment_count
+    return tuple(stories), comment_count, tuple(data_binding_references)
 
 
 def _discover_story_parts(
@@ -1042,7 +1240,7 @@ def _snapshot_story(
     part_key: str,
     kind: str,
     relationships: dict[str, _Relationship],
-) -> StorySnapshot:
+) -> tuple[StorySnapshot, tuple[_DataBindingReference, ...]]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
     context = _story_context(root, kind)
@@ -1116,21 +1314,24 @@ def _snapshot_story(
         move_to=move_to,
         property_changes=property_changes,
     )
-    return StorySnapshot(
-        part_key=part_key,
-        kind=kind,
-        block_signatures=block_signatures,
-        structure_signature=_fingerprint_element(root, relationships),
-        paragraph_count=paragraphs,
-        table_count=tables,
-        text_run_count=text_runs,
-        hidden_text_run_count=hidden_text_runs,
-        hidden_paragraph_mark_count=hidden_paragraph_marks,
-        alternative_format_import_anchor_count=alternative_format_import_anchors,
-        field_code_count=field_code_count,
-        content_control_count=content_controls,
-        comment_anchor_count=comment_anchors,
-        revisions=revisions,
+    return (
+        StorySnapshot(
+            part_key=part_key,
+            kind=kind,
+            block_signatures=block_signatures,
+            structure_signature=_fingerprint_element(root, relationships),
+            paragraph_count=paragraphs,
+            table_count=tables,
+            text_run_count=text_runs,
+            hidden_text_run_count=hidden_text_runs,
+            hidden_paragraph_mark_count=hidden_paragraph_marks,
+            alternative_format_import_anchor_count=alternative_format_import_anchors,
+            field_code_count=field_code_count,
+            content_control_count=content_controls,
+            comment_anchor_count=comment_anchors,
+            revisions=revisions,
+        ),
+        _data_binding_references(root, part_key, relationships),
     )
 
 
@@ -1200,6 +1401,40 @@ def _first_word_child(element: ET.Element, local_name: str) -> ET.Element | None
         (child for child in element if _is_word_element(child, local_name)),
         None,
     )
+
+
+def _data_binding_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_DataBindingReference, ...]:
+    """Find standard direct ``w:sdtPr/w:dataBinding`` declarations only."""
+
+    references: list[_DataBindingReference] = []
+    for properties in root.iter():
+        if not _is_word_element(properties, "sdtPr"):
+            continue
+        for child in properties:
+            if not _is_word_element(child, "dataBinding"):
+                continue
+            store_item_id = _word_attribute_value(child, "storeItemID")
+            normalized_store_item_id = store_item_id.strip() if store_item_id else ""
+            references.append(
+                _DataBindingReference(
+                    story_part=story_part,
+                    store_item_id=normalized_store_item_id or None,
+                    signature=_fingerprint_element(child, relationships),
+                )
+            )
+    return tuple(references)
+
+
+def _word_attribute_value(element: ET.Element, local_name: str) -> str | None:
+    for attribute, value in element.attrib.items():
+        namespace, attribute_local_name = _qualified_name(attribute)
+        if namespace in _WORD_NAMESPACES and attribute_local_name == local_name:
+            return value
+    return None
 
 
 def _validate_alternative_format_import_anchor(

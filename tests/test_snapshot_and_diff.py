@@ -44,6 +44,24 @@ _STRICT_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE = (
 _STRICT_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeRecipientData"
 )
+_CUSTOM_XML_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
+)
+_CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps"
+)
+_STRICT_CUSTOM_XML_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/customXml"
+)
+_STRICT_CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/customXmlProps"
+)
+_CUSTOM_XML_DATA_PROPERTIES_NAMESPACE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/customXml"
+)
+_STRICT_CUSTOM_XML_DATA_PROPERTIES_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/officeDocument/customXmlDataProps"
+)
 _STRICT_WORD_NAMESPACE = "http://purl.oclc.org/ooxml/wordprocessingml/main"
 _STRICT_RELATIONSHIP_NAMESPACE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships"
@@ -632,6 +650,163 @@ rules:
         assert marker not in rendered
 
 
+def test_data_binding_inventory_is_private_and_relationship_id_stable(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    payload_changed = tmp_path / "payload-changed.docx"
+    xpath_changed = tmp_path / "xpath-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    strict_data_binding = tmp_path / "strict-data-binding.docx"
+    without_store_item_id = tmp_path / "without-store-item-id.docx"
+    unmatched_store_item_id = tmp_path / "unmatched-store-item-id.docx"
+    multiple_bindings = tmp_path / "multiple-bindings.docx"
+    out_of_scope_markup = tmp_path / "out-of-scope-markup.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_data_binding_document(before, include_data_binding=False)
+    _write_data_binding_document(after)
+    _write_data_binding_document(
+        payload_changed,
+        custom_xml_value="DATA_BINDING_PAYLOAD_CHANGED_DO_NOT_LEAK",
+    )
+    _write_data_binding_document(
+        xpath_changed,
+        xpath="/private/records/changedValue",
+    )
+    _write_data_binding_document(renumbered, relationship_id_suffix="9")
+    _write_data_binding_document(strict_data_binding, strict_syntax=True)
+    _write_data_binding_document(
+        without_store_item_id,
+        include_store_item_id=False,
+    )
+    _write_data_binding_document(
+        unmatched_store_item_id,
+        item_store_item_id="{99999999-9999-9999-9999-999999999999}",
+    )
+    _write_data_binding_document(multiple_bindings, binding_count=2)
+    _write_data_binding_document(
+        out_of_scope_markup,
+        data_binding_outside_sdt_properties=True,
+    )
+
+    snapshot = load_snapshot(after)
+    expected_inventory = {
+        "data_binding_count": 1,
+        "data_binding_with_store_item_id_count": 1,
+        "data_binding_without_store_item_id_count": 0,
+        "data_binding_referenced_custom_xml_part_count": 1,
+        "data_binding_unmatched_store_item_id_count": 0,
+    }
+    assert snapshot.public_dict()["data_bindings"] == expected_inventory
+    assert load_snapshot(strict_data_binding).public_dict()["data_bindings"] == (
+        expected_inventory
+    )
+    assert load_snapshot(without_store_item_id).public_dict()["data_bindings"] == {
+        **expected_inventory,
+        "data_binding_with_store_item_id_count": 0,
+        "data_binding_without_store_item_id_count": 1,
+        "data_binding_referenced_custom_xml_part_count": 0,
+    }
+    assert load_snapshot(unmatched_store_item_id).public_dict()["data_bindings"] == {
+        **expected_inventory,
+        "data_binding_referenced_custom_xml_part_count": 0,
+        "data_binding_unmatched_store_item_id_count": 1,
+    }
+    assert load_snapshot(multiple_bindings).public_dict()["data_bindings"] == {
+        **expected_inventory,
+        "data_binding_count": 2,
+        "data_binding_with_store_item_id_count": 2,
+    }
+    assert load_snapshot(out_of_scope_markup).public_dict()["data_bindings"] == {
+        **expected_inventory,
+        "data_binding_count": 0,
+        "data_binding_with_store_item_id_count": 0,
+        "data_binding_referenced_custom_xml_part_count": 0,
+    }
+
+    report = diff_documents(before, after)
+    assert {
+        "content_control_inventory_changed",
+        "custom_xml_changed",
+        "data_binding_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    assert {
+        change.kind for change in diff_documents(after, payload_changed).changes
+    } == {"custom_xml_changed", "data_binding_inventory_changed"}
+    assert "data_binding_inventory_changed" in {
+        change.kind for change in diff_documents(after, xpath_changed).changes
+    }
+    assert diff_documents(after, renumbered).changes == ()
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_data_bindings: true
+  no_data_binding_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP023",
+        "DFP024",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP023"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, payload_changed), policy
+        ).findings
+    } == {"DFP023", "DFP024"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_DATA_BINDING_INVENTORY_CHANGED",
+        "DFP023",
+        "DFP024",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "DATA_BINDING_VISIBLE_DO_NOT_LEAK",
+        "DATA_BINDING_XPATH_DO_NOT_LEAK",
+        "DATA_BINDING_PREFIXES_DO_NOT_LEAK",
+        "DATA_BINDING_PAYLOAD_DO_NOT_LEAK",
+        "DATA_BINDING_PAYLOAD_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_data_binding_rejects_invalid_referenced_custom_xml_properties(
+    tmp_path,
+) -> None:
+    invalid_properties_root = tmp_path / "invalid-properties-root.docx"
+    external_properties_target = tmp_path / "external-properties-target.docx"
+    _write_data_binding_document(
+        invalid_properties_root,
+        invalid_custom_xml_properties_root=True,
+    )
+    _write_data_binding_document(
+        external_properties_target,
+        custom_xml_properties_target_mode="External",
+    )
+
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(invalid_properties_root)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(external_properties_target)
+
+
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
     before = tmp_path / "approved.docx"
     after = tmp_path / "candidate.docm"
@@ -987,6 +1162,120 @@ def _write_embedded_content_document(
     }
     if include_import_payload:
         entries["word/afchunk1.html"] = import_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_data_binding_document(
+    path,
+    *,
+    custom_xml_value: str = "DATA_BINDING_PAYLOAD_DO_NOT_LEAK",
+    xpath: str = "/private/DATA_BINDING_XPATH_DO_NOT_LEAK",
+    store_item_id: str = "{11111111-1111-1111-1111-111111111111}",
+    item_store_item_id: str | None = None,
+    relationship_id_suffix: str = "1",
+    include_data_binding: bool = True,
+    binding_count: int = 1,
+    include_store_item_id: bool = True,
+    strict_syntax: bool = False,
+    data_binding_outside_sdt_properties: bool = False,
+    invalid_custom_xml_properties_root: bool = False,
+    custom_xml_properties_target_mode: str = "Internal",
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    custom_xml_relationship_type = (
+        _STRICT_CUSTOM_XML_RELATIONSHIP_TYPE
+        if strict_syntax
+        else _CUSTOM_XML_RELATIONSHIP_TYPE
+    )
+    custom_xml_properties_relationship_type = (
+        _STRICT_CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPE
+        if strict_syntax
+        else _CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPE
+    )
+    custom_xml_data_properties_namespace = (
+        _STRICT_CUSTOM_XML_DATA_PROPERTIES_NAMESPACE
+        if strict_syntax
+        else _CUSTOM_XML_DATA_PROPERTIES_NAMESPACE
+    )
+    binding_store_item_id = (
+        f' w:storeItemID="{store_item_id}"' if include_store_item_id else ""
+    )
+    data_binding = (
+        f'<w:dataBinding w:xpath="{xpath}" '
+        "w:prefixMappings=\"xmlns:private='DATA_BINDING_PREFIXES_DO_NOT_LEAK'\""
+        f"{binding_store_item_id}/>"
+    )
+    run = "<w:r><w:t>DATA_BINDING_VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+    if include_data_binding and data_binding_outside_sdt_properties:
+        paragraph = f"<w:p>{data_binding}{run}</w:p>"
+    elif include_data_binding:
+        structured_document_tag = (
+            "<w:sdt><w:sdtPr>"
+            f"{data_binding}"
+            f"</w:sdtPr><w:sdtContent>{run}</w:sdtContent></w:sdt>"
+        )
+        paragraph = f"<w:p>{structured_document_tag * binding_count}</w:p>"
+    else:
+        paragraph = f"<w:p>{run}</w:p>"
+    custom_xml_properties_override = (
+        '<Override PartName="/customXml/itemProps1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.'
+        'customXmlProperties+xml"/>'
+        if include_data_binding
+        else ""
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{custom_xml_properties_override}"
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>{paragraph}'
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_data_binding:
+        item_id = item_store_item_id or store_item_id
+        data_relationship_id = f"rIdCustomXml{relationship_id_suffix}"
+        properties_relationship_id = f"rIdProperties{relationship_id_suffix}"
+        properties_target_mode = (
+            f' TargetMode="{custom_xml_properties_target_mode}"'
+            if custom_xml_properties_target_mode != "Internal"
+            else ""
+        )
+        entries["word/_rels/document.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{data_relationship_id}" '
+            f'Type="{custom_xml_relationship_type}" '
+            'Target="../customXml/item1.xml"/>'
+            "</Relationships>"
+        ).encode()
+        entries["customXml/item1.xml"] = (
+            f"<private><value>{custom_xml_value}</value></private>"
+        ).encode()
+        entries["customXml/_rels/item1.xml.rels"] = (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{properties_relationship_id}" '
+            f'Type="{custom_xml_properties_relationship_type}" '
+            f'Target="itemProps1.xml"{properties_target_mode}/>'
+            "</Relationships>"
+        ).encode()
+        entries["customXml/itemProps1.xml"] = (
+            b"<invalid/>"
+            if invalid_custom_xml_properties_root
+            else (
+                f'<ds:datastoreItem xmlns:ds="{custom_xml_data_properties_namespace}" '
+                f'ds:itemID="{item_id}"/>'
+            ).encode()
+        )
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

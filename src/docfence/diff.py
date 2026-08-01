@@ -439,6 +439,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.data_bindings.signature != after.data_bindings.signature:
+        changes.append(
+            Change(
+                kind="data_binding_inventory_changed",
+                message="Stored content-control data-binding inventory changed.",
+                details={
+                    "before": before.data_bindings.public_dict(),
+                    "after": after.data_bindings.public_dict(),
+                },
+            )
+        )
     if (
         before.settings_signature != after.settings_signature
         and before.track_revisions_enabled == after.track_revisions_enabled
