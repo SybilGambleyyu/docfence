@@ -8,7 +8,8 @@ tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 external relationships, custom XML, macros, core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
-configuration and recipient-data state, data-bound
+configuration and recipient-data state, OPC package digital-signature material,
+data-bound
 content controls and their referenced custom XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
 document-task workflow state, task-pane Office web-extension configuration,
@@ -26,6 +27,8 @@ comment anchor IDs; Office web-extension IDs, stores, properties, bindings, or
 part paths stay private as well. Sensitivity-label and tenant IDs, names, dates,
 action IDs, extension data, custom MIP attributes, and content-marking strings
 are private too.
+Package signer/certificate material, signing times and comments, signature
+values, signed-reference targets, and signature-part paths are private too.
 
 ```bash
 python -m pip install docfence
@@ -54,7 +57,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.11 focuses on Office Open XML Word documents and templates and
+Version 0.12 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -65,7 +68,8 @@ deliberately keeps a small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, external-source field, content-control, external-relationship,
   custom-XML, macro,
-  core/extended/custom document-property, sensitivity-label metadata,
+  core/extended/custom document-property, sensitivity-label metadata, OPC
+  package digital-signature material,
   mail-merge, content-control
   data-binding, modern-comment metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -135,6 +139,29 @@ values, and part paths are privately fingerprinted only. DocFence does not
 decrypt a protected file, read an encrypted LabelInfo stream, resolve a label
 policy, determine effective permissions, apply or remove a label, or predict
 which markings an Office client will display.
+
+OPC package digital signatures have their own inventory because a generic
+opaque-payload change cannot explain whether a package retained signature
+origin, XML signature, or certificate material. DocFence recognizes the
+standard root-package digital-signature-origin relationship, exact OPC content
+types (including default content types), and the conventional
+`_xmlsignatures/origin.sigs` residue path. A recognized origin relationship must
+be root-package scoped, internal, resolve to a stored member, and occur at most
+once. Recognized signature and certificate relationships must originate at the
+expected preceding part, be internal, resolve to a stored member, and carry the
+expected content type. XML signature parts must have the expected XMLDSIG root
+and basic SignedInfo shape.
+
+Reports expose only aggregate origin-part, XML-signature-part, certificate-part,
+SignedInfo-reference, manifest-reference, relationship-reference, inline-X.509
+certificate, and signature-property counts. Signer/certificate data, signature
+values, algorithms, signing times, comments, provider data, reference URIs,
+relationship IDs, part paths, and fingerprints remain private. The full
+recognized material is privately digested, so a same-count signature or
+certificate mutation remains review-visible. This is deliberately not a
+cryptographic verifier: DocFence does not validate a signature value,
+certificate chain, revocation or timestamp, signer identity, signing policy,
+what a signature covers, or whether a consumer should trust it.
 
 Mail-merge state is also recorded without exposing connection strings, SQL
 queries, field mappings, source/header targets, or recipient data. DocFence
@@ -258,6 +285,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_document_tasks: true
   require_no_taskpane_web_extensions: true
   require_no_sensitivity_label_metadata: true
+  require_no_package_digital_signatures: true
   require_no_external_document_dependencies: true
 ```
 
@@ -276,6 +304,7 @@ later mutation:
   no_document_task_changes: true
   no_taskpane_web_extension_changes: true
   no_sensitivity_label_metadata_changes: true
+  no_package_digital_signature_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -304,6 +333,9 @@ content-control markers, and part paths.
 Sensitivity-label IDs, tenant site IDs, label names, methods, set dates, action
 IDs, label-extension data, legacy MIP custom attributes, and Word content
 marking values remain private as well.
+Package-signature signer and certificate material, signature values, reference
+URIs, signing times, comments, provider data, relationship IDs, and part paths
+remain private as well.
 Regression tests place unique sensitive markers in each of those surfaces and
 assert that JSON, Markdown, and SARIF never reproduce them.
 
@@ -390,6 +422,13 @@ and [sensitivity-label property contract](https://learn.microsoft.com/en-us/open
 Microsoft's [MIP SDK metadata guidance](https://learn.microsoft.com/en-us/information-protection/develop/concept-mip-metadata)
 also documents legacy `MSIP_Label_` attributes and custom extensions; DocFence
 keeps them private while comparing their stored state.
+The package-signature boundary follows the OPC
+[digital-signature model](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/opc/open-packaging-conventions-overview)
+and the [ECMA-376 Open Packaging Conventions standard](https://ecma-international.org/publications-and-standards/standards/ecma-376/).
+Microsoft explicitly leaves signer identity and trust decisions to the package
+consumer; DocFence therefore inventories structure without claiming signature
+validity. Independent [OOXML-signature security research](https://www.usenix.org/conference/usenixsecurity23/presentation/rohlmann)
+is further reason to keep that distinction explicit.
 
 ## Development
 

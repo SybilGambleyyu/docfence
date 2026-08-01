@@ -189,6 +189,31 @@ _SENSITIVITY_LABEL_RELATIONSHIP_TYPE = (
 _SENSITIVITY_LABEL_CONTENT_TYPE = (
     "application/vnd.ms-office.classificationlabels+xml"
 )
+_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/origin"
+)
+_PACKAGE_DIGITAL_SIGNATURE_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/signature"
+)
+_PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/certificate"
+)
+_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-package.digital-signature-origin"
+)
+_PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml"
+)
+_PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-package.digital-signature-certificate"
+)
+_XMLDSIG_NAMESPACE = "http://www.w3.org/2000/09/xmldsig#"
+_OPC_DIGITAL_SIGNATURE_NAMESPACE = (
+    "http://schemas.openxmlformats.org/package/2006/digital-signature"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -1802,6 +1827,232 @@ def test_sensitivity_label_metadata_discovers_parts_and_rejects_invalid_state(
             load_snapshot(document)
 
 
+def test_package_digital_signature_inventory_is_private_and_semantic(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    signature_changed = tmp_path / "signature-changed.docx"
+    certificate_changed = tmp_path / "certificate-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_package_digital_signature_document(
+        before,
+        include_origin=False,
+        include_xml_signature=False,
+    )
+    _write_package_digital_signature_document(after, include_certificate_part=True)
+    _write_package_digital_signature_document(
+        signature_changed,
+        include_certificate_part=True,
+        signature_comment="PACKAGE_SIGNATURE_COMMENT_CHANGED_DO_NOT_LEAK",
+    )
+    _write_package_digital_signature_document(
+        certificate_changed,
+        include_certificate_part=True,
+        certificate_payload_marker="PACKAGE_CERTIFICATE_CHANGED_DO_NOT_LEAK",
+    )
+
+    expected_inventory = {
+        "signature_origin_part_count": 1,
+        "xml_signature_part_count": 1,
+        "certificate_part_count": 1,
+        "signed_info_reference_count": 1,
+        "manifest_reference_count": 1,
+        "relationship_reference_count": 1,
+        "inline_x509_certificate_count": 1,
+        "signature_property_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    assert (
+        after_snapshot.public_dict()["package_digital_signatures"]
+        == expected_inventory
+    )
+    assert before_snapshot.public_dict()["package_digital_signatures"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        after_snapshot.unclassified_part_count
+        == before_snapshot.unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert "package_digital_signature_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert {
+        change.kind for change in diff_documents(after, signature_changed).changes
+    } == {"package_digital_signature_inventory_changed"}
+    assert {
+        change.kind for change in diff_documents(after, certificate_changed).changes
+    } == {"package_digital_signature_inventory_changed"}
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_package_digital_signatures: true
+  no_package_digital_signature_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP037",
+        "DFP038",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, signature_changed), policy
+        ).findings
+    } == {"DFP037", "DFP038"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_PACKAGE_DIGITAL_SIGNATURE_INVENTORY_CHANGED",
+        "DFP037",
+        "DFP038",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
+        "PACKAGE_INLINE_X509_DO_NOT_LEAK",
+        "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
+        "PACKAGE_SIGNATURE_COMMENT_CHANGED_DO_NOT_LEAK",
+        "PACKAGE_DIGEST_DO_NOT_LEAK",
+        "PACKAGE_MANIFEST_DIGEST_DO_NOT_LEAK",
+        "PACKAGE_CERTIFICATE_DO_NOT_LEAK",
+        "PACKAGE_CERTIFICATE_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> None:
+    noncanonical_relationship = tmp_path / "noncanonical-relationship.docx"
+    content_type_only = tmp_path / "content-type-only.docx"
+    conventional_origin_only = tmp_path / "conventional-origin-only.docx"
+    wrong_signature_root = tmp_path / "wrong-signature-root.docx"
+    missing_signature_method = tmp_path / "missing-signature-method.docx"
+    external_origin_relationship = tmp_path / "external-origin-relationship.docx"
+    non_root_origin_relationship = tmp_path / "non-root-origin-relationship.docx"
+    missing_origin_target = tmp_path / "missing-origin-target.docx"
+    duplicate_origin_relationship = tmp_path / "duplicate-origin-relationship.docx"
+    external_signature_relationship = tmp_path / "external-signature-relationship.docx"
+    missing_signature_target = tmp_path / "missing-signature-target.docx"
+    external_certificate_relationship = (
+        tmp_path / "external-certificate-relationship.docx"
+    )
+    wrong_origin_content_type = tmp_path / "wrong-origin-content-type.docx"
+    wrong_signature_content_type = tmp_path / "wrong-signature-content-type.docx"
+    wrong_certificate_content_type = tmp_path / "wrong-certificate-content-type.docx"
+
+    _write_package_digital_signature_document(
+        noncanonical_relationship,
+        origin_part_name="private/origin.sigs",
+        signature_part_name="private/signature.xml",
+    )
+    _write_package_digital_signature_document(
+        content_type_only,
+        include_root_relationship=False,
+        include_signature_relationship=False,
+    )
+    _write_package_digital_signature_document(
+        conventional_origin_only,
+        include_xml_signature=False,
+        include_root_relationship=False,
+        include_origin_content_type=False,
+    )
+    _write_package_digital_signature_document(
+        wrong_signature_root,
+        wrong_signature_root=True,
+    )
+    _write_package_digital_signature_document(
+        missing_signature_method,
+        omit_signature_method=True,
+    )
+    _write_package_digital_signature_document(
+        external_origin_relationship,
+        origin_target_mode="External",
+    )
+    _write_package_digital_signature_document(
+        non_root_origin_relationship,
+        origin_relationship_source="word/document.xml",
+    )
+    _write_package_digital_signature_document(
+        missing_origin_target,
+        include_origin_part=False,
+        include_origin_content_type=False,
+    )
+    _write_package_digital_signature_document(
+        duplicate_origin_relationship,
+        duplicate_origin_relationship=True,
+    )
+    _write_package_digital_signature_document(
+        external_signature_relationship,
+        signature_target_mode="External",
+    )
+    _write_package_digital_signature_document(
+        missing_signature_target,
+        include_xml_signature_part=False,
+        include_xml_signature_content_type=False,
+    )
+    _write_package_digital_signature_document(
+        external_certificate_relationship,
+        include_certificate_part=True,
+        certificate_target_mode="External",
+    )
+    _write_package_digital_signature_document(
+        wrong_origin_content_type,
+        origin_content_type="application/octet-stream",
+    )
+    _write_package_digital_signature_document(
+        wrong_signature_content_type,
+        xml_signature_content_type="application/xml",
+    )
+    _write_package_digital_signature_document(
+        wrong_certificate_content_type,
+        include_certificate_part=True,
+        certificate_content_type="application/octet-stream",
+    )
+
+    for document in (noncanonical_relationship, content_type_only):
+        snapshot = load_snapshot(document)
+        assert snapshot.package_digital_signatures.signature_origin_part_count == 1
+        assert snapshot.package_digital_signatures.xml_signature_part_count == 1
+    origin_only_snapshot = load_snapshot(conventional_origin_only)
+    assert (
+        origin_only_snapshot.package_digital_signatures.signature_origin_part_count
+        == 1
+    )
+    assert origin_only_snapshot.package_digital_signatures.xml_signature_part_count == 0
+
+    for document in (
+        wrong_signature_root,
+        missing_signature_method,
+        external_origin_relationship,
+        non_root_origin_relationship,
+        missing_origin_target,
+        duplicate_origin_relationship,
+        external_signature_relationship,
+        missing_signature_target,
+        external_certificate_relationship,
+        wrong_origin_content_type,
+        wrong_signature_content_type,
+        wrong_certificate_content_type,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_word_templates_are_supported_as_first_class_scan_targets(tmp_path) -> None:
     template = tmp_path / "review-template.dotx"
     macro_template = tmp_path / "review-template.dotm"
@@ -2706,6 +2957,221 @@ def _write_sensitivity_label_document(
         entries[additional_label_info_part_name] = label_info_xml
     if include_legacy_properties:
         entries[custom_property_part_name] = legacy_properties_xml
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_package_digital_signature_document(
+    path,
+    *,
+    include_origin: bool = True,
+    include_xml_signature: bool = True,
+    include_origin_part: bool = True,
+    include_xml_signature_part: bool = True,
+    include_certificate_part: bool = False,
+    include_root_relationship: bool = True,
+    include_signature_relationship: bool = True,
+    include_certificate_relationship: bool = True,
+    include_origin_content_type: bool = True,
+    include_xml_signature_content_type: bool = True,
+    include_certificate_content_type: bool = True,
+    origin_content_type: str = _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE,
+    xml_signature_content_type: str = _PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE,
+    certificate_content_type: str = (
+        _PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_CONTENT_TYPE
+    ),
+    origin_part_name: str = "_xmlsignatures/origin.sigs",
+    signature_part_name: str = "_xmlsignatures/sig1.xml",
+    certificate_part_name: str = "_xmlsignatures/certificate1.cer",
+    origin_relationship_source: str = "/",
+    origin_target_mode: str = "Internal",
+    signature_target_mode: str = "Internal",
+    certificate_target_mode: str = "Internal",
+    relationship_id_suffix: str = "1",
+    duplicate_origin_relationship: bool = False,
+    wrong_signature_root: bool = False,
+    omit_signature_method: bool = False,
+    signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
+    inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
+    signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
+    certificate_payload_marker: str = "PACKAGE_CERTIFICATE_DO_NOT_LEAK",
+) -> None:
+    """Write a small structural OPC package-signature fixture.
+
+    The fixture deliberately contains non-cryptographic marker values. DocFence
+    validates only the bounded shape used to inventory signature material; it
+    never treats this fixture as a verified signature.
+    """
+
+    def relationship_target(
+        source_part: str, target_part: str, target_mode: str
+    ) -> str:
+        if target_mode != "Internal":
+            return "https://example.invalid/PACKAGE_SIGNATURE_TARGET_DO_NOT_LEAK"
+        if source_part == "/":
+            return target_part
+        return posixpath.relpath(target_part, start=source_part.rpartition("/")[0])
+
+    def relationship_markup(
+        relationship_id: str,
+        relationship_type: str,
+        source_part: str,
+        target_part: str,
+        target_mode: str = "Internal",
+    ) -> str:
+        target_mode_attribute = (
+            "" if target_mode == "Internal" else f' TargetMode="{target_mode}"'
+        )
+        return (
+            f'<Relationship Id="{relationship_id}" Type="{relationship_type}" '
+            f'Target="{relationship_target(source_part, target_part, target_mode)}"'
+            f"{target_mode_attribute}/>"
+        )
+
+    relationships_by_source: dict[str, list[str]] = {}
+
+    def add_relationship(source_part: str, relationship: str) -> None:
+        relationships_by_source.setdefault(source_part, []).append(relationship)
+
+    if include_origin and include_root_relationship:
+        add_relationship(
+            origin_relationship_source,
+            relationship_markup(
+                f"rIdOrigin{relationship_id_suffix}",
+                _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE,
+                origin_relationship_source,
+                origin_part_name,
+                origin_target_mode,
+            ),
+        )
+        if duplicate_origin_relationship:
+            add_relationship(
+                origin_relationship_source,
+                relationship_markup(
+                    f"rIdOriginDuplicate{relationship_id_suffix}",
+                    _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE,
+                    origin_relationship_source,
+                    origin_part_name,
+                    origin_target_mode,
+                ),
+            )
+    if include_origin and include_xml_signature and include_signature_relationship:
+        add_relationship(
+            origin_part_name,
+            relationship_markup(
+                f"rIdSignature{relationship_id_suffix}",
+                _PACKAGE_DIGITAL_SIGNATURE_RELATIONSHIP_TYPE,
+                origin_part_name,
+                signature_part_name,
+                signature_target_mode,
+            ),
+        )
+    if (
+        include_xml_signature
+        and include_certificate_part
+        and include_certificate_relationship
+    ):
+        add_relationship(
+            signature_part_name,
+            relationship_markup(
+                f"rIdCertificate{relationship_id_suffix}",
+                _PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_RELATIONSHIP_TYPE,
+                signature_part_name,
+                certificate_part_name,
+                certificate_target_mode,
+            ),
+        )
+
+    signature_root_name = "NotSignature" if wrong_signature_root else "Signature"
+    signature_method = (
+        ""
+        if omit_signature_method
+        else (
+            '<ds:SignatureMethod '
+            'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
+        )
+    )
+    signature_xml = (
+        f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
+        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
+        'Id="idPackageSignature">'
+        "<ds:SignedInfo>"
+        '<ds:CanonicalizationMethod '
+        'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
+        f"{signature_method}"
+        '<ds:Reference URI="#idPackageObject">'
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+        "<ds:DigestValue>PACKAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+        "</ds:Reference>"
+        "</ds:SignedInfo>"
+        f"<ds:SignatureValue>{signature_value}</ds:SignatureValue>"
+        "<ds:KeyInfo><ds:X509Data>"
+        f"<ds:X509Certificate>{inline_certificate_marker}</ds:X509Certificate>"
+        "</ds:X509Data></ds:KeyInfo>"
+        '<ds:Object Id="idPackageObject"><ds:Manifest>'
+        '<ds:Reference URI="/word/document.xml?ContentType='
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.'
+        'document.main+xml">'
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+        "<ds:DigestValue>PACKAGE_MANIFEST_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+        "</ds:Reference></ds:Manifest>"
+        "<ds:SignatureProperties><ds:SignatureProperty "
+        'Id="idSignatureDetails" Target="#idPackageSignature">'
+        f"<opc:SignatureTime>{signature_comment}</opc:SignatureTime>"
+        "</ds:SignatureProperty></ds:SignatureProperties>"
+        '<opc:RelationshipReference SourceId="rIdDocument1"/>'
+        f"</ds:Object></ds:{signature_root_name}>"
+    ).encode()
+
+    content_types: list[str] = [
+        f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+    ]
+    if include_origin and include_origin_content_type:
+        content_types.append(
+            f'<Default Extension="sigs" '
+            f'ContentType="{origin_content_type}"/>'
+        )
+    if include_xml_signature and include_xml_signature_content_type:
+        content_types.append(
+            f'<Override PartName="/{signature_part_name}" '
+            f'ContentType="{xml_signature_content_type}"/>'
+        )
+    if include_certificate_part and include_certificate_content_type:
+        content_types.append(
+            f'<Override PartName="/{certificate_part_name}" '
+            f'ContentType="{certificate_content_type}"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">{"".join(content_types)}</Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "VISIBLE_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_origin and include_origin_part:
+        entries[origin_part_name] = b""
+    if include_xml_signature and include_xml_signature_part:
+        entries[signature_part_name] = signature_xml
+    if include_certificate_part:
+        entries[certificate_part_name] = certificate_payload_marker.encode()
+
+    for source_part, relationships in relationships_by_source.items():
+        if source_part == "/":
+            relationship_part_name = "_rels/.rels"
+        else:
+            directory, _, basename = source_part.rpartition("/")
+            relationship_part_name = (
+                f"{directory + '/' if directory else ''}_rels/{basename}.rels"
+            )
+        entries[relationship_part_name] = (
+            f'<Relationships xmlns="{PR}">{"".join(relationships)}</Relationships>'
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

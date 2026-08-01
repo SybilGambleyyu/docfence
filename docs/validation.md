@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.11 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.12 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -9,6 +9,7 @@ following properties:
 - revision markup, comments, modern comment contact/thread/identifier/reaction
   metadata, document tasks, task-pane Office web-extension configuration,
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
+  OPC package digital-signature origin/XML-signature/certificate material, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
@@ -61,6 +62,13 @@ following properties:
   custom-property parts reached through a standard relationship. Same-count
   label and legacy-property rewrites remain review-visible while relationship-ID
   renumbering alone remains quiet;
+- OPC package digital-signature material is separately inventoried from generic
+  opaque payloads. Tests cover origin relationships and default content types,
+  noncanonical relationship targets, content-type-only signature residue,
+  conventional orphan origins, same-count signature/certificate mutations,
+  JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
+  SignedInfo shape, unavailable/external/non-root/duplicate origin
+  relationships, and unavailable/external signature and certificate targets;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -79,6 +87,8 @@ following properties:
   bindings, content-control markers, and pane values,
   sensitivity-label and tenant IDs, names, methods, dates, action IDs,
   extension payloads, legacy MIP custom attributes, and content-marking values,
+  package-signature signer/certificate material, values, algorithms, reference
+  URIs, signing times, comments, provider data, relationship IDs, and paths,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -94,6 +104,8 @@ following properties:
   rejected before reporting. Malformed sensitivity LabelInfo roots, required
   attributes, tenant-site IDs, unavailable/external/non-root classification
   relationships, and multiple LabelInfo parts are rejected before reporting.
+  Malformed recognized package-signature XMLDSIG shape and origin/signature/
+  certificate relationship topology are rejected before reporting.
 
 The release check is:
 
@@ -134,6 +146,13 @@ fixtures. They exercise real complex and simple Word field encodings without
 creating a false external-source-field count. They are compatibility smoke
 tests, not runtime dependencies.
 
+For the package-signature boundary, the release check profiles the signed DOCX
+fixture from the public [USENIX 2023 OOXML Signature Security
+artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). It confirms
+the standard origin, XML-signature, and origin-relationship topology and the
+aggregate count projection without treating that fixture's signature as trusted.
+It is a compatibility smoke test, not a runtime dependency.
+
 ## What this does not validate
 
 The suite does not claim layout equivalence, Word calculation behavior,
@@ -147,6 +166,9 @@ update, reach a target, use a particular argument as a source, or be accepted
 by Word; it records the bounded stored field-family evidence only. The
 style/default layer is a stored declaration inventory, not a renderer. It does
 not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
-permissions, or predict label markings. Those limits are explicit in the 0.11
-contract; see the
+permissions, or predict label markings. It also does not verify a package
+digital signature or digest, validate certificates or trust chains, check
+revocation or timestamps, establish signer identity, determine coverage, or
+make an Office trust decision. Those limits are explicit in the 0.12 contract;
+see the
 [threat model](threat-model.md).

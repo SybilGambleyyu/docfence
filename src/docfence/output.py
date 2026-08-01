@@ -53,6 +53,11 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_document_property_section(document.get("document_properties", {})))
     lines.extend(_sensitivity_label_section(document.get("sensitivity_labels", {})))
+    lines.extend(
+        _package_digital_signature_section(
+            document.get("package_digital_signatures", {})
+        )
+    )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
@@ -85,6 +90,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_alternative_format_import_comparison(before, after))
     lines.extend(_document_property_comparison(before, after))
     lines.extend(_sensitivity_label_comparison(before, after))
+    lines.extend(_package_digital_signature_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
@@ -260,6 +266,10 @@ def _sensitivity_label_section(value: object) -> list[str]:
     return _inventory_section("Office sensitivity-label metadata inventory", value)
 
 
+def _package_digital_signature_section(value: object) -> list[str]:
+    return _inventory_section("OPC package digital-signature inventory", value)
+
+
 def _mail_merge_section(value: object) -> list[str]:
     return _inventory_section("Mail-merge inventory", value)
 
@@ -332,6 +342,16 @@ def _sensitivity_label_comparison(
         "Office sensitivity-label metadata inventory",
         before.get("sensitivity_labels", {}),
         after.get("sensitivity_labels", {}),
+    )
+
+
+def _package_digital_signature_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "OPC package digital-signature inventory",
+        before.get("package_digital_signatures", {}),
+        after.get("package_digital_signatures", {}),
     )
 
 

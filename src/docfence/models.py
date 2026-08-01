@@ -151,6 +151,33 @@ class SensitivityLabelInventory:
 
 
 @dataclass(frozen=True)
+class PackageDigitalSignatureInventory:
+    """Stored OPC package digital-signature evidence, aggregate only."""
+
+    signature_origin_part_count: int
+    xml_signature_part_count: int
+    certificate_part_count: int
+    signed_info_reference_count: int
+    manifest_reference_count: int
+    relationship_reference_count: int
+    inline_x509_certificate_count: int
+    signature_property_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "signature_origin_part_count": self.signature_origin_part_count,
+            "xml_signature_part_count": self.xml_signature_part_count,
+            "certificate_part_count": self.certificate_part_count,
+            "signed_info_reference_count": self.signed_info_reference_count,
+            "manifest_reference_count": self.manifest_reference_count,
+            "relationship_reference_count": self.relationship_reference_count,
+            "inline_x509_certificate_count": self.inline_x509_certificate_count,
+            "signature_property_count": self.signature_property_count,
+        }
+
+
+@dataclass(frozen=True)
 class MailMergeInventory:
     """Stored mail-merge configuration and recipient-data evidence."""
 
@@ -438,6 +465,7 @@ class DocumentSnapshot:
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
     sensitivity_labels: SensitivityLabelInventory
+    package_digital_signatures: PackageDigitalSignatureInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
@@ -524,6 +552,9 @@ class DocumentSnapshot:
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
             "sensitivity_labels": self.sensitivity_labels.public_dict(),
+            "package_digital_signatures": (
+                self.package_digital_signatures.public_dict()
+            ),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),

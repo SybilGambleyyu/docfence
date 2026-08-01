@@ -48,6 +48,8 @@ _RULES: Final = {
     "no_taskpane_web_extension_changes": "DFP034",
     "require_no_sensitivity_label_metadata": "DFP035",
     "no_sensitivity_label_metadata_changes": "DFP036",
+    "require_no_package_digital_signatures": "DFP037",
+    "no_package_digital_signature_changes": "DFP038",
 }
 
 
@@ -245,6 +247,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 {
                     "before": before.sensitivity_labels.public_dict(),
                     "after": after.sensitivity_labels.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_package_digital_signature_changes") and (
+        before.package_digital_signatures.signature
+        != after.package_digital_signatures.signature
+    ):
+        findings.append(
+            _finding(
+                "no_package_digital_signature_changes",
+                "OPC package digital-signature inventory changed.",
+                {
+                    "before": before.package_digital_signatures.public_dict(),
+                    "after": after.package_digital_signatures.public_dict(),
                 },
             )
         )
@@ -446,6 +462,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_sensitivity_label_metadata",
                 "Candidate contains stored Office sensitivity-label metadata.",
                 after.sensitivity_labels.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_package_digital_signatures") and any(
+        after.package_digital_signatures.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_package_digital_signatures",
+                "Candidate contains stored OPC package digital-signature material.",
+                after.package_digital_signatures.public_dict(),
             )
         )
     if policy.enabled("require_no_mail_merge") and any(

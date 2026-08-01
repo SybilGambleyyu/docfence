@@ -439,6 +439,20 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.package_digital_signatures.signature
+        != after.package_digital_signatures.signature
+    ):
+        changes.append(
+            Change(
+                kind="package_digital_signature_inventory_changed",
+                message="Stored OPC package digital-signature inventory changed.",
+                details={
+                    "before": before.package_digital_signatures.public_dict(),
+                    "after": after.package_digital_signatures.public_dict(),
+                },
+            )
+        )
     if before.mail_merge.signature != after.mail_merge.signature:
         changes.append(
             Change(

@@ -29,6 +29,9 @@ marker values, and part paths. Sensitivity-label IDs, tenant site IDs, label
 names, assignment methods, set dates, action IDs, extension payloads, legacy
 MIP custom attributes, Word content-marking text, property names and values,
 and LabelInfo part paths are sensitive package material too.
+Package-signature signer and certificate material, signature values, algorithm
+identifiers, reference URIs, signing times, comments, provider data,
+relationship IDs, and signature-part paths are sensitive package material too.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
@@ -98,6 +101,19 @@ is aggregate-only, while label IDs, tenant IDs, names, dates, methods, action
 IDs, extension content, MIP custom attributes, and marking values remain in the
 private signature. Thus a same-count label change remains visible without
 placing governance metadata in a report.
+
+OPC package digital-signature material receives the same dedicated treatment.
+DocFence recognizes the standard root origin relationship, the exact origin,
+XML-signature, and certificate content types (including defaults), and the
+conventional origin path. Recognized relationships are constrained to the
+expected source, internal target mode, and stored target; the root origin is
+unique. A recognized XML signature receives only bounded structural XMLDSIG
+checks before its full bytes are privately digested. Public output is limited
+to topology, reference, inline-certificate, and signature-property counts.
+It never emits signer/certificate contents, values, algorithms, reference URIs,
+times, comments, provider data, relationship IDs, paths, or digests. A
+same-count signature or certificate rewrite is therefore visible without
+copying signature material into a report.
 
 Mail-merge configuration and recipient-data parts use the same private-digest
 approach. Recognized data and header sources must be external relationships;
@@ -228,6 +244,13 @@ that a file is encrypted or accessible. DocFence does not decrypt IRM-protected
 files, read a LabelInfo stream from an encrypted storage, interpret label
 policy, calculate permissions, apply/remove a label, or render a label's
 header, footer, or watermark.
+Package-signature counts are stored-state evidence, not a statement that a
+signature is cryptographically valid, that a certificate is trusted or current,
+that a signer is who the package claims, that all relevant content is covered,
+or that an Office client will make a particular trust decision. DocFence does
+not verify XMLDSIG values or reference digests, build or validate certificate
+chains, check revocation or timestamps, establish signer identity, evaluate a
+signing policy, or calculate signature coverage.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

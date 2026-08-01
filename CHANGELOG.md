@@ -2,6 +2,30 @@
 
 All notable changes are documented here.
 
+## 0.12.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for OPC package digital-signature
+  origin, XML-signature, and certificate material.
+- Added `DFP037` to require that a handoff contain no stored package-signature
+  material and `DFP038` to protect an approved signature-material baseline.
+- Reports now expose aggregate origin-part, XML-signature-part, certificate-part,
+  SignedInfo-reference, manifest-reference, relationship-reference,
+  inline-X.509-certificate, and signature-property counts only. Signer and
+  certificate data, signature values, algorithms, reference URIs, signing
+  times, comments, provider data, IDs, paths, and fingerprints remain private.
+- Detects standard origin/signature/certificate relationships and exact OPC
+  content types (including defaults), plus conventional origin residue.
+  Recognized relationships are constrained to their expected source, internal
+  target, stored member, and content type; origin relationships are unique.
+  Recognized XML-signature parts receive bounded XMLDSIG-shape validation and
+  malformed state fails closed.
+- Privately detects same-count signature and certificate rewrites, while
+  explicitly not claiming cryptographic verification, certificate trust,
+  signature coverage, signer identity, or Office trust behavior. Added
+  regression coverage for privacy redaction, policy/SARIF output, discovery
+  modes, malformed topology and XMLDSIG shape, and a public signed-package
+  compatibility smoke test.
+
 ## 0.11.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for Microsoft Purview sensitivity

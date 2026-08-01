@@ -58,6 +58,8 @@ starter policy.
 | `no_taskpane_web_extension_changes` | `DFP034` | Task-pane Office web-extension inventory differs | Comparison |
 | `require_no_sensitivity_label_metadata` | `DFP035` | Candidate has stored Office sensitivity-label metadata | Candidate |
 | `no_sensitivity_label_metadata_changes` | `DFP036` | Office sensitivity-label metadata inventory differs | Comparison |
+| `require_no_package_digital_signatures` | `DFP037` | Candidate has stored OPC package digital-signature material | Candidate |
+| `no_package_digital_signature_changes` | `DFP038` | OPC package digital-signature inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -94,6 +96,8 @@ the equivalent controlled-baseline gates for stored workflow and document-borne
 add-in state. `no_sensitivity_label_metadata_changes` does the same for a
 controlled template that intentionally retains an approved Office sensitivity
 label or its related legacy metadata.
+`no_package_digital_signature_changes` provides the controlled-baseline gate for
+a template that intentionally retains approved OPC package-signature material.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -366,6 +370,45 @@ for a handoff that must not retain label/tenant/governance metadata.
 Neither rule decrypts IRM-protected content, reads a LabelInfo stream from an
 encrypted storage, resolves a label policy, determines permissions, applies or
 removes labels, or predicts whether an Office client will display a marking.
+
+## OPC package digital-signature scope
+
+An OPC package can retain a Digital Signature Origin part, one or more XML
+Signature parts, and optional Digital Signature Certificate parts. XML signature
+markup can also contain certificate, signing-time, comment, provider, and
+reference material. That is a meaningful handoff and privacy surface, but it is
+not by itself a trust verdict.
+
+DocFence recognizes the standard root-package digital-signature-origin
+relationship, exact OPC origin/XML-signature/certificate content types
+(including content-type defaults), and the conventional
+`_xmlsignatures/origin.sigs` residue path. A recognized origin relationship must
+be root-package scoped, internal, resolvable, and unique. Recognized signature
+relationships must originate at a recognized origin; recognized certificate
+relationships must originate at a recognized XML-signature part. Each must be
+internal, resolve to a stored member, and have the expected content type.
+Recognized XML signature parts must have the XMLDSIG `Signature` root, exactly
+one direct `SignedInfo` and `SignatureValue`, and the basic direct
+canonicalization/signature-method/reference shape. Malformed recognized
+topology or XMLDSIG shape fails closed.
+
+Public output reports only aggregate origin-part, XML-signature-part,
+certificate-part, SignedInfo-reference, manifest-reference,
+relationship-reference, inline-X.509-certificate, and signature-property
+counts. Signer and certificate contents, signature values, algorithms, signing
+times, comments, provider data, reference URIs, relationship IDs, part paths,
+and fingerprints remain private. The comparison digest retains all recognized
+part bytes and relationship semantics, so a same-count signature or certificate
+rewrite is review-visible.
+
+`require_no_package_digital_signatures` fails whenever any package-signature
+public count is nonzero, including a recognized empty origin part. Use it for a
+handoff that must not retain signer, certificate, or signature residue.
+`no_package_digital_signature_changes` protects an approved stored baseline.
+Neither rule verifies a cryptographic signature or digest, validates a
+certificate or chain, checks revocation or a timestamp, establishes signer
+identity, determines what content is covered, assesses an Office client, or
+decides whether a signature should be trusted.
 
 ## External Word document dependency scope
 

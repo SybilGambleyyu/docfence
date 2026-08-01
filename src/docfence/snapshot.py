@@ -32,6 +32,7 @@ from docfence.models import (
     ExternalFieldInventory,
     MailMergeInventory,
     ModernCommentMetadataInventory,
+    PackageDigitalSignatureInventory,
     RelationshipInventory,
     RevisionInventory,
     SensitivityLabelInventory,
@@ -188,6 +189,34 @@ _SENSITIVITY_LABEL_RELATIONSHIP_TYPE: Final = (
 )
 _SENSITIVITY_LABEL_FALLBACK_PART_NAMES: Final = frozenset(
     {"docmetadata/labelinfo", "docmetadata/labelinfo.xml"}
+)
+_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE: Final = (
+    "application/vnd.openxmlformats-package.digital-signature-origin"
+)
+_PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE: Final = (
+    "application/vnd.openxmlformats-package.digital-signature-xmlsignature+xml"
+)
+_PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_CONTENT_TYPE: Final = (
+    "application/vnd.openxmlformats-package.digital-signature-certificate"
+)
+_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE: Final = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/origin"
+)
+_PACKAGE_DIGITAL_SIGNATURE_RELATIONSHIP_TYPE: Final = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/signature"
+)
+_PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_RELATIONSHIP_TYPE: Final = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/"
+    "digital-signature/certificate"
+)
+_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_FALLBACK_PART_NAMES: Final = frozenset(
+    {"_xmlsignatures/origin.sigs"}
+)
+_XMLDSIG_NAMESPACE: Final = "http://www.w3.org/2000/09/xmldsig#"
+_OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
+    "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
 _SENSITIVITY_LABEL_GUID: Final = re.compile(
     r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
@@ -544,6 +573,12 @@ def _load_package(
             sensitivity_labels, sensitivity_label_parts = _sensitivity_label_inventory(
                 archive, members, content_types, relationship_maps, limits
             )
+            (
+                package_digital_signatures,
+                package_digital_signature_parts,
+            ) = _package_digital_signature_inventory(
+                archive, members, content_types, relationship_maps, limits
+            )
             mail_merge, mail_merge_parts = _mail_merge_inventory(
                 archive, members, relationship_maps, limits
             )
@@ -616,6 +651,7 @@ def _load_package(
                     | alternative_format_import_parts
                     | document_property_parts
                     | sensitivity_label_parts
+                    | package_digital_signature_parts
                     | mail_merge_parts
                     | modern_comment_metadata_parts
                     | document_task_parts
@@ -647,6 +683,7 @@ def _load_package(
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
         sensitivity_labels=sensitivity_labels,
+        package_digital_signatures=package_digital_signatures,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
         external_fields=external_fields,
@@ -804,9 +841,24 @@ def _content_type_overrides(
     if _local_name(root.tag) != "Types":
         raise DocumentFormatError("package content types are invalid")
     overrides: dict[str, str] = {}
+    defaults: dict[str, str] = {}
     for child in root:
-        if _local_name(child.tag) != "Override":
+        local_name = _local_name(child.tag)
+        if local_name == "Default":
+            extension = child.attrib.get("Extension")
+            content_type = child.attrib.get("ContentType")
+            normalized_extension = (extension or "").casefold()
+            if (
+                not normalized_extension
+                or "." in normalized_extension
+                or not content_type
+                or normalized_extension in defaults
+            ):
+                raise DocumentFormatError("package content types are invalid")
+            defaults[normalized_extension] = content_type
             continue
+        if local_name != "Override":
+            raise DocumentFormatError("package content types are invalid")
         part_name = child.attrib.get("PartName")
         content_type = child.attrib.get("ContentType")
         if not part_name or not content_type or not part_name.startswith("/"):
@@ -815,6 +867,13 @@ def _content_type_overrides(
         if member_name not in members or member_name in overrides:
             raise DocumentFormatError("package content types are invalid")
         overrides[member_name] = content_type
+    for member_name in members:
+        if member_name in overrides:
+            continue
+        extension = Path(member_name).suffix.removeprefix(".").casefold()
+        content_type = defaults.get(extension)
+        if content_type is not None:
+            overrides[member_name] = content_type
     return overrides
 
 
@@ -1313,6 +1372,297 @@ def _sensitivity_label_custom_property_category(property_name: str) -> str | Non
     if _WORD_SENSITIVITY_CONTENT_MARKING_PROPERTY_NAME.fullmatch(property_name):
         return "word_content_marking"
     return None
+
+
+def _package_digital_signature_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[PackageDigitalSignatureInventory, frozenset[str]]:
+    """Inventory OPC signature material without making a trust decision.
+
+    OPC package signatures can carry signer, certificate, signing-time, comment,
+    and provider material. This inventory deliberately reports only structural
+    counts and retains raw part digests privately. It validates recognized
+    package topology and a small XMLDSIG shape, but it does not verify a
+    cryptographic signature, certificate chain, timestamp, signing policy, or
+    signed-content coverage.
+    """
+
+    records: list[tuple[str, ...]] = []
+    origin_parts: set[str] = set()
+    xml_signature_parts: set[str] = set()
+    certificate_parts: set[str] = set()
+
+    def add_origin_part(part_name: str) -> None:
+        origin_parts.add(part_name)
+        if len(origin_parts) > 1:
+            raise DocumentFormatError("package digital signature origins are invalid")
+
+    for part_name in members:
+        if (
+            part_name.casefold()
+            in _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_FALLBACK_PART_NAMES
+        ):
+            add_origin_part(part_name)
+
+    content_type_kinds = {
+        _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE: "origin",
+        _PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE: "xml_signature",
+        _PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_CONTENT_TYPE: "certificate",
+    }
+    for part_name, content_type in sorted(content_types.items()):
+        kind = content_type_kinds.get(content_type.casefold())
+        if kind is None:
+            continue
+        records.append(
+            (
+                "package_digital_signature_content_type",
+                kind,
+                part_name,
+                content_type,
+            )
+        )
+        if kind == "origin":
+            add_origin_part(part_name)
+        elif kind == "xml_signature":
+            xml_signature_parts.add(part_name)
+        else:
+            certificate_parts.add(part_name)
+
+    origin_relationship_count = 0
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            if (
+                relationship.relationship_type.casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE
+            ):
+                continue
+            origin_relationship_count += 1
+            if source_part != "/" or relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if (
+                target is None
+                or content_types.get(target, "").casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE
+            ):
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            add_origin_part(target)
+            records.append(
+                (
+                    "package_digital_signature_origin_relationship",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+    if origin_relationship_count > 1:
+        raise DocumentFormatError("package digital signature origins are invalid")
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            if (
+                relationship.relationship_type.casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_RELATIONSHIP_TYPE
+            ):
+                continue
+            if (
+                source_part not in origin_parts
+                or relationship.target_mode.casefold() != "internal"
+            ):
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if (
+                target is None
+                or content_types.get(target, "").casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE
+            ):
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            xml_signature_parts.add(target)
+            records.append(
+                (
+                    "package_digital_signature_relationship",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in sorted(
+            relationships.values(), key=lambda value: value.canonical_value()
+        ):
+            if (
+                relationship.relationship_type.casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_RELATIONSHIP_TYPE
+            ):
+                continue
+            if (
+                source_part not in xml_signature_parts
+                or relationship.target_mode.casefold() != "internal"
+            ):
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if (
+                target is None
+                or content_types.get(target, "").casefold()
+                != _PACKAGE_DIGITAL_SIGNATURE_CERTIFICATE_CONTENT_TYPE
+            ):
+                raise DocumentFormatError(
+                    "package digital signature relationships are invalid"
+                )
+            certificate_parts.add(target)
+            records.append(
+                (
+                    "package_digital_signature_certificate_relationship",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+    counts = {
+        "signed_info_reference": 0,
+        "manifest_reference": 0,
+        "relationship_reference": 0,
+        "inline_x509_certificate": 0,
+        "signature_property": 0,
+    }
+    for part_name in sorted(origin_parts):
+        records.append(
+            (
+                "package_digital_signature_origin_part",
+                part_name,
+                _digest_bytes(_read_member(archive, members[part_name], limits)),
+            )
+        )
+    for part_name in sorted(xml_signature_parts):
+        payload = _read_member(archive, members[part_name], limits)
+        root = _parse_xml(payload, limits)
+        signature_counts = _validate_package_digital_signature_root(root)
+        for key, value in signature_counts.items():
+            counts[key] += value
+        records.append(
+            (
+                "package_digital_signature_xml_part",
+                part_name,
+                _digest_bytes(payload),
+            )
+        )
+    for part_name in sorted(certificate_parts):
+        records.append(
+            (
+                "package_digital_signature_certificate_part",
+                part_name,
+                _digest_bytes(_read_member(archive, members[part_name], limits)),
+            )
+        )
+
+    signature_parts = frozenset(
+        origin_parts | xml_signature_parts | certificate_parts
+    )
+    return (
+        PackageDigitalSignatureInventory(
+            signature_origin_part_count=len(origin_parts),
+            xml_signature_part_count=len(xml_signature_parts),
+            certificate_part_count=len(certificate_parts),
+            signed_info_reference_count=counts["signed_info_reference"],
+            manifest_reference_count=counts["manifest_reference"],
+            relationship_reference_count=counts["relationship_reference"],
+            inline_x509_certificate_count=counts["inline_x509_certificate"],
+            signature_property_count=counts["signature_property"],
+            signature=_digest_records(records),
+        ),
+        signature_parts,
+    )
+
+
+def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]:
+    """Check a bounded XMLDSIG shape without verifying cryptographic validity."""
+
+    if _qualified_name(root.tag) != (_XMLDSIG_NAMESPACE, "Signature"):
+        raise DocumentFormatError("package digital signature parts are invalid")
+
+    signed_infos = [
+        child
+        for child in root
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignedInfo")
+    ]
+    signature_values = [
+        child
+        for child in root
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignatureValue")
+    ]
+    if len(signed_infos) != 1 or len(signature_values) != 1:
+        raise DocumentFormatError("package digital signature parts are invalid")
+    if not _element_has_text_value(signature_values[0]):
+        raise DocumentFormatError("package digital signature parts are invalid")
+
+    signed_info = signed_infos[0]
+    canonicalization_methods = [
+        child
+        for child in signed_info
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "CanonicalizationMethod")
+    ]
+    signature_methods = [
+        child
+        for child in signed_info
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignatureMethod")
+    ]
+    signed_info_references = [
+        child
+        for child in signed_info
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
+    ]
+    if (
+        len(canonicalization_methods) != 1
+        or len(signature_methods) != 1
+        or not signed_info_references
+    ):
+        raise DocumentFormatError("package digital signature parts are invalid")
+
+    manifest_reference_count = 0
+    relationship_reference_count = 0
+    inline_x509_certificate_count = 0
+    signature_property_count = 0
+    for element in root.iter():
+        qualified_name = _qualified_name(element.tag)
+        if qualified_name == (_XMLDSIG_NAMESPACE, "Manifest"):
+            manifest_reference_count += sum(
+                _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
+                for child in element
+            )
+        elif qualified_name == (
+            _OPC_DIGITAL_SIGNATURE_NAMESPACE,
+            "RelationshipReference",
+        ):
+            relationship_reference_count += 1
+        elif qualified_name == (_XMLDSIG_NAMESPACE, "X509Certificate"):
+            inline_x509_certificate_count += 1
+        elif qualified_name == (_XMLDSIG_NAMESPACE, "SignatureProperty"):
+            signature_property_count += 1
+
+    return {
+        "signed_info_reference": len(signed_info_references),
+        "manifest_reference": manifest_reference_count,
+        "relationship_reference": relationship_reference_count,
+        "inline_x509_certificate": inline_x509_certificate_count,
+        "signature_property": signature_property_count,
+    }
 
 
 def _mail_merge_inventory(
