@@ -76,6 +76,8 @@ starter policy.
 | `no_word_drawing_hyperlink_changes` | `DFP052` | DrawingML hyperlink-action inventory differs | Comparison |
 | `require_no_word_vml_hyperlinks` | `DFP053` | Candidate has direct legacy VML shape-link markup | Candidate |
 | `no_word_vml_hyperlink_changes` | `DFP054` | VML hyperlink-markup inventory differs | Comparison |
+| `require_no_word_drawing_linked_pictures` | `DFP055` | Candidate has direct DrawingML linked-picture markup | Candidate |
+| `no_word_drawing_linked_picture_changes` | `DFP056` | DrawingML linked-picture inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -128,6 +130,8 @@ intentionally retains stored `HYPERLINK` field references.
 intentionally retains direct WordprocessingML hyperlink markup.
 `no_word_drawing_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct DrawingML hyperlink-action markup.
+`no_word_drawing_linked_picture_changes` provides the equivalent gate when it
+intentionally retains direct DrawingML linked-picture markup.
 `no_word_vml_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct legacy VML shape-link markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
@@ -662,9 +666,35 @@ unchanged semantics remains quiet. Neither rule resolves, retrieves, follows,
 validates, evaluates, renders, or executes an action, nor does either establish
 that a target is reachable, safe, or honored by a Word client.
 
+## DrawingML linked-picture scope
+
+Direct `a:blip/@r:link` markup is distinct from a `w:hyperlink` element,
+`HYPERLINK` field, DrawingML hyperlink-action element, `r:embed` embedded-image
+reference, and generic relationship total. DocFence scans each direct
+`a:blip/@r:link` marker in supported Word stories, including duplicate markers
+and markers in Markup Compatibility branches. It does not deduplicate visual
+objects or select a client-rendered branch.
+
+Each marker is privately fingerprinted with its relationship resolved by
+semantics and publicly classified as a standard image relationship with stored
+external mode, stored internal mode, or unsupported relationship. An orphaned
+image relationship and an `a:blip` with `r:embed` but no `r:link` do not create
+marker counts. Targets, relationship IDs, surrounding drawing markup, story
+paths, and fingerprints never appear in reports. Same-count target or direct
+markup changes remain visible; an ID-only renumbering with unchanged semantics
+remains quiet.
+
+`require_no_word_drawing_linked_pictures` fails whenever a candidate contains a
+stored direct linked-picture marker. Use it for a handoff that must carry no
+such markup. `no_word_drawing_linked_picture_changes` compares a private
+inventory signature for a controlled baseline. Neither rule retrieves an image,
+selects a Markup Compatibility branch, resolves an image target, renders a
+picture, updates a link, or establishes that Word will load, reach, or honor a
+target.
+
 ## Legacy VML shape-link scope
 
-Direct legacy VML `href` attributes form a fourth stored link surface, separate
+Direct legacy VML `href` attributes form a fifth stored link surface, separate
 from `HYPERLINK` field codes, direct WordprocessingML `w:hyperlink` markup,
 DrawingML action markup, and broad package relationship totals. The inventory
 scans supported Word stories for a direct unqualified `href` only on the

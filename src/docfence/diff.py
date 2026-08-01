@@ -534,6 +534,20 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.word_drawing_linked_pictures.signature
+        != after.word_drawing_linked_pictures.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_drawing_linked_picture_inventory_changed",
+                message="Stored DrawingML linked-picture inventory changed.",
+                details={
+                    "before": before.word_drawing_linked_pictures.public_dict(),
+                    "after": after.word_drawing_linked_pictures.public_dict(),
+                },
+            )
+        )
     if before.word_vml_hyperlinks.signature != after.word_vml_hyperlinks.signature:
         changes.append(
             Change(

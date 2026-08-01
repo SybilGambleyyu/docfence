@@ -2,6 +2,31 @@
 
 All notable changes are documented here.
 
+## 0.21.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct DrawingML
+  `a:blip/@r:link` linked-picture markers in supported Word stories. It is
+  separate from `HYPERLINK` fields, direct `w:hyperlink` markup, DrawingML
+  hyperlink actions, `r:embed` embedded-picture references, and broad package
+  relationship totals.
+- Added `DFP055` to require a handoff with no direct DrawingML linked-picture
+  markup and `DFP056` to protect an approved marker baseline.
+- Reports now expose only aggregate marker/story and backing standard-image
+  relationship classifications (external target mode, internal target mode, or
+  unsupported). Image targets, relationship IDs, surrounding drawing markup,
+  story paths, and fingerprints remain private.
+- Each direct marker is counted independently, including duplicate markers and
+  markers in Markup Compatibility branches. A standalone image relationship or
+  `a:blip` carrying only `r:embed` is not counted. The inventory does not select
+  a rendering branch, retrieve or resolve an image, render a picture, update a
+  link, or claim a Word client will honor a target.
+- Private inventory signatures catch same-count target and direct-markup
+  changes while normalizing relationship-ID renumbering with unchanged
+  semantics. Added regression coverage for privacy redaction, policy/SARIF
+  output, external/internal/unsupported relationship classes, dual
+  `r:link`/`r:embed` markup, orphan exclusion, header and Strict encodings,
+  same-count target/markup changes, and relationship-ID renumbering stability.
+
 ## 0.20.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct legacy VML shape-link

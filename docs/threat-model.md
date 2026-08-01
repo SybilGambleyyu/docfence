@@ -42,6 +42,8 @@ material too.
 Direct WordprocessingML hyperlink targets, local anchors, locations, tooltips,
 frame names, history values, display text, relationship IDs, and story-part
 paths are sensitive package material too.
+Direct DrawingML linked-picture targets, relationship IDs, surrounding drawing
+markup, and story-part paths are sensitive package material too.
 Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are sensitive package material too.
 Word editable-range marker IDs, individual editor values, exact table-column
@@ -208,6 +210,21 @@ frame names, history settings, relationship IDs, paths, and fingerprints remain
 private. A same-count target or attribute rewrite remains review-visible in the
 private signature; an ID rewrite with identical semantics does not add report
 churn.
+
+Direct DrawingML `a:blip/@r:link` markup receives a separate private-digest
+treatment from field instructions, `w:hyperlink` markup, DrawingML
+hyperlink-action markup, `r:embed` image references, and broad relationship
+totals. DocFence scans each direct marker in supported Word stories and retains
+every stored marker separately; it does not deduplicate markers that share a
+relationship or visual object, or choose a Markup Compatibility branch. The
+`r:link` relationship is privately normalized through its resolved semantics
+and publicly classified only as a standard image relationship with external or
+internal stored target mode, or an unsupported relationship. An `a:blip` with
+only `r:embed` and an unreferenced image relationship do not create marker
+counts. Targets, relationship IDs, surrounding drawing markup, paths, and
+fingerprints remain private. A same-count target or markup rewrite remains
+review-visible in the private signature; an ID rewrite with identical semantics
+does not add report churn.
 
 Direct legacy VML shape `href` markup receives a separate private-digest
 treatment from field instructions, `w:hyperlink` markup, DrawingML actions,
@@ -400,6 +417,12 @@ safe, permitted, or honored, or an `action` executes. DocFence does not select
 Markup Compatibility branches, associate markers with rendered objects,
 deduplicate a visual link, resolve, retrieve, follow, validate, evaluate,
 render, or execute an action.
+Direct DrawingML linked-picture counts are likewise stored-state evidence, not
+proof that Word selects a marker, reaches a relationship target, retrieves or
+updates an image, renders a picture, or honors a stored relationship. DocFence
+does not select Markup Compatibility branches, associate markers with rendered
+objects, deduplicate a visual picture, resolve, retrieve, validate, evaluate,
+render, or update a linked picture.
 Direct legacy VML shape-link counts are likewise stored-state evidence, not
 proof that a client inherits a group/template link, renders a shape, honors an
 `href`, reaches or safely follows a target, or opens a frame. DocFence does not

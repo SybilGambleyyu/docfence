@@ -42,6 +42,7 @@ from docfence.models import (
     WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
     WordDrawingHyperlinkInventory,
+    WordDrawingLinkedPictureInventory,
     WordHyperlinkFieldInventory,
     WordHyperlinkMarkupInventory,
     WordPermissionRangeInventory,
@@ -132,6 +133,12 @@ _HYPERLINK_RELATIONSHIP_TYPES: Final = frozenset(
     {
         "http://schemas.openxmlformats.org/officedocument/2006/relationships/hyperlink",
         "http://purl.oclc.org/ooxml/officedocument/relationships/hyperlink",
+    }
+)
+_IMAGE_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/image",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/image",
     }
 )
 _DRAWING_HYPERLINK_REFERENCE_KINDS: Final = {
@@ -633,6 +640,15 @@ class _DrawingHyperlinkReference:
 
 
 @dataclass(frozen=True)
+class _DrawingLinkedPictureReference:
+    """One private direct DrawingML ``a:blip/@r:link`` marker in a Word story."""
+
+    story_part: str
+    markup_signature: str
+    classification: str
+
+
+@dataclass(frozen=True)
 class _VmlHyperlinkReference:
     """One private direct legacy VML href marker in a Word story."""
 
@@ -798,6 +814,7 @@ def _load_package(
                 hyperlink_field_references,
                 hyperlink_markup_references,
                 drawing_hyperlink_references,
+                drawing_linked_picture_references,
                 vml_hyperlink_references,
                 web_extension_control_references,
             ) = _story_snapshots(
@@ -823,6 +840,9 @@ def _load_package(
             )
             word_drawing_hyperlinks = _word_drawing_hyperlink_inventory(
                 drawing_hyperlink_references
+            )
+            word_drawing_linked_pictures = _word_drawing_linked_picture_inventory(
+                drawing_linked_picture_references
             )
             word_vml_hyperlinks = _word_vml_hyperlink_inventory(
                 vml_hyperlink_references
@@ -915,6 +935,7 @@ def _load_package(
         word_hyperlink_fields=word_hyperlink_fields,
         word_hyperlink_markup=word_hyperlink_markup,
         word_drawing_hyperlinks=word_drawing_hyperlinks,
+        word_drawing_linked_pictures=word_drawing_linked_pictures,
         word_vml_hyperlinks=word_vml_hyperlinks,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
@@ -3223,6 +3244,7 @@ def _story_snapshots(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
     tuple[_WebExtensionControlReference, ...],
 ]:
@@ -3233,6 +3255,7 @@ def _story_snapshots(
     hyperlink_field_references: list[_HyperlinkFieldReference] = []
     hyperlink_markup_references: list[_HyperlinkMarkupReference] = []
     drawing_hyperlink_references: list[_DrawingHyperlinkReference] = []
+    drawing_linked_picture_references: list[_DrawingLinkedPictureReference] = []
     vml_hyperlink_references: list[_VmlHyperlinkReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
     comment_count = 0
@@ -3246,6 +3269,7 @@ def _story_snapshots(
             story_hyperlink_field_references,
             story_hyperlink_markup_references,
             story_drawing_hyperlink_references,
+            story_drawing_linked_picture_references,
             story_vml_hyperlink_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
@@ -3257,6 +3281,9 @@ def _story_snapshots(
         hyperlink_field_references.extend(story_hyperlink_field_references)
         hyperlink_markup_references.extend(story_hyperlink_markup_references)
         drawing_hyperlink_references.extend(story_drawing_hyperlink_references)
+        drawing_linked_picture_references.extend(
+            story_drawing_linked_picture_references
+        )
         vml_hyperlink_references.extend(story_vml_hyperlink_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
@@ -3276,6 +3303,7 @@ def _story_snapshots(
         tuple(hyperlink_field_references),
         tuple(hyperlink_markup_references),
         tuple(drawing_hyperlink_references),
+        tuple(drawing_linked_picture_references),
         tuple(vml_hyperlink_references),
         tuple(web_extension_control_references),
     )
@@ -3347,6 +3375,7 @@ def _snapshot_story(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
 ]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
@@ -3446,6 +3475,7 @@ def _snapshot_story(
         _hyperlink_field_references(field_instruction_references),
         _hyperlink_markup_references(root, part_key, relationships),
         _drawing_hyperlink_references(root, part_key, relationships),
+        _drawing_linked_picture_references(root, part_key, relationships),
         _vml_hyperlink_references(root, part_key, relationships),
     )
 
@@ -3978,9 +4008,20 @@ def _validate_alternative_format_import_anchor(
 
 
 def _relationship_id_value(element: ET.Element) -> str | None:
+    return _relationship_attribute_value(element, "id")
+
+
+def _relationship_attribute_value(
+    element: ET.Element, local_name: str
+) -> str | None:
+    """Return one direct relationship-namespace attribute, including empty."""
+
     for attribute, value in element.attrib.items():
-        namespace, local_name = _qualified_name(attribute)
-        if namespace in _REL_ATTRIBUTE_NAMESPACES and local_name == "id":
+        namespace, attribute_local_name = _qualified_name(attribute)
+        if (
+            namespace in _REL_ATTRIBUTE_NAMESPACES
+            and attribute_local_name == local_name
+        ):
             return value
     return None
 
@@ -4464,6 +4505,24 @@ def _hyperlink_markup_relationship_classification(
     return "unsupported_relationship"
 
 
+def _drawing_linked_picture_relationship_classification(
+    relationship: _Relationship | None,
+) -> str:
+    """Classify the stored image relationship behind an ``a:blip/@r:link``."""
+
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold() not in _IMAGE_RELATIONSHIP_TYPES
+    ):
+        return "unsupported_relationship"
+    target_mode = relationship.target_mode.casefold()
+    if target_mode == "external":
+        return "external_image_relationship"
+    if target_mode == "internal":
+        return "internal_image_relationship"
+    return "unsupported_relationship"
+
+
 def _word_hyperlink_markup_inventory(
     references: tuple[_HyperlinkMarkupReference, ...],
 ) -> WordHyperlinkMarkupInventory:
@@ -4619,6 +4678,82 @@ def _word_drawing_hyperlink_inventory(
         ],
         action_attribute_drawing_hyperlink_count=action_attribute_count,
         invalid_url_attribute_drawing_hyperlink_count=invalid_url_attribute_count,
+        signature=_digest_records(records),
+    )
+
+
+def _drawing_linked_picture_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_DrawingLinkedPictureReference, ...]:
+    """Retain direct ``a:blip/@r:link`` markers without exposing image data.
+
+    ``r:link`` is the DrawingML linked-picture reference. This inventories every
+    stored marker in supported Word stories, including duplicate markers that
+    share a relationship and markers in markup-compatibility branches. It does
+    not select a rendering branch, deduplicate visual objects, retrieve an
+    image, or claim a Word client will load one. An ``r:link`` attribute is
+    always retained as stored evidence; its resolved relationship is classified
+    only by standard image type and stored target mode.
+    """
+
+    references: list[_DrawingLinkedPictureReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace not in _DRAWING_NAMESPACES or local_name != "blip":
+            continue
+        relationship_id = _relationship_attribute_value(element, "link")
+        if relationship_id is None:
+            continue
+        references.append(
+            _DrawingLinkedPictureReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                classification=_drawing_linked_picture_relationship_classification(
+                    relationships.get(relationship_id)
+                ),
+            )
+        )
+    return tuple(references)
+
+
+def _word_drawing_linked_picture_inventory(
+    references: tuple[_DrawingLinkedPictureReference, ...],
+) -> WordDrawingLinkedPictureInventory:
+    """Aggregate linked-picture markers without emitting their target material."""
+
+    classification_counts = {
+        "external_image_relationship": 0,
+        "internal_image_relationship": 0,
+        "unsupported_relationship": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        classification_counts[reference.classification] += 1
+        records.append(
+            (
+                "word_drawing_linked_picture",
+                reference.story_part,
+                reference.markup_signature,
+                reference.classification,
+            )
+        )
+
+    return WordDrawingLinkedPictureInventory(
+        drawing_linked_picture_reference_count=len(references),
+        drawing_linked_picture_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        external_image_relationship_drawing_linked_picture_count=(
+            classification_counts["external_image_relationship"]
+        ),
+        internal_image_relationship_drawing_linked_picture_count=(
+            classification_counts["internal_image_relationship"]
+        ),
+        unsupported_relationship_drawing_linked_picture_count=(
+            classification_counts["unsupported_relationship"]
+        ),
         signature=_digest_records(records),
     )
 

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.20 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.21 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -14,7 +14,8 @@ following properties:
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
   state, Word `HYPERLINK` field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
-  hyperlink-action markup state, direct legacy VML shape-link `href` markup
+  hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
+  linked-picture markup state, direct legacy VML shape-link `href` markup
   state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
   direct hidden paragraph
@@ -119,6 +120,15 @@ following properties:
   DrawingML/Word/relationship namespaces, orphaned relationship exclusion,
   same-count target and action changes, relationship-ID renumbering stability,
   JSON/Markdown/SARIF redaction, and policy findings;
+- direct DrawingML `a:blip/@r:link` linked-picture markup is separately
+  inventoried from direct `w:hyperlink` markup, `HYPERLINK` fields,
+  DrawingML hyperlink actions, `r:embed`-only image references, and generic
+  relationship totals. Tests cover standard image relationships with external
+  and internal stored target modes, a resolved unsupported relationship,
+  dual `r:link`/`r:embed` attributes, body/header stories, Transitional and
+  Strict DrawingML/Word/relationship namespaces, orphaned image-relationship
+  exclusion, same-count target and direct-markup changes, relationship-ID
+  renumbering stability, JSON/Markdown/SARIF redaction, and policy findings;
 - direct legacy VML `href` markup is separately inventoried from direct
   `w:hyperlink` markup, `HYPERLINK` fields, DrawingML actions, and generic
   relationship totals. Tests cover all supported direct VML element kinds
@@ -163,6 +173,8 @@ following properties:
   frame targets, and story paths,
   direct `w:hyperlink` relationship targets, anchors, locations, tooltips,
   frame names, history values, display text, relationship IDs, and story paths,
+  direct DrawingML linked-picture targets, relationship IDs, surrounding
+  drawing markup, and story paths,
   direct VML `href` values, frame targets, titles, alternate text, shape IDs,
   and story paths,
   editable-range marker IDs, individual editor identities, exact table-column
@@ -267,6 +279,17 @@ relationship-backed marker references without emitting a target. This is a
 compatibility smoke test, not a runtime dependency or a statement about link
 rendering or action execution.
 
+For DrawingML linked-picture markup, the release check profiles the public
+[`abs/1.docx` package](https://github.com/pea-sys/shell-experiments/blob/91386d4de9e499a21bbb2e54743eb63a63727bfb/powershell/survey/abspath2relpath-docx/survey/abs/1.docx)
+from pea-sys's open-source `abspath2relpath-docx` investigation. The pinned
+package SHA-256 is
+`8554932d5de0f1c81dbdcbf7b480c17f9008abca18c66a7f03b2e881cfe5147b`.
+It stores two direct `a:blip/@r:link` markers backed by two external standard
+image relationships. DocFence reports two direct markers and two
+external-image classifications while keeping relationship IDs and paths out of
+the output. This is a compatibility smoke test, not a runtime dependency or a
+statement that any Word client will retrieve, update, or render the pictures.
+
 For legacy VML shape-link markup, the release check uses a controlled,
 standards-shaped Word-story package that places direct `href` attributes on all
 supported VML geometry kinds and keeps the package's relationship, field,
@@ -313,7 +336,10 @@ reachable, safe, rendered, or followed by Word; it records bounded stored
 relationship/markup evidence only. It likewise does not assert that a direct
 DrawingML hyperlink-action marker is valid, selected by Word, reachable, safe,
 rendered, followed, or executed; it records bounded stored marker evidence
-only. It likewise does not assert that a direct VML shape `href` is valid,
+only. It likewise does not assert that a direct DrawingML linked-picture marker
+is valid, selected by Word, reachable, safe, rendered, updated, or retrieved;
+it records bounded stored marker/relationship evidence only. It likewise does
+not assert that a direct VML shape `href` is valid,
 inherited, rendered, reachable, safe, followed, or honored by a client; it
 records bounded direct-markup evidence only. It does not calculate effective
 VML inheritance or inspect arbitrary VML elements. The style/default layer is a stored
@@ -330,5 +356,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.20 contract; see
+only, not field evaluation. Those limits are explicit in the 0.21 contract; see
 [threat model](threat-model.md).

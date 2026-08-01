@@ -66,6 +66,8 @@ _RULES: Final = {
     "no_word_drawing_hyperlink_changes": "DFP052",
     "require_no_word_vml_hyperlinks": "DFP053",
     "no_word_vml_hyperlink_changes": "DFP054",
+    "require_no_word_drawing_linked_pictures": "DFP055",
+    "no_word_drawing_linked_picture_changes": "DFP056",
 }
 
 
@@ -377,6 +379,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_drawing_linked_picture_changes") and (
+        before.word_drawing_linked_pictures.signature
+        != after.word_drawing_linked_pictures.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_drawing_linked_picture_changes",
+                "Stored DrawingML linked-picture inventory changed.",
+                {
+                    "before": before.word_drawing_linked_pictures.public_dict(),
+                    "after": after.word_drawing_linked_pictures.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_word_vml_hyperlink_changes") and (
         before.word_vml_hyperlinks.signature != after.word_vml_hyperlinks.signature
     ):
@@ -668,6 +684,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_drawing_hyperlinks",
                 "Candidate contains stored DrawingML hyperlink-action markup.",
                 after.word_drawing_hyperlinks.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_drawing_linked_pictures") and any(
+        after.word_drawing_linked_pictures.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_drawing_linked_pictures",
+                "Candidate contains stored DrawingML linked-picture markup.",
+                after.word_drawing_linked_pictures.public_dict(),
             )
         )
     if policy.enabled("require_no_word_vml_hyperlinks") and any(

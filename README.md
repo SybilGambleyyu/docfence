@@ -7,8 +7,9 @@ surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 `HYPERLINK` field references, direct `w:hyperlink` markup, DrawingML
-click/hover/mouse-over hyperlink-action markup, legacy VML shape `href`
-markup, external relationships, custom XML, macros,
+click/hover/mouse-over hyperlink-action markup, direct DrawingML linked-picture
+`a:blip/@r:link` markup, legacy VML shape `href` markup, external
+relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, OPC package digital-signature material,
@@ -48,6 +49,8 @@ private too.
 DrawingML hyperlink-action targets, invalid URLs, actions, tooltips, frame
 names, history settings, relationship IDs, and story-part paths are private
 too.
+DrawingML linked-picture targets, relationship IDs, surrounding drawing markup,
+and story-part paths are private too.
 Legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
@@ -80,7 +83,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.20 focuses on Office Open XML Word documents and templates and
+Version 0.21 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -91,6 +94,7 @@ deliberately keeps a small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, `HYPERLINK` field-reference, direct `w:hyperlink` markup,
   DrawingML click/hover/mouse-over hyperlink-action markup,
+  DrawingML `a:blip/@r:link` linked-picture markup,
   legacy VML shape/group/shape-template `href` markup,
   external-source field,
   content-control, external-relationship,
@@ -336,7 +340,31 @@ approved marker baseline. This inventory never resolves, retrieves, follows,
 validates, evaluates, or renders an action, and no count establishes that a
 target is reachable, safe, or honored by a Word client.
 
-Legacy VML shape markup is a fourth direct link surface: a `v:shape`,
+DrawingML linked pictures are a separate direct relationship surface again: an
+`a:blip` with `r:link` stores a linked-picture reference, distinct from an
+embedded-picture `r:embed` reference, a hyperlink action, a `w:hyperlink`
+element, a `HYPERLINK` field, or broad relationship totals. DocFence scans each
+direct `a:blip/@r:link` marker in every supported Word story. It does not
+collapse markers that share a relationship or visual object and does not select
+a Markup Compatibility branch; the count is stored-markup evidence, not a
+rendered-picture or network-access count.
+
+Each marker is classified from its resolved relationship as a standard image
+relationship with stored external or internal target mode, or as an unsupported
+relationship. An unreferenced image relationship and an `a:blip` carrying only
+`r:embed` do not create linked-picture marker counts. Public output reports
+only aggregate marker/story and relationship-classification counts. Image
+targets, relationship IDs, surrounding drawing markup, story paths, and
+fingerprints remain private. The private signature catches same-count target or
+attribute rewrites and normalizes relationship-ID renumbering with unchanged
+semantics. It neither retrieves an image nor determines that Word will load,
+render, update, or honor a linked picture.
+
+`require_no_word_drawing_linked_pictures` fails for every stored direct
+DrawingML linked-picture marker, while
+`no_word_drawing_linked_picture_changes` protects an approved marker baseline.
+
+Legacy VML shape markup is a fifth direct link surface: a `v:shape`,
 `v:roundrect`, `v:group`, or related VML geometry element can carry an
 unqualified `href` directly, without a relationship, `w:hyperlink`,
 `HYPERLINK` field, or DrawingML action. DocFence scans direct `href` attributes
@@ -487,6 +515,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_word_hyperlink_fields: true
   require_no_word_hyperlink_markup: true
   require_no_word_drawing_hyperlinks: true
+  require_no_word_drawing_linked_pictures: true
   require_no_word_vml_hyperlinks: true
   require_no_external_document_dependencies: true
 ```
@@ -514,6 +543,7 @@ later mutation:
   no_word_hyperlink_field_changes: true
   no_word_hyperlink_markup_changes: true
   no_word_drawing_hyperlink_changes: true
+  no_word_drawing_linked_picture_changes: true
   no_word_vml_hyperlink_changes: true
   no_external_document_dependency_changes: true
 ```
@@ -686,6 +716,14 @@ attributes; the corresponding [`a:hlinkHover` definition](https://c-rex.net/samp
 and Open XML SDK [`a:hlinkMouseOver` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.hyperlinkonmouseover?view=openxml-3.0.1)
 complete the stored action family. DocFence counts direct stored markers only,
 keeps all values private, and makes no client-execution or target-safety claim.
+The DrawingML linked-picture boundary follows the Open XML SDK's
+[`a:blip/@r:link` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.blip.link?view=openxml-3.0.1),
+which defines a linked-picture reference as an image that does not reside in
+the file, and ECMA-376's [Image Part
+contract](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Image_topic_ID0EGXDO.html),
+which permits a standard image relationship to have an internal or external
+target mode. The release check also profiles an open-source Word package from
+the [`abspath2relpath-docx` investigation](https://github.com/pea-sys/shell-experiments/blob/91386d4de9e499a21bbb2e54743eb63a63727bfb/powershell/survey/abspath2relpath-docx/survey/abs/1.docx): it contains two direct markers backed by external image relationships. DocFence reports only the two marker and relationship-classification counts, never their paths or targets.
 The legacy VML boundary follows Microsoft's [`HRef` shape
 attribute](https://learn.microsoft.com/en-us/windows/win32/vml/href-attribute--shape--vml),
 which defines the URL used when a shape is clicked, and the W3C's

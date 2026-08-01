@@ -435,6 +435,44 @@ class WordDrawingHyperlinkInventory:
 
 
 @dataclass(frozen=True)
+class WordDrawingLinkedPictureInventory:
+    """Direct DrawingML linked-picture markup in Word stories, aggregate only.
+
+    Linked-picture targets, relationship IDs, surrounding drawing markup, story
+    paths, and fingerprints can reveal document context. They remain in the
+    private signature; public output reports only marker and relationship
+    classification counts. A stored marker is not evidence that a Word client
+    will load, render, or otherwise honor the referenced image.
+    """
+
+    drawing_linked_picture_reference_count: int
+    drawing_linked_picture_story_count: int
+    external_image_relationship_drawing_linked_picture_count: int
+    internal_image_relationship_drawing_linked_picture_count: int
+    unsupported_relationship_drawing_linked_picture_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "drawing_linked_picture_reference_count": (
+                self.drawing_linked_picture_reference_count
+            ),
+            "drawing_linked_picture_story_count": (
+                self.drawing_linked_picture_story_count
+            ),
+            "external_image_relationship_drawing_linked_picture_count": (
+                self.external_image_relationship_drawing_linked_picture_count
+            ),
+            "internal_image_relationship_drawing_linked_picture_count": (
+                self.internal_image_relationship_drawing_linked_picture_count
+            ),
+            "unsupported_relationship_drawing_linked_picture_count": (
+                self.unsupported_relationship_drawing_linked_picture_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordVmlHyperlinkInventory:
     """Direct legacy VML ``href`` markup in Word stories, aggregate only.
 
@@ -820,6 +858,7 @@ class DocumentSnapshot:
     word_hyperlink_fields: WordHyperlinkFieldInventory
     word_hyperlink_markup: WordHyperlinkMarkupInventory
     word_drawing_hyperlinks: WordDrawingHyperlinkInventory
+    word_drawing_linked_pictures: WordDrawingLinkedPictureInventory
     word_vml_hyperlinks: WordVmlHyperlinkInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
@@ -921,6 +960,9 @@ class DocumentSnapshot:
             "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
             "word_hyperlink_markup": self.word_hyperlink_markup.public_dict(),
             "word_drawing_hyperlinks": self.word_drawing_hyperlinks.public_dict(),
+            "word_drawing_linked_pictures": (
+                self.word_drawing_linked_pictures.public_dict()
+            ),
             "word_vml_hyperlinks": self.word_vml_hyperlinks.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
