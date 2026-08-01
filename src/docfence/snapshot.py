@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import posixpath
 import stat
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -20,7 +21,9 @@ from typing import Final
 
 from docfence.errors import DocumentFormatError, DocumentSafetyError
 from docfence.models import (
+    AlternativeFormatImportInventory,
     DocumentSnapshot,
+    EmbeddedObjectInventory,
     RelationshipInventory,
     RevisionInventory,
     StorySnapshot,
@@ -78,6 +81,27 @@ _STORY_ROOT_NAMES: Final = {
     "comment": "comments",
     "glossary": "glossaryDocument",
 }
+_EMBEDDED_OBJECT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/oleobject",
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/package",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/oleobject",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/package",
+    }
+)
+_EMBEDDED_CONTROL_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/control",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/control",
+        "http://schemas.microsoft.com/office/2006/relationships/activexcontrolbinary",
+    }
+)
+_ALTERNATIVE_FORMAT_IMPORT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/afchunk",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/afchunk",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -145,6 +169,14 @@ def _load_package(
             relationships, relationship_maps = _relationship_inventory(
                 archive, members, limits
             )
+            embedded_objects, embedded_object_parts = _embedded_object_inventory(
+                archive, members, relationship_maps, limits
+            )
+            alternative_format_imports, alternative_format_import_parts = (
+                _alternative_format_import_inventory(
+                    archive, members, relationship_maps, limits
+                )
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             stories, comment_count = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
@@ -157,7 +189,11 @@ def _load_package(
             )
             macro_present, macro_signature = _macro_inventory(archive, members, limits)
             unclassified_count, unclassified_signature = _unclassified_inventory(
-                archive, members, stories, limits
+                archive,
+                members,
+                stories,
+                embedded_object_parts | alternative_format_import_parts,
+                limits,
             )
     except (DocumentFormatError, DocumentSafetyError):
         raise
@@ -178,6 +214,8 @@ def _load_package(
         stories=stories,
         relationships=relationships,
         styles=styles,
+        embedded_objects=embedded_objects,
+        alternative_format_imports=alternative_format_imports,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
         custom_xml_part_count=custom_count,
@@ -404,6 +442,170 @@ def _relationship_inventory(
     )
 
 
+def _embedded_object_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[EmbeddedObjectInventory, frozenset[str]]:
+    object_records: list[tuple[str, ...]] = []
+    control_records: list[tuple[str, ...]] = []
+    object_parts = set(_part_names_under(members, "word/embeddings/"))
+    control_parts = set(_part_names_under(members, "word/activeX/"))
+    object_targets: set[str] = set()
+
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in relationships.values():
+            relationship_type = relationship.relationship_type.casefold()
+            if relationship_type in _EMBEDDED_OBJECT_RELATIONSHIP_TYPES:
+                object_records.append(
+                    ("embedded_object", source_part, *relationship.canonical_value())
+                )
+                target = _internal_relationship_target(
+                    source_part, relationship, members
+                )
+                if target is not None:
+                    object_targets.add(target)
+                    object_parts.add(target)
+            elif relationship_type in _EMBEDDED_CONTROL_RELATIONSHIP_TYPES:
+                control_records.append(
+                    ("embedded_control", source_part, *relationship.canonical_value())
+                )
+                target = _internal_relationship_target(
+                    source_part, relationship, members
+                )
+                if target is not None:
+                    control_parts.add(target)
+
+    object_parts.difference_update(control_parts - object_targets)
+    payload_parts = frozenset(object_parts | control_parts)
+    return (
+        EmbeddedObjectInventory(
+            object_relationship_count=len(object_records),
+            object_part_count=len(object_parts),
+            control_relationship_count=len(control_records),
+            control_part_count=len(control_parts),
+            signature=_payload_inventory_signature(
+                [*object_records, *control_records],
+                payload_parts,
+                archive,
+                members,
+                limits,
+            ),
+        ),
+        payload_parts,
+    )
+
+
+def _alternative_format_import_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[AlternativeFormatImportInventory, frozenset[str]]:
+    records: list[tuple[str, ...]] = []
+    payload_parts: set[str] = set()
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in relationships.values():
+            if (
+                relationship.relationship_type.casefold()
+                not in _ALTERNATIVE_FORMAT_IMPORT_RELATIONSHIP_TYPES
+            ):
+                continue
+            records.append(
+                (
+                    "alternative_format_import",
+                    source_part,
+                    *relationship.canonical_value(),
+                )
+            )
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is not None:
+                payload_parts.add(target)
+
+    part_names = frozenset(payload_parts)
+    return (
+        AlternativeFormatImportInventory(
+            relationship_count=len(records),
+            payload_part_count=len(part_names),
+            signature=_payload_inventory_signature(
+                records, part_names, archive, members, limits
+            ),
+        ),
+        part_names,
+    )
+
+
+def _internal_relationship_target(
+    source_part: str,
+    relationship: _Relationship,
+    members: dict[str, zipfile.ZipInfo],
+) -> str | None:
+    target_mode = relationship.target_mode.casefold()
+    if target_mode == "external":
+        return None
+    if target_mode != "internal":
+        raise DocumentFormatError("package relationship target mode is invalid")
+    return _resolve_internal_relationship_target(
+        source_part, relationship.target, members
+    )
+
+
+def _resolve_internal_relationship_target(
+    source_part: str,
+    target: str,
+    members: dict[str, zipfile.ZipInfo],
+) -> str:
+    if (
+        not target
+        or target.startswith("/")
+        or any(token in target for token in ("\\", ":", "?", "#", "\x00"))
+    ):
+        raise DocumentFormatError("package relationship target is invalid")
+    base = "" if source_part == "/" else source_part.rpartition("/")[0]
+    resolved = posixpath.normpath(posixpath.join(base, target))
+    if (
+        resolved in {"", ".", ".."}
+        or resolved.startswith("../")
+        or resolved.startswith("/")
+        or resolved not in members
+    ):
+        raise DocumentFormatError("package relationship target is unavailable")
+    return resolved
+
+
+def _part_names_under(members: dict[str, zipfile.ZipInfo], prefix: str) -> list[str]:
+    return sorted(
+        name
+        for name in members
+        if name.startswith(prefix)
+        and "/_rels/" not in name
+        and not name.endswith(".rels")
+    )
+
+
+def _payload_inventory_signature(
+    relationship_records: list[tuple[str, ...]],
+    part_names: frozenset[str],
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    limits: PackageLimits,
+) -> str:
+    records = [*relationship_records]
+    records.extend(
+        (
+            "payload_part",
+            part_name,
+            _digest_bytes(_read_member(archive, members[part_name], limits)),
+        )
+        for part_name in sorted(part_names)
+    )
+    encoded = json.dumps(
+        sorted(records), ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return _digest_bytes(encoded)
+
+
 def _relationship_source_part(member_name: str) -> str:
     if member_name == "_rels/.rels":
         return "/"
@@ -517,6 +719,7 @@ def _snapshot_story(
     text_runs = 0
     hidden_text_runs = 0
     hidden_paragraph_marks = 0
+    alternative_format_import_anchors = 0
     simple_fields = 0
     field_begins = 0
     loose_instructions = 0
@@ -552,6 +755,9 @@ def _snapshot_story(
             content_controls += 1
         elif local_name == "commentRangeStart":
             comment_anchors += 1
+        elif local_name == "altChunk":
+            _validate_alternative_format_import_anchor(element, relationships)
+            alternative_format_import_anchors += 1
 
         if local_name == "ins":
             insertions += 1
@@ -583,6 +789,7 @@ def _snapshot_story(
         text_run_count=text_runs,
         hidden_text_run_count=hidden_text_runs,
         hidden_paragraph_mark_count=hidden_paragraph_marks,
+        alternative_format_import_anchor_count=alternative_format_import_anchors,
         field_code_count=field_code_count,
         content_control_count=content_controls,
         comment_anchor_count=comment_anchors,
@@ -656,6 +863,28 @@ def _first_word_child(element: ET.Element, local_name: str) -> ET.Element | None
         (child for child in element if _is_word_element(child, local_name)),
         None,
     )
+
+
+def _validate_alternative_format_import_anchor(
+    element: ET.Element, relationships: dict[str, _Relationship]
+) -> None:
+    relationship_id = _relationship_id_value(element)
+    relationship = relationships.get(relationship_id) if relationship_id else None
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold()
+        not in _ALTERNATIVE_FORMAT_IMPORT_RELATIONSHIP_TYPES
+        or relationship.target_mode.casefold() != "internal"
+    ):
+        raise DocumentFormatError("alternative-format import markup is invalid")
+
+
+def _relationship_id_value(element: ET.Element) -> str | None:
+    for attribute, value in element.attrib.items():
+        namespace, local_name = _qualified_name(attribute)
+        if namespace in _REL_ATTRIBUTE_NAMESPACES and local_name == "id":
+            return value
+    return None
 
 
 def _field_char_is_begin(element: ET.Element) -> bool:
@@ -793,6 +1022,7 @@ def _unclassified_inventory(
     archive: zipfile.ZipFile,
     members: dict[str, zipfile.ZipInfo],
     stories: tuple[StorySnapshot, ...],
+    specialized_part_names: frozenset[str],
     limits: PackageLimits,
 ) -> tuple[int, str]:
     known_parts = {
@@ -802,6 +1032,7 @@ def _unclassified_inventory(
         *_custom_xml_part_names(members),
         *_macro_part_names(members),
     }
+    known_parts.update(specialized_part_names)
     known_parts.update(name for name in members if name.endswith(".rels"))
     unclassified_parts = sorted(name for name in members if name not in known_parts)
     return (

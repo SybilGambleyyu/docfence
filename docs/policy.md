@@ -36,6 +36,10 @@ starter policy.
 | `require_no_content_controls` | `DFP012` | Candidate has stored content controls | Candidate |
 | `require_no_hidden_text_style_declarations` | `DFP013` | Candidate has stored style/default declarations that can hide text | Candidate |
 | `require_no_hidden_paragraph_marks` | `DFP014` | Candidate has direct hidden paragraph-mark markup | Candidate |
+| `require_no_embedded_objects` | `DFP015` | Candidate has stored embedded OLE/package/control relationships or payload parts | Candidate |
+| `require_no_alternative_format_imports` | `DFP016` | Candidate has stored `aFChunk` import relationships, payloads, or `w:altChunk` anchors | Candidate |
+| `no_embedded_object_payload_changes` | `DFP017` | Embedded OLE/package/control inventory differs | Comparison |
+| `no_alternative_format_import_changes` | `DFP018` | Alternative-format import inventory or anchor count differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -53,8 +57,12 @@ Choose policies based on the handoff boundary. A publishing gate often uses the
 starter policy and candidate-state rules. A controlled template workflow might
 also enable `no_document_settings_changes` and
 `no_unclassified_package_payload_changes`; those are intentionally stricter and
-can flag a media, metadata, or other opaque package mutation. `word/styles.xml`
-is handled by the dedicated style inventory instead.
+can flag a media, metadata, or other opaque package mutation. A template that
+intentionally embeds a known payload can instead enable
+`no_embedded_object_payload_changes` or
+`no_alternative_format_import_changes` to preserve that baseline while blocking
+a later mutation. `word/styles.xml` is handled by the dedicated style inventory
+instead.
 
 ## Hidden-text scope
 
@@ -69,6 +77,26 @@ effective state also depends on style inheritance and application. Therefore,
 this rule is a conservative declaration gate, not a claim that DocFence has
 resolved which candidate runs Word will display as hidden. A `w:vanish` with an
 explicit false value does not trigger the declaration count.
+
+## Embedded and imported-content scope
+
+`require_no_embedded_objects` is a candidate-state gate for OLE/package and
+control payload evidence. It recognizes the standard `oleObject`, `package`,
+`control`, and ActiveX-control-binary relationship types, as well as payloads
+stored in the conventional `word/embeddings/` and `word/activeX/` folders. The
+comparison rule fingerprints those recognized relationship semantics and the
+payload bytes privately, so relationship-ID renumbering alone remains quiet.
+
+`require_no_alternative_format_imports` fails when a candidate has an `aFChunk`
+relationship, its resolved internal payload, or a direct Word `w:altChunk`
+anchor. The comparison counterpart detects a relationship/payload mutation and
+an anchor-count mutation. An unanchored `aFChunk` relationship is still
+inventoried because it is stored imported-content state.
+
+For every encountered `w:altChunk`, DocFence requires a matching internal
+standard `aFChunk` relationship whose target safely resolves to a stored package
+member. It does not decode, import, render, execute, or assess the safety of
+that payload. Findings and reports expose only aggregate counts.
 
 ## CI example
 

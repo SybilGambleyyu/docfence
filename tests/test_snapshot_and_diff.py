@@ -5,7 +5,7 @@ import zipfile
 from dataclasses import replace
 
 import pytest
-from conftest import CT, W, write_document
+from conftest import CT, DOCX_MAIN_TYPE, PR, R, W, write_document
 
 from docfence.cli import main
 from docfence.diff import diff_documents
@@ -13,6 +13,22 @@ from docfence.errors import DocumentFormatError, DocumentSafetyError, PolicyErro
 from docfence.output import render_profile, render_report
 from docfence.policy import apply_policy, load_policy, starter_policy
 from docfence.snapshot import load_snapshot
+
+_ALT_CHUNK_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk"
+)
+_ACTIVE_X_CONTROL_BINARY_RELATIONSHIP_TYPE = (
+    "http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary"
+)
+_CONTROL_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control"
+)
+_OLE_OBJECT_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject"
+)
+_PACKAGE_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -45,6 +61,17 @@ def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None
         "hidden_text_style_definition_count": 0,
         "document_default_hidden_text_enabled": False,
     }
+    assert public["embedded_objects"] == {
+        "embedded_object_relationship_count": 0,
+        "embedded_object_part_count": 0,
+        "embedded_control_relationship_count": 0,
+        "embedded_control_part_count": 0,
+    }
+    assert public["alternative_format_imports"] == {
+        "alternative_format_import_relationship_count": 0,
+        "alternative_format_import_payload_part_count": 0,
+    }
+    assert public["alternative_format_import_anchor_count"] == 0
     assert public["field_code_count"] == 1
     assert public["content_control_count"] == 1
     assert public["comment_anchor_count"] == 1
@@ -160,6 +187,152 @@ def test_spec_vanish_is_inventoried_only_for_a_paragraph_mark(tmp_path) -> None:
     rendered = render_profile(snapshot, "markdown")
     assert "SPECIAL_DO_NOT_LEAK" not in rendered
     assert "DIRECT_FALSE_DO_NOT_LEAK" not in rendered
+
+
+def test_embedded_objects_and_alternative_imports_are_separate_and_private(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    payload_changed = tmp_path / "payload-changed.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    duplicate_anchor = tmp_path / "duplicate-anchor.docx"
+    policy_path = tmp_path / "docfence.yml"
+    write_document(before)
+    _write_embedded_content_document(after)
+    _write_embedded_content_document(
+        payload_changed,
+        object_payload=b"OBJECT_PAYLOAD_CHANGED_DO_NOT_LEAK",
+        import_payload=b"ALT_IMPORT_CHANGED_DO_NOT_LEAK",
+    )
+    _write_embedded_content_document(renumbered, relationship_id_suffix="9")
+    _write_embedded_content_document(duplicate_anchor, duplicate_alt_chunk_anchor=True)
+
+    snapshot = load_snapshot(after)
+    public = snapshot.public_dict()
+    assert public["alternative_format_import_anchor_count"] == 1
+    assert public["embedded_objects"] == {
+        "embedded_object_relationship_count": 2,
+        "embedded_object_part_count": 2,
+        "embedded_control_relationship_count": 2,
+        "embedded_control_part_count": 2,
+    }
+    assert public["alternative_format_imports"] == {
+        "alternative_format_import_relationship_count": 1,
+        "alternative_format_import_payload_part_count": 1,
+    }
+    assert public["unclassified_part_count"] == 1
+
+    report = diff_documents(before, after)
+    assert {
+        "embedded_object_inventory_changed",
+        "alternative_format_import_inventory_changed",
+        "alternative_format_import_anchor_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    payload_report = diff_documents(after, payload_changed)
+    payload_kinds = {change.kind for change in payload_report.changes}
+    assert {
+        "embedded_object_inventory_changed",
+        "alternative_format_import_inventory_changed",
+    } <= payload_kinds
+    assert "alternative_format_import_anchor_inventory_changed" not in payload_kinds
+    assert diff_documents(after, renumbered).changes == ()
+    duplicate_anchor_report = diff_documents(after, duplicate_anchor)
+    duplicate_anchor_kinds = {change.kind for change in duplicate_anchor_report.changes}
+    assert (
+        "alternative_format_import_anchor_inventory_changed" in duplicate_anchor_kinds
+    )
+    assert "alternative_format_import_inventory_changed" not in duplicate_anchor_kinds
+    assert "embedded_object_inventory_changed" not in duplicate_anchor_kinds
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_embedded_objects: true
+  require_no_alternative_format_imports: true
+  no_embedded_object_payload_changes: true
+  no_alternative_format_import_changes: true
+""",
+        encoding="utf-8",
+    )
+    gated = apply_policy(report, load_policy(policy_path))
+    assert {finding.rule_id for finding in gated.findings} == {
+        "DFP015",
+        "DFP016",
+        "DFP017",
+        "DFP018",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(payload_report, load_policy(policy_path)).findings
+    } == {
+        "DFP015",
+        "DFP016",
+        "DFP017",
+        "DFP018",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, renumbered), load_policy(policy_path)
+        ).findings
+    } == {
+        "DFP015",
+        "DFP016",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            duplicate_anchor_report, load_policy(policy_path)
+        ).findings
+    } == {"DFP015", "DFP016", "DFP018"}
+
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_EMBEDDED_OBJECT_INVENTORY_CHANGED",
+        "DFC_ALTERNATIVE_FORMAT_IMPORT_INVENTORY_CHANGED",
+        "DFP015",
+        "DFP016",
+        "DFP017",
+        "DFP018",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VISIBLE_DO_NOT_LEAK",
+        "OBJECT_PAYLOAD_DO_NOT_LEAK",
+        "PACKAGE_PAYLOAD_DO_NOT_LEAK",
+        "CONTROL_PAYLOAD_DO_NOT_LEAK",
+        "ALT_IMPORT_DO_NOT_LEAK",
+        "OBJECT_PAYLOAD_CHANGED_DO_NOT_LEAK",
+        "ALT_IMPORT_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_alt_chunk_requires_a_matching_internal_import_relationship(tmp_path) -> None:
+    wrong_type = tmp_path / "wrong-type.docx"
+    external_target = tmp_path / "external-target.docx"
+    missing_target = tmp_path / "missing-target.docx"
+    _write_embedded_content_document(
+        wrong_type, alt_chunk_relationship_type=_OLE_OBJECT_RELATIONSHIP_TYPE
+    )
+    _write_embedded_content_document(external_target, alt_chunk_target_mode="External")
+    _write_embedded_content_document(missing_target, include_import_payload=False)
+
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(wrong_type)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(external_target)
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(missing_target)
 
 
 def test_diff_reports_supported_changes_without_document_material(tmp_path) -> None:
@@ -448,3 +621,76 @@ def _styles_with_hidden_text_declarations() -> str:
     <w:rPr><w:vanish w:val=\"false\"/></w:rPr>
   </w:style>
 </w:styles>"""
+
+
+def _write_embedded_content_document(
+    path,
+    *,
+    object_payload: bytes = b"OBJECT_PAYLOAD_DO_NOT_LEAK",
+    import_payload: bytes = b"ALT_IMPORT_DO_NOT_LEAK",
+    relationship_id_suffix: str = "1",
+    alt_chunk_relationship_type: str = _ALT_CHUNK_RELATIONSHIP_TYPE,
+    alt_chunk_target_mode: str = "Internal",
+    include_import_payload: bool = True,
+    duplicate_alt_chunk_anchor: bool = False,
+) -> None:
+    object_id = f"rIdObject{relationship_id_suffix}"
+    package_id = f"rIdPackage{relationship_id_suffix}"
+    control_id = f"rIdControl{relationship_id_suffix}"
+    binary_control_id = f"rIdControlBinary{relationship_id_suffix}"
+    import_id = f"rIdImport{relationship_id_suffix}"
+    import_target_mode = (
+        f' TargetMode="{alt_chunk_target_mode}"'
+        if alt_chunk_target_mode != "Internal"
+        else ""
+    )
+    import_override = (
+        '<Override PartName="/word/afchunk1.html" ContentType="text/html"/>'
+        if include_import_payload
+        else ""
+    )
+    alt_chunk_markup = f'<w:altChunk r:id="{import_id}"/>'
+    if duplicate_alt_chunk_anchor:
+        alt_chunk_markup *= 2
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{import_override}</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}" xmlns:r="{R}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            f"{alt_chunk_markup}"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/_rels/document.xml.rels": (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{object_id}" Type="{_OLE_OBJECT_RELATIONSHIP_TYPE}" '
+            'Target="embeddings/object1.bin"/>'
+            f'<Relationship Id="{package_id}" Type="{_PACKAGE_RELATIONSHIP_TYPE}" '
+            'Target="embeddings/package1.bin"/>'
+            f'<Relationship Id="{control_id}" Type="{_CONTROL_RELATIONSHIP_TYPE}" '
+            'Target="activeX/activeX1.xml"/>'
+            f'<Relationship Id="{import_id}" Type="{alt_chunk_relationship_type}" '
+            f'Target="afchunk1.html"{import_target_mode}/>'
+            "</Relationships>"
+        ).encode(),
+        "word/embeddings/object1.bin": object_payload,
+        "word/embeddings/package1.bin": b"PACKAGE_PAYLOAD_DO_NOT_LEAK",
+        "word/activeX/activeX1.xml": b"<activeXControl/>",
+        "word/activeX/_rels/activeX1.xml.rels": (
+            f'<Relationships xmlns="{PR}">'
+            f'<Relationship Id="{binary_control_id}" '
+            f'Type="{_ACTIVE_X_CONTROL_BINARY_RELATIONSHIP_TYPE}" '
+            'Target="activeX1.bin"/>'
+            "</Relationships>"
+        ).encode(),
+        "word/activeX/activeX1.bin": b"CONTROL_PAYLOAD_DO_NOT_LEAK",
+    }
+    if include_import_payload:
+        entries["word/afchunk1.html"] = import_payload
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)

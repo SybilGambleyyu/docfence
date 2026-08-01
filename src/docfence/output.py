@@ -45,6 +45,12 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(_story_kind_section(document.get("story_kind_counts", {})))
     lines.extend(_revision_section(document.get("revisions", {})))
     lines.extend(_style_section(document.get("styles", {})))
+    lines.extend(_embedded_object_section(document.get("embedded_objects", {})))
+    lines.extend(
+        _alternative_format_import_section(
+            document.get("alternative_format_imports", {})
+        )
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -56,6 +62,8 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_story_kind_comparison(before, after))
     lines.extend(_revision_comparison(before, after))
     lines.extend(_style_comparison(before, after))
+    lines.extend(_embedded_object_comparison(before, after))
+    lines.extend(_alternative_format_import_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
         lines.append("No stored changes detected by the supported inventories.")
@@ -87,6 +95,7 @@ def _single_document_table(document: dict[str, object]) -> list[str]:
         "text_run_count",
         "hidden_text_run_count",
         "hidden_paragraph_mark_count",
+        "alternative_format_import_anchor_count",
         "field_code_count",
         "content_control_count",
         "comment_anchor_count",
@@ -111,6 +120,7 @@ def _comparison_table(before: dict[str, object], after: dict[str, object]) -> li
         "text_run_count",
         "hidden_text_run_count",
         "hidden_paragraph_mark_count",
+        "alternative_format_import_anchor_count",
         "field_code_count",
         "content_control_count",
         "comment_anchor_count",
@@ -200,6 +210,64 @@ def _style_comparison(before: dict[str, object], after: dict[str, object]) -> li
             key,
             before_styles.get(key, 0),
             after_styles.get(key, 0),
+        )
+        for key in keys
+    )
+    return [*lines, ""]
+
+
+def _embedded_object_section(value: object) -> list[str]:
+    return _inventory_section("Embedded object inventory", value)
+
+
+def _alternative_format_import_section(value: object) -> list[str]:
+    return _inventory_section("Alternative-format import inventory", value)
+
+
+def _inventory_section(title: str, value: object) -> list[str]:
+    inventory = _mapping(value)
+    lines = [f"## {title}", "", "| Field | Value |", "| --- | ---: |"]
+    lines.extend(f"| `{key}` | {_value(inventory[key])} |" for key in sorted(inventory))
+    return [*lines, ""]
+
+
+def _embedded_object_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Embedded object inventory",
+        before.get("embedded_objects", {}),
+        after.get("embedded_objects", {}),
+    )
+
+
+def _alternative_format_import_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Alternative-format import inventory",
+        before.get("alternative_format_imports", {}),
+        after.get("alternative_format_imports", {}),
+    )
+
+
+def _inventory_comparison(
+    title: str, before_value: object, after_value: object
+) -> list[str]:
+    before_inventory = _mapping(before_value)
+    after_inventory = _mapping(after_value)
+    keys = sorted(set(before_inventory) | set(after_inventory))
+    lines = [
+        f"## {title}",
+        "",
+        "| Field | Before | After |",
+        "| --- | ---: | ---: |",
+    ]
+    lines.extend(
+        _comparison_row(
+            key,
+            before_inventory.get(key, 0),
+            after_inventory.get(key, 0),
         )
         for key in keys
     )

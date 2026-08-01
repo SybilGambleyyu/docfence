@@ -269,6 +269,14 @@ def _append_review_inventory_changes(
     )
     _append_count_change(
         changes,
+        "alternative_format_import_anchor_inventory_changed",
+        "Stored alternative-format import anchor inventory changed.",
+        "alternative_format_import_anchor_count",
+        before.alternative_format_import_anchor_count,
+        after.alternative_format_import_anchor_count,
+    )
+    _append_count_change(
+        changes,
         "field_code_inventory_changed",
         "Stored field-code inventory changed.",
         "field_code_count",
@@ -381,6 +389,31 @@ def _append_package_changes(
                 details={
                     "before_macro_present": before.macro_present,
                     "after_macro_present": after.macro_present,
+                },
+            )
+        )
+    if before.embedded_objects.signature != after.embedded_objects.signature:
+        changes.append(
+            Change(
+                kind="embedded_object_inventory_changed",
+                message="Stored embedded object inventory changed.",
+                details={
+                    "before": before.embedded_objects.public_dict(),
+                    "after": after.embedded_objects.public_dict(),
+                },
+            )
+        )
+    if (
+        before.alternative_format_imports.signature
+        != after.alternative_format_imports.signature
+    ):
+        changes.append(
+            Change(
+                kind="alternative_format_import_inventory_changed",
+                message="Stored alternative-format import inventory changed.",
+                details={
+                    "before": before.alternative_format_imports.public_dict(),
+                    "after": after.alternative_format_imports.public_dict(),
                 },
             )
         )

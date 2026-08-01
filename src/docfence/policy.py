@@ -26,6 +26,10 @@ _RULES: Final = {
     "require_no_content_controls": "DFP012",
     "require_no_hidden_text_style_declarations": "DFP013",
     "require_no_hidden_paragraph_marks": "DFP014",
+    "require_no_embedded_objects": "DFP015",
+    "require_no_alternative_format_imports": "DFP016",
+    "no_embedded_object_payload_changes": "DFP017",
+    "no_alternative_format_import_changes": "DFP018",
 }
 
 
@@ -249,6 +253,68 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_hidden_paragraph_marks",
                 "Candidate contains hidden paragraph marks.",
                 {"hidden_paragraph_mark_count": after.hidden_paragraph_mark_count},
+            )
+        )
+    if policy.enabled("require_no_embedded_objects") and any(
+        after.embedded_objects.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_embedded_objects",
+                "Candidate contains stored embedded object or control evidence.",
+                after.embedded_objects.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_alternative_format_imports") and (
+        after.alternative_format_import_anchor_count
+        or any(after.alternative_format_imports.public_dict().values())
+    ):
+        findings.append(
+            _finding(
+                "require_no_alternative_format_imports",
+                "Candidate contains stored alternative-format imports.",
+                {
+                    "alternative_format_import_anchor_count": (
+                        after.alternative_format_import_anchor_count
+                    ),
+                    **after.alternative_format_imports.public_dict(),
+                },
+            )
+        )
+    if (
+        policy.enabled("no_embedded_object_payload_changes")
+        and before.embedded_objects.signature != after.embedded_objects.signature
+    ):
+        findings.append(
+            _finding(
+                "no_embedded_object_payload_changes",
+                "Embedded object or control inventory changed.",
+                {
+                    "before": before.embedded_objects.public_dict(),
+                    "after": after.embedded_objects.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_alternative_format_import_changes") and (
+        before.alternative_format_imports.signature
+        != after.alternative_format_imports.signature
+        or before.alternative_format_import_anchor_count
+        != after.alternative_format_import_anchor_count
+    ):
+        findings.append(
+            _finding(
+                "no_alternative_format_import_changes",
+                "Alternative-format import inventory changed.",
+                {
+                    "before_alternative_format_import_anchor_count": (
+                        before.alternative_format_import_anchor_count
+                    ),
+                    "after_alternative_format_import_anchor_count": (
+                        after.alternative_format_import_anchor_count
+                    ),
+                    "before": before.alternative_format_imports.public_dict(),
+                    "after": after.alternative_format_imports.public_dict(),
+                },
             )
         )
     if (

@@ -8,15 +8,17 @@ package. It is not a general-purpose malware sandbox or a renderer.
 
 The source document is treated as sensitive. Its body text, hidden text,
 comments, reviewer metadata, relationship targets, field instructions, style
-identifiers, custom XML, and macro bytes must not become DocFence report
-content. The report may be stored in CI artifacts, pasted into an issue, or
-uploaded to a SARIF consumer, so it is intentionally restricted to counts,
-fixed categories, booleans, and generic story kinds.
+identifiers, custom XML, macro bytes, embedded-object bytes, and
+alternative-format-import bytes must not become DocFence report content. The
+report may be stored in CI artifacts, pasted into an issue, or uploaded to a
+SARIF consumer, so it is intentionally restricted to counts, fixed categories,
+booleans, and generic story kinds.
 
 DocFence does not invoke Word or Office automation. It does not execute macro
 code, calculate fields, resolve a hyperlink, retrieve a relationship target,
-render images, or send package bytes over the network. It operates on a local
-copy of the ZIP container with the Python standard library.
+open an embedded object, import alternative-format content, render images, or
+send package bytes over the network. It operates on a local copy of the ZIP
+container with the Python standard library.
 
 ## Package and parser defenses
 
@@ -55,6 +57,13 @@ renumbering alone does not create report churn. Word's volatile `rsid` metadata
 and common volatile revision author/date metadata are also excluded from story
 fingerprints.
 
+Embedded OLE/package/control and alternative-format-import inventories use the
+same private-digest approach. For the recognized relationship types, an internal
+target is resolved only as a normalized package-member name and must exist in
+the already validated ZIP member map. A `w:altChunk` anchor must name a matching
+internal `aFChunk` relationship. These checks never interpret the target's
+payload bytes as an application document, script, image, or HTML.
+
 This protects DocFence-controlled report surfaces, not arbitrary caller logs.
 Shell history, paths provided on the command line, operating-system audit logs,
 and external tools are outside this contract.
@@ -70,7 +79,11 @@ text-run style properties and document defaults, but does not decide whether a
 style is used or calculate inherited/toggled effective formatting. Unsupported
 or unclassified package parts are still fingerprinted as an opaque category so
 their mutation is visible, but DocFence does not claim to explain their visual
-or business effect.
+or business effect. Embedded OLE/package/control evidence and alternative-format
+imports are separate inventories, but they are not decoded, rendered, imported,
+or scanned for malware. Recognized conventional folders make otherwise opaque
+payloads review-visible; they do not prove the payload is valid, safe, or used
+by Word.
 
 For a consequential legal, medical, financial, or publishing decision, use
 DocFence as a controlled review signal alongside an appropriate rendering and

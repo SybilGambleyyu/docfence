@@ -61,6 +61,40 @@ class StyleInventory:
 
 
 @dataclass(frozen=True)
+class EmbeddedObjectInventory:
+    """Stored OLE/package object and embedded-control evidence."""
+
+    object_relationship_count: int
+    object_part_count: int
+    control_relationship_count: int
+    control_part_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "embedded_object_relationship_count": self.object_relationship_count,
+            "embedded_object_part_count": self.object_part_count,
+            "embedded_control_relationship_count": self.control_relationship_count,
+            "embedded_control_part_count": self.control_part_count,
+        }
+
+
+@dataclass(frozen=True)
+class AlternativeFormatImportInventory:
+    """Stored OOXML alternative-format import relationships and payloads."""
+
+    relationship_count: int
+    payload_part_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "alternative_format_import_relationship_count": self.relationship_count,
+            "alternative_format_import_payload_part_count": self.payload_part_count,
+        }
+
+
+@dataclass(frozen=True)
 class StorySnapshot:
     """One private document story fingerprint plus aggregate review state."""
 
@@ -73,6 +107,7 @@ class StorySnapshot:
     text_run_count: int
     hidden_text_run_count: int
     hidden_paragraph_mark_count: int
+    alternative_format_import_anchor_count: int
     field_code_count: int
     content_control_count: int
     comment_anchor_count: int
@@ -87,6 +122,9 @@ class StorySnapshot:
             "text_run_count": self.text_run_count,
             "hidden_text_run_count": self.hidden_text_run_count,
             "hidden_paragraph_mark_count": self.hidden_paragraph_mark_count,
+            "alternative_format_import_anchor_count": (
+                self.alternative_format_import_anchor_count
+            ),
             "field_code_count": self.field_code_count,
             "content_control_count": self.content_control_count,
             "comment_anchor_count": self.comment_anchor_count,
@@ -119,6 +157,8 @@ class DocumentSnapshot:
     stories: tuple[StorySnapshot, ...]
     relationships: RelationshipInventory
     styles: StyleInventory
+    embedded_objects: EmbeddedObjectInventory
+    alternative_format_imports: AlternativeFormatImportInventory
     track_revisions_enabled: bool
     comment_count: int
     custom_xml_part_count: int
@@ -150,6 +190,12 @@ class DocumentSnapshot:
         return sum(story.hidden_paragraph_mark_count for story in self.stories)
 
     @property
+    def alternative_format_import_anchor_count(self) -> int:
+        return sum(
+            story.alternative_format_import_anchor_count for story in self.stories
+        )
+
+    @property
     def field_code_count(self) -> int:
         return sum(story.field_code_count for story in self.stories)
 
@@ -175,6 +221,9 @@ class DocumentSnapshot:
             "text_run_count": sum(story.text_run_count for story in self.stories),
             "hidden_text_run_count": self.hidden_text_run_count,
             "hidden_paragraph_mark_count": self.hidden_paragraph_mark_count,
+            "alternative_format_import_anchor_count": (
+                self.alternative_format_import_anchor_count
+            ),
             "field_code_count": self.field_code_count,
             "content_control_count": self.content_control_count,
             "comment_anchor_count": sum(
@@ -185,6 +234,8 @@ class DocumentSnapshot:
             "revisions": self.revisions.public_dict(),
             "relationships": self.relationships.public_dict(),
             "styles": self.styles.public_dict(),
+            "embedded_objects": self.embedded_objects.public_dict(),
+            "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "custom_xml_part_count": self.custom_xml_part_count,
             "macro_present": self.macro_present,
             "unclassified_part_count": self.unclassified_part_count,

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.2 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.3 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -9,17 +9,20 @@ following properties:
 - revision markup, comments, direct `w:vanish` runs, direct hidden paragraph
   marks (including `w:specVanish`), stored style/default hidden-text
   declarations, fields, content controls, Track Changes, external
-  relationships, custom XML, macros, and unclassified payload changes are
-  detected by the intended inventories;
+  relationships, custom XML, macros, embedded OLE/package/control payloads,
+  ActiveX control chains, alternative-format imports, and unclassified payload
+  changes are detected by the intended inventories;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
-  underlying target remain quiet;
+  underlying target and embedded/import payload remain quiet;
 - generated JSON, Markdown, and SARIF do not reproduce unique markers placed
   in visible/hidden text, reviewer metadata, comments, URLs, field instructions,
-  custom XML, macros, or opaque package parts;
+  custom XML, macros, embedded/control payloads, alternative-format imports, or
+  opaque package parts;
 - policy failures return a nonzero CI status and SARIF uses no source location;
-- DTD/entity markup and unsafe ZIP member names are rejected before reporting.
+- DTD/entity markup, unsafe ZIP member names, and `w:altChunk` markup without a
+  matching internal import relationship are rejected before reporting.
 
 The release check is:
 
@@ -41,7 +44,8 @@ is not a DocFence dependency and is not required at runtime.
 ## What this does not validate
 
 The suite does not claim layout equivalence, Word calculation behavior,
-style-inherited effective hiddenness, macro safety, malware detection, or
+style-inherited effective hiddenness, macro safety, embedded-payload safety,
+malware detection, alternative-format rendering/import behavior, or
 compatibility with every vendor extension. The style/default layer is a stored
-declaration inventory, not a renderer. Those limits are explicit in the 0.2
+declaration inventory, not a renderer. Those limits are explicit in the 0.3
 contract; see the [threat model](threat-model.md).
