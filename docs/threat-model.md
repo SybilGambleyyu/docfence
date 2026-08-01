@@ -13,7 +13,8 @@ alternative-format-import bytes, document-property names, and document-property
 values, mail-merge configuration, source/header targets, connection strings,
 queries, field mappings, recipient data, data-binding XPath expressions,
 namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
-values, external template/subdocument/frame-source targets, and frame names
+values, external-source field paths, connections, queries, application/item
+references, external template/subdocument/frame-source targets, and frame names
 must not become DocFence report content. The report may be stored in CI
 artifacts, pasted into an issue, or uploaded to a SARIF consumer, so it is
 intentionally restricted to counts, fixed categories, booleans, and generic
@@ -93,6 +94,22 @@ properties root; malformed recognized state fails closed. A binding whose
 storage ID cannot be associated with a discovered part remains a counted review
 signal rather than causing DocFence to guess a target.
 
+External-source Word field instructions receive the same private-digest
+treatment. DocFence classifies only the initial keyword of complete simple
+`w:fldSimple` instructions and complete complex `w:fldChar`/`w:instrText`
+sequences for the documented `DATABASE`, legacy `DATA`, `DDE`, `DDEAUTO`,
+`INCLUDE`/`INCLUDETEXT`, `INCLUDEPICTURE`/`IMPORT`, `LINK`, and `RD` families.
+The instruction—including a potential file path, connection string, query, DDE
+application or item, OLE class, or bookmark—is reduced to a private hash before
+reporting. Public output exposes only category counts. It never parses a source
+argument, evaluates a field, starts an external application, opens a file,
+connects to a data source, or retrieves content. Complex-field instruction runs
+are concatenated before hashing, so run fragmentation alone remains quiet. A
+tracked `w:delInstrText` sequence is assembled as a separate deleted variant
+rather than being combined with the current `w:instrText` sequence. Instruction
+text outside a complete field or an unclosed complex field is not classified as
+an external source.
+
 External Word document dependencies receive the same private-digest treatment.
 DocFence recognizes attached-template relationships from discovered Document
 Settings parts, subdocument relationships from the main document, and frame
@@ -137,7 +154,11 @@ the recipient records or connection details a package may retain. Content-contro
 data-binding counts are stored-state evidence, not proof that a given XPath
 selects a node, that Word will update the visible control, or that an unscoped
 mapping uses any particular custom XML part. DocFence does not evaluate XPath,
-resolve XML namespaces, or calculate rich-text mappings. Attached-template,
+resolve XML namespaces, or calculate rich-text mappings. External-source field
+counts are likewise stored-state evidence, not proof that Word will update a
+field, access a source, use a particular connection, or accept a field's
+argument grammar. The boundary classifies only its named field families, not
+arbitrary field expressions or every field that can display a URL. Attached-template,
 subdocument, and frameset counts are likewise stored-state evidence, not proof
 that Word will retrieve a target, that an external document exists, or that any
 external content is safe. DocFence does not validate a target's scheme, follow

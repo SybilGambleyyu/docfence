@@ -450,6 +450,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.external_fields.signature != after.external_fields.signature:
+        changes.append(
+            Change(
+                kind="external_field_inventory_changed",
+                message="Stored external-source Word field inventory changed.",
+                details={
+                    "before": before.external_fields.public_dict(),
+                    "after": after.external_fields.public_dict(),
+                },
+            )
+        )
     if (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature

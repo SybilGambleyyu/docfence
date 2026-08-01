@@ -54,6 +54,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(_document_property_section(document.get("document_properties", {})))
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
+    lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
         _external_document_dependency_section(
             document.get("external_document_dependencies", {})
@@ -75,6 +76,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_document_property_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
+    lines.extend(_external_field_comparison(before, after))
     lines.extend(_external_document_dependency_comparison(before, after))
     lines.extend(["## Changes", ""])
     if not report.changes:
@@ -248,6 +250,10 @@ def _data_binding_section(value: object) -> list[str]:
     return _inventory_section("Content-control data-binding inventory", value)
 
 
+def _external_field_section(value: object) -> list[str]:
+    return _inventory_section("External-source Word field inventory", value)
+
+
 def _external_document_dependency_section(value: object) -> list[str]:
     return _inventory_section("External Word document dependency inventory", value)
 
@@ -306,6 +312,16 @@ def _data_binding_comparison(
         "Content-control data-binding inventory",
         before.get("data_bindings", {}),
         after.get("data_bindings", {}),
+    )
+
+
+def _external_field_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "External-source Word field inventory",
+        before.get("external_fields", {}),
+        after.get("external_fields", {}),
     )
 
 

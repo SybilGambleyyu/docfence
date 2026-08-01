@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.7 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.8 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -17,6 +17,16 @@ following properties:
   attached templates, master-document subdocuments, frameset sources
   (including Strict relationships and glossary-linked settings), and
   unclassified payload changes are detected by the intended inventories;
+- `DATABASE`, legacy `DATA`, `DDE`, `DDEAUTO`, `INCLUDE`/`INCLUDETEXT`,
+  `INCLUDEPICTURE`/`IMPORT`, `LINK`, and `RD` field instructions are
+  separately categorized from simple and complex field encodings, including
+  split, nested, resultless, Strict, and header-story cases; ordinary
+  instruction text, post-separator text, and unclosed complex fields do not
+  produce external-source field counts;
+- tracked field-code replacements retain separately scanned current
+  `w:instrText` and deleted `w:delInstrText` variants, including a changed
+  argument with shared field-code text; loose deleted instruction text does not
+  produce a count;
 - direct false-valued hidden declarations and `w:specVanish` outside paragraph
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
@@ -27,6 +37,7 @@ following properties:
   in visible/hidden text, reviewer metadata, comments, URLs, field instructions,
   custom XML, document-property names or values, mail-merge connection/query/
   source/recipient values, data-binding XPath/prefix/storage/payload values,
+  external-source field paths, connections, queries, application/item names,
   external template/subdocument/frame targets and frame names, macros,
   embedded/control payloads, alternative-format imports, or opaque package
   parts;
@@ -60,6 +71,13 @@ template](https://github.com/obster-y/XJTU-thesis-Office/tree/master/%E6%A8%A1%E
 which contains a real external attached-template relationship. Those tools and
 fixtures are not DocFence dependencies and are not required at runtime.
 
+For the field encoding boundary, the release check also profiled Apache POI's
+independent [`FieldCodes.docx`](https://github.com/apache/poi/blob/trunk/test-data/document/FieldCodes.docx)
+and [`FldSimple.docx`](https://github.com/apache/poi/blob/trunk/test-data/document/FldSimple.docx)
+fixtures. They exercise real complex and simple Word field encodings without
+creating a false external-source-field count. They are compatibility smoke
+tests, not runtime dependencies.
+
 ## What this does not validate
 
 The suite does not claim layout equivalence, Word calculation behavior,
@@ -68,6 +86,9 @@ malware detection, alternative-format rendering/import behavior, or
 compatibility with every vendor extension. It also does not decide whether a
 document-property value is personal, confidential, intended, or safe to share,
 or whether stored mail-merge state will run, retrieve data, or select a
-recipient. The style/default layer is a stored declaration inventory, not a
-renderer. Those limits are explicit in the 0.7 contract; see the
+recipient. It does not assert that a recognized external-source field will
+update, reach a target, use a particular argument as a source, or be accepted
+by Word; it records the bounded stored field-family evidence only. The
+style/default layer is a stored declaration inventory, not a renderer. Those
+limits are explicit in the 0.8 contract; see the
 [threat model](threat-model.md).

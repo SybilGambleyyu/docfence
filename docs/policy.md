@@ -48,6 +48,8 @@ starter policy.
 | `no_data_binding_changes` | `DFP024` | Content-control data-binding inventory differs | Comparison |
 | `require_no_external_document_dependencies` | `DFP025` | Candidate has stored attached-template, subdocument, or frameset-source dependency state | Candidate |
 | `no_external_document_dependency_changes` | `DFP026` | External Word document dependency inventory differs | Comparison |
+| `require_no_external_fields` | `DFP027` | Candidate has a recognized external-source Word field instruction | Candidate |
+| `no_external_field_changes` | `DFP028` | External-source Word field inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -75,8 +77,9 @@ mail-merge configuration and recipient state. `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
 controlled template that deliberately retains an attached template, master
-subdocument, or frameset source. `word/styles.xml` is handled by the dedicated
-style inventory instead.
+subdocument, or frameset source. `no_external_field_changes` does the same for
+a controlled template that deliberately retains known external-source Word
+fields. `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
 
@@ -193,6 +196,41 @@ custom XML data/properties payloads. It therefore catches a mutation to an
 identified bound data part without exposing it. It does not make an unscoped
 XPath binding identify a target; use `no_custom_xml_changes` as well when every
 custom XML mutation must block a handoff.
+
+## External-source field scope
+
+`require_no_external_fields` and `no_external_field_changes` cover a small,
+explicit field-family boundary rather than every possible Word field. The
+inventory recognizes `DATABASE`; legacy `DATA`; `DDE` and `DDEAUTO`;
+`INCLUDE` and `INCLUDETEXT`; `INCLUDEPICTURE` and legacy `IMPORT`; `LINK`; and
+`RD`. These are the families whose instructions can name a data source, file,
+linked object, DDE source, or referenced document. A field is counted from
+either a simple `w:fldSimple` `w:instr` attribute or a complete complex
+begin-to-end field whose pre-separator `w:instrText` runs concatenate to one of
+those keywords. Complex fields can nest and need not store a result separator.
+When revision markup retains a deleted field code in `w:delInstrText`, its
+deleted instruction is assembled separately from the current `w:instrText`
+instruction. `w:moveFrom`/`w:moveTo` field-code ranges receive the same
+deleted/current treatment. Consequently, a field-code replacement can
+contribute both its current and its deleted stored instruction to this
+inventory.
+
+An `instrText` or `delInstrText` outside a complete complex field's instruction
+portion remains ordinary text for this inventory. An unclosed complex field is
+not counted. DocFence does not parse a field's arguments after classifying its
+initial keyword, so it does not infer a path, connection, query, application,
+item, or whether a source actually exists. It never evaluates a field, updates
+a result, opens an object, starts a DDE conversation, follows a source, or runs
+a query.
+
+The candidate-state rule fails when any of the eight aggregate category counts
+is nonzero. The comparison rule privately hashes each complete matching
+instruction with its story context and category. Thus a changed source remains
+visible to the policy without entering a report, while splitting the same
+complex instruction across a different number of `instrText` runs remains
+quiet. These rules intentionally do not claim to inventory arbitrary field
+expressions or every field that might display a URL; generic external
+relationships remain a separate inventory.
 
 ## External Word document dependency scope
 

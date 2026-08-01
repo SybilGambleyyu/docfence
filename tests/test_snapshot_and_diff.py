@@ -968,6 +968,208 @@ rules:
         assert marker not in rendered
 
 
+def test_external_field_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    target_changed = tmp_path / "target-changed.docx"
+    split_complex = tmp_path / "split-complex.docx"
+    strict = tmp_path / "strict.docx"
+    header = tmp_path / "header.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_external_field_document(before, include_external_fields=False)
+    _write_external_field_document(after)
+    _write_external_field_document(
+        target_changed,
+        target_marker="EXTERNAL_FIELD_TARGET_CHANGED_DO_NOT_LEAK",
+    )
+    _write_external_field_document(split_complex, split_complex_instructions=True)
+    _write_external_field_document(strict, strict_syntax=True)
+    _write_external_field_document(
+        header,
+        include_external_fields=False,
+        include_header_field=True,
+    )
+
+    expected_inventory = {
+        "database_field_count": 1,
+        "legacy_data_field_count": 1,
+        "dde_field_count": 1,
+        "dde_auto_field_count": 1,
+        "include_text_field_count": 2,
+        "include_picture_field_count": 2,
+        "link_field_count": 1,
+        "referenced_document_field_count": 1,
+    }
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["external_fields"] == expected_inventory
+    assert load_snapshot(before).public_dict()["external_fields"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert load_snapshot(strict).public_dict()["external_fields"] == expected_inventory
+    assert (
+        load_snapshot(split_complex).external_fields.signature
+        == snapshot.external_fields.signature
+    )
+    assert load_snapshot(header).public_dict()["external_fields"] == {
+        **{key: 0 for key in expected_inventory},
+        "link_field_count": 1,
+    }
+
+    report = diff_documents(before, after)
+    assert "external_field_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "external_field_inventory_changed" in {
+        change.kind for change in diff_documents(after, target_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_external_fields: true
+  no_external_field_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP027",
+        "DFP028",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, split_complex), policy
+        ).findings
+    } == {"DFP027"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_EXTERNAL_FIELD_INVENTORY_CHANGED",
+        "DFP027",
+        "DFP028",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "EXTERNAL_FIELD_TARGET_DO_NOT_LEAK",
+        "EXTERNAL_FIELD_TARGET_CHANGED_DO_NOT_LEAK",
+        "LOOSE_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "POST_SEPARATOR_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "INCOMPLETE_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "HEADER_EXTERNAL_FIELD_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_external_field_inventory_handles_nested_and_resultless_complex_fields(
+    tmp_path,
+) -> None:
+    document = tmp_path / "nested.docx"
+    _write_raw_package(
+        document,
+        f'''<w:document xmlns:w="{W}"><w:body><w:p>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> IF 1 = 1 </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> INCLUDETEXT "NESTED_</w:instrText></w:r>
+  <w:r><w:instrText xml:space="preserve">EXTERNAL_FIELD_</w:instrText></w:r>
+  <w:r><w:instrText xml:space="preserve">DO_NOT_LEAK.docx" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> "yes" "no" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> RD "RESULTLESS_</w:instrText></w:r>
+  <w:r><w:instrText xml:space="preserve">EXTERNAL_FIELD_</w:instrText></w:r>
+  <w:r><w:instrText xml:space="preserve">DO_NOT_LEAK.docx" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p><w:sectPr/></w:body></w:document>''',
+    )
+
+    assert load_snapshot(document).public_dict()["external_fields"] == {
+        "database_field_count": 0,
+        "legacy_data_field_count": 0,
+        "dde_field_count": 0,
+        "dde_auto_field_count": 0,
+        "include_text_field_count": 1,
+        "include_picture_field_count": 0,
+        "link_field_count": 0,
+        "referenced_document_field_count": 1,
+    }
+
+
+def test_external_field_inventory_preserves_revision_variants_privately(
+    tmp_path,
+) -> None:
+    document = tmp_path / "revision-field.docx"
+    _write_raw_package(
+        document,
+        f'''<w:document xmlns:w="{W}"><w:body><w:p>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> INCLUDETEXT "</w:instrText></w:r>
+  <w:del w:id="1"><w:r>
+    <w:delInstrText>DELETED_EXTERNAL_FIELD_DO_NOT_LEAK</w:delInstrText>
+  </w:r></w:del>
+  <w:ins w:id="2"><w:r>
+    <w:instrText>INSERTED_EXTERNAL_FIELD_DO_NOT_LEAK</w:instrText>
+  </w:r></w:ins>
+  <w:r><w:instrText>.docx" </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:del w:id="3"><w:r>
+    <w:delInstrText>RD "RETIRED_</w:delInstrText>
+    <w:delInstrText>EXTERNAL_FIELD_DO_NOT_LEAK.docx"</w:delInstrText>
+  </w:r></w:del>
+  <w:ins w:id="4"><w:r><w:instrText>DATE</w:instrText></w:r></w:ins>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:moveFrom w:id="6"><w:r>
+    <w:delInstrText>LINK "MOVED_FROM_EXTERNAL_FIELD_DO_NOT_LEAK"</w:delInstrText>
+  </w:r></w:moveFrom>
+  <w:moveTo w:id="7"><w:r>
+    <w:instrText>LINK "MOVED_TO_EXTERNAL_FIELD_DO_NOT_LEAK"</w:instrText>
+  </w:r></w:moveTo>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  <w:del w:id="5"><w:r>
+    <w:delInstrText>INCLUDETEXT "LOOSE_DELETED_</w:delInstrText>
+    <w:delInstrText>EXTERNAL_FIELD_DO_NOT_LEAK.docx"</w:delInstrText>
+  </w:r></w:del>
+</w:p><w:sectPr/></w:body></w:document>''',
+    )
+
+    snapshot = load_snapshot(document)
+    assert snapshot.public_dict()["external_fields"] == {
+        "database_field_count": 0,
+        "legacy_data_field_count": 0,
+        "dde_field_count": 0,
+        "dde_auto_field_count": 0,
+        "include_text_field_count": 2,
+        "include_picture_field_count": 0,
+        "link_field_count": 2,
+        "referenced_document_field_count": 1,
+    }
+    rendered = render_profile(snapshot, "json") + render_profile(snapshot, "markdown")
+    for marker in (
+        "DELETED_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "INSERTED_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "RETIRED_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "MOVED_FROM_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "MOVED_TO_EXTERNAL_FIELD_DO_NOT_LEAK",
+        "LOOSE_DELETED_EXTERNAL_FIELD_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_external_document_dependency_discovers_glossary_settings(tmp_path) -> None:
     before = tmp_path / "glossary-before.docx"
     renumbered = tmp_path / "glossary-renumbered.docx"
@@ -1256,6 +1458,111 @@ def _write_raw_package(path, document_xml: str, extra_name: str | None = None) -
         archive.writestr("word/document.xml", document_xml)
         if extra_name is not None:
             archive.writestr(extra_name, b"x")
+
+
+def _write_external_field_document(
+    path,
+    *,
+    target_marker: str = "EXTERNAL_FIELD_TARGET_DO_NOT_LEAK",
+    include_external_fields: bool = True,
+    split_complex_instructions: bool = False,
+    strict_syntax: bool = False,
+    include_header_field: bool = False,
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+
+    def simple_field(instruction: str) -> str:
+        escaped_instruction = (
+            instruction.replace("&", "&amp;")
+            .replace('"', "&quot;")
+            .replace("<", "&lt;")
+        )
+        return (
+            f'<w:fldSimple w:instr="{escaped_instruction}"><w:r><w:t>'
+            "FIELD_RESULT_DO_NOT_LEAK</w:t></w:r></w:fldSimple>"
+        )
+
+    def complex_field(instruction: str) -> str:
+        chunks = [instruction]
+        if split_complex_instructions:
+            split_at = len(instruction) // 2
+            chunks = [instruction[:split_at], instruction[split_at:]]
+        instruction_markup = "".join(
+            f'<w:r><w:instrText xml:space="preserve">{chunk}</w:instrText></w:r>'
+            for chunk in chunks
+        )
+        return (
+            '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+            f"{instruction_markup}"
+            '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+            "<w:r><w:t>FIELD_RESULT_DO_NOT_LEAK</w:t></w:r>"
+            '<w:r><w:fldChar w:fldCharType="end"/></w:r>'
+        )
+
+    external_fields = ""
+    if include_external_fields:
+        external_fields = "".join(
+            (
+                simple_field(f'DATABASE "{target_marker}"'),
+                simple_field(f'DATA "{target_marker}"'),
+                complex_field(f'DDE Excel "{target_marker}" "Sheet1!R1C1"'),
+                simple_field(f'DDEAUTO Excel "{target_marker}" "Sheet1!R1C1"'),
+                complex_field(f'INCLUDE "{target_marker}.docx"'),
+                simple_field(f'INCLUDETEXT "{target_marker}.docx"'),
+                complex_field(f'IMPORT "{target_marker}.png"'),
+                simple_field(f'INCLUDEPICTURE "{target_marker}.png"'),
+                complex_field(f'LINK Excel.Chart.12 "{target_marker}"'),
+                simple_field(f'RD "{target_marker}.docx"'),
+            )
+        )
+
+    ignored_instruction_markup = (
+        "<w:r><w:instrText>"
+        'INCLUDETEXT "LOOSE_EXTERNAL_FIELD_DO_NOT_LEAK.docx"'
+        "</w:instrText></w:r>"
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+        "<w:r><w:instrText>DATE</w:instrText></w:r>"
+        '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
+        "<w:r><w:instrText>"
+        'INCLUDETEXT "POST_SEPARATOR_EXTERNAL_FIELD_DO_NOT_LEAK.docx"'
+        "</w:instrText></w:r>"
+        '<w:r><w:fldChar w:fldCharType="end"/></w:r>'
+        '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
+        "<w:r><w:instrText>"
+        'INCLUDETEXT "INCOMPLETE_EXTERNAL_FIELD_DO_NOT_LEAK.docx"'
+        "</w:instrText></w:r>"
+    )
+    header_override = (
+        '<Override PartName="/word/header1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.'
+        'wordprocessingml.header+xml"/>'
+        if include_header_field
+        else ""
+    )
+    header_field = simple_field(
+        'LINK Excel.Chart.12 "HEADER_EXTERNAL_FIELD_DO_NOT_LEAK"'
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            f"{header_override}</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body><w:p>'
+            "<w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r>"
+            f"{external_fields}{ignored_instruction_markup}"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_header_field:
+        entries["word/header1.xml"] = (
+            f'<w:hdr xmlns:w="{word_namespace}"><w:p>{header_field}</w:p></w:hdr>'
+        ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
 
 
 def _styles_with_hidden_text_declarations() -> str:

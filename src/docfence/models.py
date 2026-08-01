@@ -174,6 +174,33 @@ class DataBindingInventory:
 
 
 @dataclass(frozen=True)
+class ExternalFieldInventory:
+    """Stored Word field instructions that can source outside material."""
+
+    database_field_count: int
+    legacy_data_field_count: int
+    dde_field_count: int
+    dde_auto_field_count: int
+    include_text_field_count: int
+    include_picture_field_count: int
+    link_field_count: int
+    referenced_document_field_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "database_field_count": self.database_field_count,
+            "legacy_data_field_count": self.legacy_data_field_count,
+            "dde_field_count": self.dde_field_count,
+            "dde_auto_field_count": self.dde_auto_field_count,
+            "include_text_field_count": self.include_text_field_count,
+            "include_picture_field_count": self.include_picture_field_count,
+            "link_field_count": self.link_field_count,
+            "referenced_document_field_count": self.referenced_document_field_count,
+        }
+
+
+@dataclass(frozen=True)
 class ExternalDocumentDependencyInventory:
     """Stored references to external Word document packages."""
 
@@ -266,6 +293,7 @@ class DocumentSnapshot:
     document_properties: DocumentPropertyInventory
     mail_merge: MailMergeInventory
     data_bindings: DataBindingInventory
+    external_fields: ExternalFieldInventory
     external_document_dependencies: ExternalDocumentDependencyInventory
     track_revisions_enabled: bool
     comment_count: int
@@ -347,6 +375,7 @@ class DocumentSnapshot:
             "document_properties": self.document_properties.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
+            "external_fields": self.external_fields.public_dict(),
             "external_document_dependencies": (
                 self.external_document_dependencies.public_dict()
             ),

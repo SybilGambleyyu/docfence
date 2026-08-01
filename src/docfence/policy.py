@@ -38,6 +38,8 @@ _RULES: Final = {
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
     "no_external_document_dependency_changes": "DFP026",
+    "require_no_external_fields": "DFP027",
+    "no_external_field_changes": "DFP028",
 }
 
 
@@ -251,6 +253,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_external_field_changes") and (
+        before.external_fields.signature != after.external_fields.signature
+    ):
+        findings.append(
+            _finding(
+                "no_external_field_changes",
+                "External-source Word field inventory changed.",
+                {
+                    "before": before.external_fields.public_dict(),
+                    "after": after.external_fields.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_external_document_dependency_changes") and (
         before.external_document_dependencies.signature
         != after.external_document_dependencies.signature
@@ -379,6 +394,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_data_bindings",
                 "Candidate contains stored content-control data bindings.",
                 after.data_bindings.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_external_fields") and any(
+        after.external_fields.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_external_fields",
+                "Candidate contains stored external-source Word field instructions.",
+                after.external_fields.public_dict(),
             )
         )
     if policy.enabled("require_no_external_document_dependencies") and any(

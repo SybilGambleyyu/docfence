@@ -27,6 +27,7 @@ from docfence.models import (
     DocumentSnapshot,
     EmbeddedObjectInventory,
     ExternalDocumentDependencyInventory,
+    ExternalFieldInventory,
     MailMergeInventory,
     RelationshipInventory,
     RevisionInventory,
@@ -247,6 +248,23 @@ _WEB_SETTINGS_RELATIONSHIP_TYPES: Final = frozenset(
 _SETTINGS_SOURCE_PARTS: Final = frozenset(
     {"word/document.xml", "word/glossary/document.xml"}
 )
+_EXTERNAL_FIELD_CATEGORY_BY_KEYWORD: Final = {
+    "database": "database",
+    "data": "legacy_data",
+    "dde": "dde",
+    "ddeauto": "dde_auto",
+    "include": "include_text",
+    "includetext": "include_text",
+    "includepicture": "include_picture",
+    "import": "include_picture",
+    "link": "link",
+    "rd": "referenced_document",
+}
+_FIELD_INSTRUCTION_VARIANTS: Final = ("current", "deleted")
+_CURRENT_FIELD_INSTRUCTION_VARIANTS: Final = frozenset({"current"})
+_DELETED_FIELD_INSTRUCTION_VARIANTS: Final = frozenset({"deleted"})
+_CURRENT_FIELD_REVISION_TAGS: Final = frozenset({"ins", "moveTo"})
+_DELETED_FIELD_REVISION_TAGS: Final = frozenset({"del", "moveFrom"})
 
 
 @dataclass(frozen=True)
@@ -266,6 +284,24 @@ class _DataBindingReference:
     story_part: str
     store_item_id: str | None
     signature: str
+
+
+@dataclass(frozen=True)
+class _ExternalFieldReference:
+    """One private external-source Word field instruction in a story."""
+
+    story_part: str
+    category: str
+    instruction_signature: str
+
+
+@dataclass
+class _ComplexFieldState:
+    """Transient state for one complex field while its story is traversed."""
+
+    simple_field_depth: int
+    instruction_chunks: dict[str, list[str]]
+    accepts_instructions: bool = True
 
 
 def load_snapshot(
@@ -338,7 +374,12 @@ def _load_package(
                 archive, members, relationship_maps, limits
             )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
-            stories, comment_count, data_binding_references = _story_snapshots(
+            (
+                stories,
+                comment_count,
+                data_binding_references,
+                external_field_references,
+            ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
             )
             data_bindings = _data_binding_inventory(
@@ -348,6 +389,7 @@ def _load_package(
                 relationship_maps,
                 limits,
             )
+            external_fields = _external_field_inventory(external_field_references)
             (
                 external_document_dependencies,
                 external_document_dependency_parts,
@@ -401,6 +443,7 @@ def _load_package(
         document_properties=document_properties,
         mail_merge=mail_merge,
         data_bindings=data_bindings,
+        external_fields=external_fields,
         external_document_dependencies=external_document_dependencies,
         track_revisions_enabled=settings_enabled,
         comment_count=comment_count,
@@ -1293,6 +1336,50 @@ def _data_binding_inventory(
     )
 
 
+def _external_field_inventory(
+    references: tuple[_ExternalFieldReference, ...],
+) -> ExternalFieldInventory:
+    """Inventory field families that can consult material outside a package.
+
+    The field instruction, including a potential path, connection, query, or
+    object name, is hashed before it leaves the story traversal. The public
+    model carries category counts only.
+    """
+
+    counts = {
+        "database": 0,
+        "legacy_data": 0,
+        "dde": 0,
+        "dde_auto": 0,
+        "include_text": 0,
+        "include_picture": 0,
+        "link": 0,
+        "referenced_document": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        counts[reference.category] += 1
+        records.append(
+            (
+                "external_field_instruction",
+                reference.story_part,
+                reference.category,
+                reference.instruction_signature,
+            )
+        )
+    return ExternalFieldInventory(
+        database_field_count=counts["database"],
+        legacy_data_field_count=counts["legacy_data"],
+        dde_field_count=counts["dde"],
+        dde_auto_field_count=counts["dde_auto"],
+        include_text_field_count=counts["include_text"],
+        include_picture_field_count=counts["include_picture"],
+        link_field_count=counts["link"],
+        referenced_document_field_count=counts["referenced_document"],
+        signature=_digest_records(records),
+    )
+
+
 def _custom_xml_store_items(
     archive: zipfile.ZipFile,
     members: dict[str, zipfile.ZipInfo],
@@ -1465,22 +1552,36 @@ def _story_snapshots(
     content_types: dict[str, str],
     relationship_maps: dict[str, dict[str, _Relationship]],
     limits: PackageLimits,
-) -> tuple[tuple[StorySnapshot, ...], int, tuple[_DataBindingReference, ...]]:
+) -> tuple[
+    tuple[StorySnapshot, ...],
+    int,
+    tuple[_DataBindingReference, ...],
+    tuple[_ExternalFieldReference, ...],
+]:
     stories: list[StorySnapshot] = []
     data_binding_references: list[_DataBindingReference] = []
+    external_field_references: list[_ExternalFieldReference] = []
     comment_count = 0
     for part_key, kind in _discover_story_parts(members, content_types):
         root = _read_xml(archive, members[part_key], limits)
-        story, story_data_binding_references = _snapshot_story(
-            root, part_key, kind, relationship_maps.get(part_key, {})
-        )
+        (
+            story,
+            story_data_binding_references,
+            story_external_field_references,
+        ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
         data_binding_references.extend(story_data_binding_references)
+        external_field_references.extend(story_external_field_references)
         if kind == "comment":
             comment_count += _count_word_elements(root, "comment")
     if not any(story.kind == "body" for story in stories):
         raise DocumentFormatError("package does not contain a document story")
-    return tuple(stories), comment_count, tuple(data_binding_references)
+    return (
+        tuple(stories),
+        comment_count,
+        tuple(data_binding_references),
+        tuple(external_field_references),
+    )
 
 
 def _discover_story_parts(
@@ -1541,7 +1642,11 @@ def _snapshot_story(
     part_key: str,
     kind: str,
     relationships: dict[str, _Relationship],
-) -> tuple[StorySnapshot, tuple[_DataBindingReference, ...]]:
+) -> tuple[
+    StorySnapshot,
+    tuple[_DataBindingReference, ...],
+    tuple[_ExternalFieldReference, ...],
+]:
     if not _is_word_element(root, _STORY_ROOT_NAMES[kind]):
         raise DocumentFormatError("document story is invalid")
     context = _story_context(root, kind)
@@ -1633,6 +1738,7 @@ def _snapshot_story(
             revisions=revisions,
         ),
         _data_binding_references(root, part_key, relationships),
+        _external_field_references(root, part_key),
     )
 
 
@@ -1730,6 +1836,136 @@ def _data_binding_references(
     return tuple(references)
 
 
+def _external_field_references(
+    root: ET.Element, story_part: str
+) -> tuple[_ExternalFieldReference, ...]:
+    """Collect external-source field instructions in both OOXML encodings.
+
+    A ``w:fldSimple`` stores its instruction directly in ``w:instr``. Complex
+    fields use begin/separate/end characters and may split their instruction
+    across multiple ``w:instrText`` runs. Revision markup can preserve both a
+    current instruction and a deleted instruction in one complex field, so the
+    two variants are assembled independently. Instruction text outside a
+    complete complex field's instruction portion is ordinary text under
+    ISO/IEC 29500, so it is intentionally ignored here.
+    """
+
+    references: list[_ExternalFieldReference] = []
+    complex_fields: list[_ComplexFieldState] = []
+
+    def add_instruction(instruction: str | None) -> None:
+        if instruction is None:
+            return
+        category = _external_field_category(instruction)
+        if category is None:
+            return
+        references.append(
+            _ExternalFieldReference(
+                story_part=story_part,
+                category=category,
+                instruction_signature=_digest_bytes(instruction.encode("utf-8")),
+            )
+        )
+
+    def add_complex_field_instructions(field: _ComplexFieldState) -> None:
+        seen_instructions: set[str] = set()
+        for variant in _FIELD_INSTRUCTION_VARIANTS:
+            instruction = "".join(field.instruction_chunks[variant])
+            if not instruction or instruction in seen_instructions:
+                continue
+            seen_instructions.add(instruction)
+            add_instruction(instruction)
+
+    def append_instruction_text(
+        field: _ComplexFieldState, text: str, variants: frozenset[str]
+    ) -> None:
+        for variant in variants:
+            field.instruction_chunks[variant].append(text)
+
+    def visit(
+        element: ET.Element,
+        simple_field_depth: int,
+        instruction_variants: frozenset[str],
+        in_deleted_revision: bool,
+    ) -> None:
+        namespace, local_name = _qualified_name(element.tag)
+        child_simple_field_depth = simple_field_depth
+        child_instruction_variants = instruction_variants
+        child_in_deleted_revision = in_deleted_revision
+        if namespace in _WORD_NAMESPACES:
+            if local_name in _CURRENT_FIELD_REVISION_TAGS:
+                child_instruction_variants = (
+                    instruction_variants & _CURRENT_FIELD_INSTRUCTION_VARIANTS
+                )
+                child_in_deleted_revision = False
+            elif local_name in _DELETED_FIELD_REVISION_TAGS:
+                child_instruction_variants = (
+                    instruction_variants & _DELETED_FIELD_INSTRUCTION_VARIANTS
+                )
+                child_in_deleted_revision = True
+
+            if local_name == "fldSimple":
+                if instruction_variants:
+                    add_instruction(_word_attribute_value(element, "instr"))
+                child_simple_field_depth += 1
+            elif local_name == "fldChar":
+                field_char_type = _field_char_type(element)
+                if field_char_type == "begin":
+                    complex_fields.append(
+                        _ComplexFieldState(
+                            simple_field_depth=simple_field_depth,
+                            instruction_chunks={
+                                variant: [] for variant in _FIELD_INSTRUCTION_VARIANTS
+                            },
+                        )
+                    )
+                elif field_char_type == "separate" and complex_fields:
+                    complex_fields[-1].accepts_instructions = False
+                elif field_char_type == "end" and complex_fields:
+                    field = complex_fields.pop()
+                    add_complex_field_instructions(field)
+            elif (
+                local_name == "instrText"
+                and complex_fields
+                and complex_fields[-1].accepts_instructions
+                and complex_fields[-1].simple_field_depth == simple_field_depth
+                and not in_deleted_revision
+            ):
+                append_instruction_text(
+                    complex_fields[-1], element.text or "", instruction_variants
+                )
+            elif (
+                local_name == "delInstrText"
+                and complex_fields
+                and complex_fields[-1].accepts_instructions
+                and complex_fields[-1].simple_field_depth == simple_field_depth
+                and in_deleted_revision
+            ):
+                append_instruction_text(
+                    complex_fields[-1], element.text or "", instruction_variants
+                )
+
+        for child in element:
+            visit(
+                child,
+                child_simple_field_depth,
+                child_instruction_variants,
+                child_in_deleted_revision,
+            )
+
+    visit(root, 0, frozenset(_FIELD_INSTRUCTION_VARIANTS), False)
+    return tuple(references)
+
+
+def _external_field_category(instruction: str) -> str | None:
+    """Return the review category for a complete Word field instruction."""
+
+    tokens = instruction.lstrip().split(maxsplit=1)
+    if not tokens:
+        return None
+    return _EXTERNAL_FIELD_CATEGORY_BY_KEYWORD.get(tokens[0].casefold())
+
+
 def _word_attribute_value(element: ET.Element, local_name: str) -> str | None:
     for attribute, value in element.attrib.items():
         namespace, attribute_local_name = _qualified_name(attribute)
@@ -1761,10 +1997,14 @@ def _relationship_id_value(element: ET.Element) -> str | None:
 
 
 def _field_char_is_begin(element: ET.Element) -> bool:
+    return _field_char_type(element) == "begin"
+
+
+def _field_char_type(element: ET.Element) -> str | None:
     for attribute, value in element.attrib.items():
         if _local_name(attribute) == "fldCharType":
-            return value.casefold() == "begin"
-    return False
+            return value.strip().casefold()
+    return None
 
 
 def _is_enabled(element: ET.Element) -> bool:

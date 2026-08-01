@@ -4,10 +4,11 @@ DocFence is a local-first change-assurance CLI for Word `.docx` and `.docm`
 files. It turns an opaque document diff into a reviewable, privacy-safe account
 of stored content-block changes and the review surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
-style/default declarations, field codes, external relationships, custom XML,
-macros, core/extended/custom document properties, mail-merge configuration and
-recipient-data state, data-bound content controls and their referenced custom
-XML state, external document dependencies, embedded OLE/package/control
+style/default declarations, field codes, external-source field instructions,
+external relationships, custom XML, macros, core/extended/custom document
+properties, mail-merge configuration and recipient-data state, data-bound
+content controls and their referenced custom XML state, external document
+dependencies, embedded OLE/package/control
 payloads, OOXML alternative-format imports, headers, footers, notes, document
 settings, and otherwise unclassified package payloads.
 
@@ -44,7 +45,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.7 focuses on Office Open XML Word documents and deliberately keeps a
+Version 0.8 focuses on Office Open XML Word documents and deliberately keeps a
 small, inspectable contract:
 
 - bounded `.docx` / `.docm` ZIP packages;
@@ -53,7 +54,8 @@ small, inspectable contract:
   bookkeeping while retaining stored text and formatting semantics privately;
 - revision markup, comments, direct hidden-text runs, direct hidden
   paragraph-mark markup, stored style/default hidden-text declarations,
-  field-code, content-control, external-relationship, custom-XML, macro,
+  field-code, external-source field, content-control, external-relationship,
+  custom-XML, macro,
   core/extended/custom document-property, mail-merge, content-control
   data-binding, attached-template/master-subdocument/frameset-source external
   document dependency, embedded OLE/package/control, alternative-format-import,
@@ -123,6 +125,22 @@ reported, but DocFence deliberately does not guess which part Word might choose
 from its XPath. It does not evaluate XPath, update a control, or render the
 result.
 
+External-source Word fields are recorded separately from the general field-code
+count. DocFence recognizes `DATABASE`, legacy `DATA`, `DDE`, `DDEAUTO`,
+`INCLUDE`/`INCLUDETEXT`, `INCLUDEPICTURE`/`IMPORT`, `LINK`, and `RD` field
+instructions in every supported story. It handles both OOXML encodings: a
+simple field's `w:instr` attribute and a complete complex field's concatenated
+pre-separator `w:instrText` runs. When tracked revisions retain a deleted field
+code in `w:delInstrText`, DocFence inventories the current and deleted complex
+instruction variants separately. The public inventory contains only category
+counts; field instructions, source paths, connection strings, queries,
+application names, item references, and private fingerprints never appear in a
+report. Instruction text outside a complete complex field's instruction portion
+is not treated as a field instruction, and an unclosed complex field is not
+counted. The field keyword is a review signal, not a parser or evaluator:
+DocFence does not interpret its arguments, update the field, locate a source,
+run a query, start DDE, open an OLE object, or fetch any content.
+
 External Word document dependencies are recorded separately from the generic
 external-relationship count. DocFence recognizes an attached template in a
 Document Settings part, `w:subDoc` anchors in the main document, and
@@ -166,6 +184,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_custom_document_properties: true
   require_no_mail_merge: true
   require_no_data_bindings: true
+  require_no_external_fields: true
   require_no_external_document_dependencies: true
 ```
 
@@ -179,6 +198,7 @@ later mutation:
   no_document_property_changes: true
   no_mail_merge_changes: true
   no_data_binding_changes: true
+  no_external_field_changes: true
   no_external_document_dependency_changes: true
 ```
 
@@ -228,6 +248,21 @@ and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api
 which maps content-control text to document XML data. An independent
 [OOXML reference-corpus fixture](https://loadfix.github.io/ooxml-reference-corpus/case/docx__custom-xml-part.html)
 was profiled as a compatibility smoke test.
+The external-source-field boundary follows OOXML's [simple and complex field
+representations](https://ooxml.info/docs/17/17.16/17.16.2/) and the Open XML
+SDK's [`instrText` rule](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.fieldcode?view=openxml-3.0.1),
+which treats an instruction-text element outside a complex field's instruction
+portion as ordinary text. The SDK also documents
+[`delInstrText`](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.deletedfieldcode?view=openxml-3.0.1)
+as the deleted complex-field-code representation. Microsoft's current field
+documentation describes [database queries](https://support.microsoft.com/en-us/word/field-codes-database-field),
+[included documents](https://support.microsoft.com/en-us/word/field-codes-includetext-field),
+[linked pictures and the legacy IMPORT alias](https://support.microsoft.com/en-us/word/field-codes-includepicture-field),
+[OLE links](https://support.microsoft.com/en-us/word/field-codes-link-field),
+and [referenced documents](https://support.microsoft.com/en-us/word/field-codes-rd-referenced-document-field).
+Microsoft's interoperability specifications document [DDE](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/a2c3a25a-1dba-40da-be7a-47cf63c78d55?redirectedfrom=MSDN),
+`DDEAUTO`, and the legacy `DATA`, `INCLUDE`, and `IMPORT` aliases in its
+[field-type catalog](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/28a8d2c2-6107-409d-8f6a-e345ab6d4179).
 The external-document-dependency boundary follows the OOXML
 [Document Template](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Document_topic_ID0E1IDK.html),
 [Master Documents and Subdocuments](https://c-rex.net/samples/ooxml/e1/Part1/OOXML_P1_Fundamentals_Master_topic_ID0E2SDK.html),

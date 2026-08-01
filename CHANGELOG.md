@@ -2,6 +2,30 @@
 
 All notable changes are documented here.
 
+## 0.8.0 — 2026-08-01
+
+- Added a separate privacy-safe inventory for stored Word field instructions
+  that can source or query material outside the package: `DATABASE`, legacy
+  `DATA`, `DDE`, `DDEAUTO`, `INCLUDE`/`INCLUDETEXT`,
+  `INCLUDEPICTURE`/`IMPORT`, `LINK`, and `RD`.
+- Added `DFP027` to require that a candidate contain no recognized
+  external-source field instructions and `DFP028` to block external-field
+  inventory changes against a controlled baseline.
+- Handles simple `w:fldSimple` instructions and complete, nested complex-field
+  begin/separate/end sequences without treating standalone or result-side
+  `w:instrText` as a field instruction. Complex fields without a result
+  separator are supported; an unclosed complex field is ignored. Tracked
+  `w:delInstrText` field-code variants are separately inventoried rather than
+  concatenated with current `w:instrText` variants.
+- Privately fingerprints complete instructions and their story context while
+  reporting only field-family counts. Source paths, connection strings, SQL,
+  application names, item references, OLE details, and fingerprints are never
+  emitted. Splitting one unchanged complex instruction over a different number
+  of runs remains quiet.
+- Added conventional, Strict, header-story, nested, resultless, split-run,
+  target-change, tracked-deletion, non-field-text, unclosed-field, policy,
+  SARIF, and redaction regression coverage.
+
 ## 0.7.0 — 2026-08-01
 
 - Added a separate privacy-safe inventory for three standard external Word
