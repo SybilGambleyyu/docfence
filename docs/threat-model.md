@@ -48,9 +48,9 @@ Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are sensitive package material too.
 Direct legacy VML image targets, relationship IDs, raw source values, other
 image-data attributes, and story-part paths are sensitive package material too.
-Direct legacy VML linked-OLE sources, monikers, program, shape, and object
-identifiers, relationship IDs and targets, update metadata, field codes,
-markup, and story-part paths are sensitive package material too.
+Direct legacy VML linked- and embedded-OLE sources, monikers, program, shape,
+and object identifiers, relationship IDs and targets, update metadata, field
+codes, markup, and story-part paths are sensitive package material too.
 Direct WordprocessingML linked-object-property program and shape identifiers,
 relationship IDs and targets, field codes, locking and update metadata, markup,
 and story-part paths are sensitive package material too.
@@ -278,8 +278,9 @@ inventory churn.
 
 Direct legacy Office VML `o:OLEObject` markup with `Type="Link"` receives a
 separate private-digest treatment from broad embedded-object relationship and
-payload totals, `Type="Embed"`, WordprocessingML `w:objectLink`, VML image
-data, VML shape links, DrawingML linked pictures, and field instructions.
+payload totals, the separately inventoried `Type="Embed"`, WordprocessingML
+`w:objectLink`, VML image data, VML shape links, DrawingML linked pictures, and
+field instructions.
 DocFence retains every direct marker in supported Word stories, including
 duplicates and Markup Compatibility branches. A standard OLE-object
 relationship is classified by stored external or internal target mode; another
@@ -293,15 +294,34 @@ so same-count source, program, field-code, update-mode, or target rewrites stay
 review-visible while relationship-ID renumbering with unchanged semantics stays
 quiet.
 
+Direct legacy Office VML `o:OLEObject` markup with `Type="Embed"` receives a
+separate private-digest treatment from `Type="Link"`, WordprocessingML
+`w:objectEmbed`/`w:objectLink`, VML image data and shape links, fields, and
+broad embedded-object relationship/payload totals. DocFence retains every
+direct marker in supported Word stories, including duplicates and Markup
+Compatibility branches; the Office VML contract permits several parent forms,
+so it does not assign a rendered-object position. A standard OLE-object
+relationship is classified by stored external or internal target mode; another
+resolved type or mode is unsupported, and a direct marker without optional
+`r:id` remains its own stored-evidence class. Public output reports only
+aggregate marker/story and relationship-classification counts. Program, shape,
+and object IDs, relationship IDs and targets, update metadata, field codes,
+markup, paths, and fingerprints remain private. The full direct marker is
+privately fingerprinted, so same-count program, field-code, update-metadata,
+or target rewrites stay review-visible while relationship-ID renumbering with
+unchanged semantics stays quiet. `UpdateMode` is retained only in that private
+marker because the standard describes it for the Link form, not as embedded
+object behavior.
+
 Direct WordprocessingML `w:control` markup receives a separate private-digest
 treatment only when it is a direct child of `w:object` or `w:pict` in a
 supported Word story. The direct parent position is retained as an aggregate
 class because the standard describes the two forms separately; arbitrary
 `w:control` elements elsewhere do not become anchors. This boundary is distinct
-from `w:objectLink`, `w:objectEmbed`, legacy VML linked-OLE markup, VML image
-data and shapes, ActiveX-binary relationships, fields, and broad embedded
-control relationship/payload totals. A direct marker without optional `r:id`
-remains reviewable evidence. When it has an ID, only a standard control
+from `w:objectLink`, `w:objectEmbed`, legacy VML linked- and embedded-OLE
+markup, VML image data and shapes, ActiveX-binary relationships, fields, and
+broad embedded-control relationship/payload totals. A direct marker without
+optional `r:id` remains reviewable evidence. When it has an ID, only a standard control
 relationship is classified: internal is the conforming persistence-part mode,
 while external remains separately visible as nonconforming stored evidence;
 another resolved type or mode is unsupported. Public output exposes only
@@ -521,6 +541,12 @@ retrieves a source, updates or activates an OLE object, or honors an automatic
 update flag. DocFence does not select Markup Compatibility branches, associate
 markers with rendered objects, deduplicate a visual object, resolve, retrieve,
 open, update, activate, evaluate, render, or execute an OLE object.
+Direct legacy VML embedded-OLE counts are likewise stored-state evidence, not
+proof that a client selects a marker, associates it with a visual shape,
+retrieves, opens, or activates an OLE object, or renders embedded content.
+DocFence does not select Markup Compatibility branches, associate markers with
+rendered objects, deduplicate a visual object, decode payload bytes, resolve,
+retrieve, open, update, activate, evaluate, render, or execute an OLE object.
 Direct WordprocessingML linked-object-property counts are likewise stored-state
 evidence, not proof that a client selects a marker, associates it with a visual
 object, retrieves a source, updates or activates an OLE object, or honors a

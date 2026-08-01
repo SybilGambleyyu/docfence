@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.26 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.27 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -19,7 +19,8 @@ following properties:
   state, direct legacy VML external-image `v:imagedata/@r:id` markup state,
   direct legacy VML image-data hyperlink `v:imagedata/@r:href` markup state,
   direct legacy Office VML linked-OLE `o:OLEObject Type="Link"` markup state,
-  direct WordprocessingML `w:object/w:objectLink` linked-object-property
+  direct legacy Office VML embedded-OLE `o:OLEObject Type="Embed"` markup
+  state, direct WordprocessingML `w:object/w:objectLink` linked-object-property
   markup state, direct WordprocessingML `w:object/w:control` and
   `w:pict/w:control` embedded-control-anchor markup state, and
   Word content-control web-extension markers, direct `w:vanish` runs, and
@@ -164,20 +165,31 @@ following properties:
   renumbering stability, JSON/Markdown/SARIF redaction, and policy findings;
 - direct legacy Office VML `o:OLEObject Type="Link"` markup is separately
   inventoried from broad embedded-object relationship/payload totals,
-  `Type="Embed"`, WordprocessingML `w:objectLink`, VML image data, VML shape
-  links, DrawingML linked pictures, fields, and generic relationship totals.
-  Tests cover standard OLE-object relationships with external and internal
-  stored target modes, a resolved unsupported non-OLE relationship, a direct
-  marker without `r:id`, `UpdateMode="Always"` and other update modes,
+  the separately inventoried `Type="Embed"`, WordprocessingML `w:objectLink`,
+  VML image data, VML shape links, DrawingML linked pictures, fields, and
+  generic relationship totals. Tests cover standard OLE-object relationships
+  with external and internal stored target modes, a resolved unsupported
+  non-OLE relationship, a direct marker without `r:id`, `UpdateMode="Always"`
+  and other update modes, duplicate markers, body/header stories, Transitional
+  and Strict Word/relationship namespaces, orphaned relationship exclusion,
+  unavailable relationship failure, same-count target/source-marker changes,
+  relationship-ID renumbering stability, JSON/Markdown/SARIF redaction, and
+  policy findings;
+- direct legacy Office VML `o:OLEObject Type="Embed"` markup is separately
+  inventoried from `Type="Link"`, WordprocessingML `w:objectEmbed` and
+  `w:objectLink`, VML image data and shape links, fields, and broad
+  embedded-object relationship/payload totals. Tests cover standard OLE-object
+  relationships with external and internal stored target modes, a resolved
+  unsupported non-OLE relationship, a direct marker without optional `r:id`,
   duplicate markers, body/header stories, Transitional and Strict
   Word/relationship namespaces, orphaned relationship exclusion, unavailable
-  relationship failure, same-count target/source-marker changes,
+  relationship failure, same-count program/update/target-marker changes,
   relationship-ID renumbering stability, JSON/Markdown/SARIF redaction, and
   policy findings;
 - direct WordprocessingML `w:objectLink` markup is separately inventoried
-  only as a direct child of `w:object`, distinct from `w:objectEmbed`,
-  legacy VML linked-OLE markup, VML image data/shape links, DrawingML linked
-  pictures, field inventories, and generic relationship totals. Tests cover
+  only as a direct child of `w:object`, distinct from `w:objectEmbed`, legacy
+  VML linked- and embedded-OLE markup, VML image data/shape links, DrawingML
+  linked pictures, field inventories, and generic relationship totals. Tests cover
   standard external and internal OLE-object relationships, unsupported and
   missing relationships, exact `always` and `onCall` modes plus missing or
   unsupported modes, duplicate markers, body/header stories, Transitional and
@@ -187,9 +199,9 @@ following properties:
   redaction, and policy findings;
 - direct WordprocessingML `w:control` markup is separately inventoried only
   as a direct child of `w:object` or `w:pict`, distinct from arbitrary
-  unparented markers, `w:objectLink`, `w:objectEmbed`, legacy VML linked-OLE
-  markup, VML image data/shapes, ActiveX-binary relationships, field
-  inventories, and generic control relationship/payload totals. Tests cover
+  unparented markers, `w:objectLink`, `w:objectEmbed`, legacy VML linked- and
+  embedded-OLE markup, VML image data/shapes, ActiveX-binary relationships,
+  field inventories, and generic control relationship/payload totals. Tests cover
   parent-position counts, standard internal and external control relationships,
   unsupported and missing relationships, duplicate markers, body/header
   stories, Transitional and Strict Word/relationship namespaces, orphaned and
@@ -240,6 +252,8 @@ following properties:
   direct VML linked-OLE sources, monikers, program, shape, and object IDs,
   relationship IDs and targets, update metadata, field codes, markup, and
   story paths,
+  direct VML embedded-OLE program, shape, and object IDs, relationship IDs and
+  targets, update metadata, field codes, markup, and story paths,
   direct WordprocessingML linked-object-property program and shape IDs,
   relationship IDs and targets, field codes, locking and update metadata,
   markup, and story paths,
@@ -395,6 +409,21 @@ with a controlled package and separately confirms the real serialized form.
 It retains all source, program, and field data privately and makes no claim
 that Word will retrieve, update, activate, or honor the object.
 
+For legacy VML embedded-OLE markup, release validation combines the controlled
+Word-story package in the public regression test with public package fixtures
+from two independently maintained OOXML test corpora. The Open XML SDK's
+[`ole.docx` fixture at `cd2b359`](https://github.com/dotnet/Open-XML-SDK/blob/cd2b359ef824737edb93f1c6157c19551aae1e52/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/ole/ole.docx)
+contains one direct `o:OLEObject Type="Embed"` marker with an internal standard
+OLE-object relationship and payload. Five docx4j fixtures at
+[`74ea743`](https://github.com/plutext/docx4j/tree/74ea74323a33d92769fdbd3e6d5fe730bbfd8ffb/docx4j-core-tests/src/test/resources/OLE)
+each contain one direct marker in a `w:object` with the same stored internal
+standard relationship class. A pinned scan of the Open XML SDK corpus found
+direct markers in 22 of 503 readable package candidates (two of 505 candidates
+produced read errors); the docx4j scan found them in five of 141 readable Word
+packages. These are public test assets, not a prevalence survey or a claim of
+client runtime behavior. The release profiles raw public fixtures without
+emitting their program IDs, targets, payloads, or paths.
+
 For WordprocessingML linked-object-property markup, release validation uses the
 controlled Word-story package in the public regression test. It exercises direct
 `w:object/w:objectLink` scoping, duplicate body/header markers, standard
@@ -506,6 +535,9 @@ alternate marker. It likewise does not assert that a direct VML
 `o:OLEObject Type="Link"` marker is valid, selected, retrievable, source-backed
 at review time, updated, activated, rendered, or honored by Word; it records
 bounded stored marker/relationship evidence only. It also does not assert that
+an `o:OLEObject Type="Embed"` marker is valid, selected, retrievable,
+payload-backed, opened, activated, rendered, or honored by Word; it records
+bounded stored marker/relationship evidence only. It also does not assert that
 a direct WordprocessingML `w:objectLink` marker is schema-valid,
 selected, source-backed at review time, updated, activated, rendered, or
 honored by Word; it records bounded stored marker/relationship evidence only.
@@ -526,5 +558,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.26 contract; see
+only, not field evaluation. Those limits are explicit in the 0.27 contract; see
 [threat model](threat-model.md).

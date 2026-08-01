@@ -49,6 +49,7 @@ from docfence.models import (
     WordObjectLinkInventory,
     WordPermissionRangeInventory,
     WordProtectionInventory,
+    WordVmlEmbeddedOleObjectInventory,
     WordVmlExternalImageInventory,
     WordVmlHyperlinkInventory,
     WordVmlImageHyperlinkInventory,
@@ -703,6 +704,15 @@ class _VmlLinkedOleObjectReference:
 
 
 @dataclass(frozen=True)
+class _VmlEmbeddedOleObjectReference:
+    """One private direct legacy VML Office embedded-OLE marker."""
+
+    story_part: str
+    markup_signature: str
+    relationship_classification: str
+
+
+@dataclass(frozen=True)
 class _WordObjectLinkReference:
     """One private direct WordprocessingML linked-object-property marker."""
 
@@ -883,6 +893,7 @@ def _load_package(
                 vml_external_image_references,
                 vml_image_hyperlink_references,
                 vml_linked_ole_object_references,
+                vml_embedded_ole_object_references,
                 word_object_link_references,
                 word_embedded_control_references,
                 web_extension_control_references,
@@ -924,6 +935,9 @@ def _load_package(
             )
             word_vml_linked_ole_objects = _word_vml_linked_ole_object_inventory(
                 vml_linked_ole_object_references
+            )
+            word_vml_embedded_ole_objects = _word_vml_embedded_ole_object_inventory(
+                vml_embedded_ole_object_references
             )
             word_object_links = _word_object_link_inventory(word_object_link_references)
             word_embedded_controls = _word_embedded_control_inventory(
@@ -1022,6 +1036,7 @@ def _load_package(
         word_vml_external_images=word_vml_external_images,
         word_vml_image_hyperlinks=word_vml_image_hyperlinks,
         word_vml_linked_ole_objects=word_vml_linked_ole_objects,
+        word_vml_embedded_ole_objects=word_vml_embedded_ole_objects,
         word_object_links=word_object_links,
         word_embedded_controls=word_embedded_controls,
         word_permission_ranges=word_permission_ranges,
@@ -3336,6 +3351,7 @@ def _story_snapshots(
     tuple[_VmlExternalImageReference, ...],
     tuple[_VmlImageHyperlinkReference, ...],
     tuple[_VmlLinkedOleObjectReference, ...],
+    tuple[_VmlEmbeddedOleObjectReference, ...],
     tuple[_WordObjectLinkReference, ...],
     tuple[_WordEmbeddedControlReference, ...],
     tuple[_WebExtensionControlReference, ...],
@@ -3352,6 +3368,7 @@ def _story_snapshots(
     vml_external_image_references: list[_VmlExternalImageReference] = []
     vml_image_hyperlink_references: list[_VmlImageHyperlinkReference] = []
     vml_linked_ole_object_references: list[_VmlLinkedOleObjectReference] = []
+    vml_embedded_ole_object_references: list[_VmlEmbeddedOleObjectReference] = []
     word_object_link_references: list[_WordObjectLinkReference] = []
     word_embedded_control_references: list[_WordEmbeddedControlReference] = []
     web_extension_control_references: list[_WebExtensionControlReference] = []
@@ -3371,6 +3388,7 @@ def _story_snapshots(
             story_vml_external_image_references,
             story_vml_image_hyperlink_references,
             story_vml_linked_ole_object_references,
+            story_vml_embedded_ole_object_references,
             story_word_object_link_references,
             story_word_embedded_control_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
@@ -3391,6 +3409,9 @@ def _story_snapshots(
         vml_image_hyperlink_references.extend(story_vml_image_hyperlink_references)
         vml_linked_ole_object_references.extend(
             story_vml_linked_ole_object_references
+        )
+        vml_embedded_ole_object_references.extend(
+            story_vml_embedded_ole_object_references
         )
         word_object_link_references.extend(story_word_object_link_references)
         word_embedded_control_references.extend(
@@ -3419,6 +3440,7 @@ def _story_snapshots(
         tuple(vml_external_image_references),
         tuple(vml_image_hyperlink_references),
         tuple(vml_linked_ole_object_references),
+        tuple(vml_embedded_ole_object_references),
         tuple(word_object_link_references),
         tuple(word_embedded_control_references),
         tuple(web_extension_control_references),
@@ -3496,6 +3518,7 @@ def _snapshot_story(
     tuple[_VmlExternalImageReference, ...],
     tuple[_VmlImageHyperlinkReference, ...],
     tuple[_VmlLinkedOleObjectReference, ...],
+    tuple[_VmlEmbeddedOleObjectReference, ...],
     tuple[_WordObjectLinkReference, ...],
     tuple[_WordEmbeddedControlReference, ...],
 ]:
@@ -3601,6 +3624,7 @@ def _snapshot_story(
         _vml_external_image_references(root, part_key, relationships),
         _vml_image_hyperlink_references(root, part_key, relationships),
         _vml_linked_ole_object_references(root, part_key, relationships),
+        _vml_embedded_ole_object_references(root, part_key, relationships),
         _word_object_link_references(root, part_key, relationships),
         _word_embedded_control_references(root, part_key, relationships),
     )
@@ -5281,6 +5305,105 @@ def _word_vml_linked_ole_object_inventory(
             relationship_counts["unsupported_relationship"]
         ),
         without_relationship_id_vml_linked_ole_object_count=(
+            relationship_counts["without_relationship_id"]
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _vml_embedded_ole_object_references(
+    root: ET.Element,
+    story_part: str,
+    relationships: dict[str, _Relationship],
+) -> tuple[_VmlEmbeddedOleObjectReference, ...]:
+    """Retain direct legacy VML Office ``OLEObject Type=Embed`` markers.
+
+    This narrow stored-markup inventory records each Office VML OLE-object
+    marker whose unqualified ``Type`` is ``Embed`` in a supported Word story,
+    including duplicate markers and markers in markup-compatibility branches.
+    The Office VML contract permits the element in several parent forms, so the
+    boundary follows the direct marker rather than assigning it a rendering
+    position. The full marker remains privately fingerprinted so program,
+    shape, object, field-code, and update metadata never reach output while
+    same-count rewrites stay review-visible. It does not select a rendering
+    branch, associate a marker with a shape, inspect an object payload, load or
+    activate an OLE object, or claim that a client will honor one.
+
+    An OLE relationship is optional in the legacy marker, so a direct marker
+    without ``r:id`` remains stored evidence in its own public class. The
+    standard permits an OLE-object relationship with an internal or external
+    target mode; those stored modes remain separate. ``UpdateMode`` applies to
+    the Link type, so this embedded-object inventory retains it only inside the
+    private marker signature rather than presenting it as an embedded-object
+    behavior. VML linked-OLE markup, WordprocessingML ``w:objectEmbed`` and
+    ``w:objectLink`` markup, VML image data and shape links, fields, and broad
+    embedded-object relationship/payload totals remain separate surfaces.
+    """
+
+    references: list[_VmlEmbeddedOleObjectReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if namespace != _OFFICE_VML_NAMESPACE or local_name != "OLEObject":
+            continue
+        marker_type = _unqualified_attribute_value(element, "Type")
+        if marker_type is None or marker_type.strip().casefold() != "embed":
+            continue
+        relationship_id = _relationship_id_value(element)
+        relationship_classification = (
+            "without_relationship_id"
+            if relationship_id is None
+            else _ole_object_relationship_classification(
+                relationships.get(relationship_id)
+            )
+        )
+        references.append(
+            _VmlEmbeddedOleObjectReference(
+                story_part=story_part,
+                markup_signature=_fingerprint_element(element, relationships),
+                relationship_classification=relationship_classification,
+            )
+        )
+    return tuple(references)
+
+
+def _word_vml_embedded_ole_object_inventory(
+    references: tuple[_VmlEmbeddedOleObjectReference, ...],
+) -> WordVmlEmbeddedOleObjectInventory:
+    """Aggregate VML embedded-OLE-object markers without emitting metadata."""
+
+    relationship_counts = {
+        "external_standard_ole_object_relationship": 0,
+        "internal_standard_ole_object_relationship": 0,
+        "unsupported_relationship": 0,
+        "without_relationship_id": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        relationship_counts[reference.relationship_classification] += 1
+        records.append(
+            (
+                "word_vml_embedded_ole_object",
+                reference.story_part,
+                reference.markup_signature,
+                reference.relationship_classification,
+            )
+        )
+
+    return WordVmlEmbeddedOleObjectInventory(
+        vml_embedded_ole_object_count=len(references),
+        vml_embedded_ole_object_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        external_standard_ole_object_relationship_vml_embedded_ole_object_count=(
+            relationship_counts["external_standard_ole_object_relationship"]
+        ),
+        internal_standard_ole_object_relationship_vml_embedded_ole_object_count=(
+            relationship_counts["internal_standard_ole_object_relationship"]
+        ),
+        unsupported_relationship_vml_embedded_ole_object_count=(
+            relationship_counts["unsupported_relationship"]
+        ),
+        without_relationship_id_vml_embedded_ole_object_count=(
             relationship_counts["without_relationship_id"]
         ),
         signature=_digest_records(records),

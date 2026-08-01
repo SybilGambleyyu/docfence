@@ -97,6 +97,11 @@ def _profile_markdown(document: dict[str, object]) -> str:
             document.get("word_vml_linked_ole_objects", {})
         )
     )
+    lines.extend(
+        _word_vml_embedded_ole_object_section(
+            document.get("word_vml_embedded_ole_objects", {})
+        )
+    )
     lines.extend(_word_object_link_section(document.get("word_object_links", {})))
     lines.extend(
         _word_embedded_control_section(document.get("word_embedded_controls", {}))
@@ -148,6 +153,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_vml_external_image_comparison(before, after))
     lines.extend(_word_vml_image_hyperlink_comparison(before, after))
     lines.extend(_word_vml_linked_ole_object_comparison(before, after))
+    lines.extend(_word_vml_embedded_ole_object_comparison(before, after))
     lines.extend(_word_object_link_comparison(before, after))
     lines.extend(_word_embedded_control_comparison(before, after))
     lines.extend(_word_permission_range_comparison(before, after))
@@ -374,6 +380,10 @@ def _word_vml_linked_ole_object_section(value: object) -> list[str]:
     return _inventory_section("VML linked-OLE-object inventory", value)
 
 
+def _word_vml_embedded_ole_object_section(value: object) -> list[str]:
+    return _inventory_section("VML embedded-OLE-object inventory", value)
+
+
 def _word_object_link_section(value: object) -> list[str]:
     return _inventory_section(
         "WordprocessingML linked-object-property inventory", value
@@ -592,6 +602,16 @@ def _word_vml_linked_ole_object_comparison(
         "VML linked-OLE-object inventory",
         before.get("word_vml_linked_ole_objects", {}),
         after.get("word_vml_linked_ole_objects", {}),
+    )
+
+
+def _word_vml_embedded_ole_object_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "VML embedded-OLE-object inventory",
+        before.get("word_vml_embedded_ole_objects", {}),
+        after.get("word_vml_embedded_ole_objects", {}),
     )
 
 

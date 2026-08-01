@@ -78,6 +78,8 @@ _RULES: Final = {
     "no_word_object_link_changes": "DFP064",
     "require_no_word_embedded_controls": "DFP065",
     "no_word_embedded_control_changes": "DFP066",
+    "require_no_word_vml_embedded_ole_objects": "DFP067",
+    "no_word_vml_embedded_ole_object_changes": "DFP068",
 }
 
 
@@ -458,6 +460,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_word_vml_embedded_ole_object_changes") and (
+        before.word_vml_embedded_ole_objects.signature
+        != after.word_vml_embedded_ole_objects.signature
+    ):
+        findings.append(
+            _finding(
+                "no_word_vml_embedded_ole_object_changes",
+                "Stored VML embedded-OLE-object inventory changed.",
+                {
+                    "before": before.word_vml_embedded_ole_objects.public_dict(),
+                    "after": after.word_vml_embedded_ole_objects.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_word_object_link_changes") and (
         before.word_object_links.signature != after.word_object_links.signature
     ):
@@ -813,6 +829,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_vml_linked_ole_objects",
                 "Candidate contains stored VML linked-OLE-object markup.",
                 after.word_vml_linked_ole_objects.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_word_vml_embedded_ole_objects") and any(
+        after.word_vml_embedded_ole_objects.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_word_vml_embedded_ole_objects",
+                "Candidate contains stored VML embedded-OLE-object markup.",
+                after.word_vml_embedded_ole_objects.public_dict(),
             )
         )
     if policy.enabled("require_no_word_object_links") and any(

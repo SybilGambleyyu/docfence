@@ -601,6 +601,20 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.word_vml_embedded_ole_objects.signature
+        != after.word_vml_embedded_ole_objects.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_vml_embedded_ole_object_inventory_changed",
+                message="Stored VML embedded-OLE-object inventory changed.",
+                details={
+                    "before": before.word_vml_embedded_ole_objects.public_dict(),
+                    "after": after.word_vml_embedded_ole_objects.public_dict(),
+                },
+            )
+        )
     if before.word_object_links.signature != after.word_object_links.signature:
         changes.append(
             Change(

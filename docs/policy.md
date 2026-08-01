@@ -88,6 +88,8 @@ starter policy.
 | `no_word_object_link_changes` | `DFP064` | WordprocessingML linked-object-property inventory differs | Comparison |
 | `require_no_word_embedded_controls` | `DFP065` | Candidate has direct WordprocessingML embedded-control anchors | Candidate |
 | `no_word_embedded_control_changes` | `DFP066` | WordprocessingML embedded-control-anchor inventory differs | Comparison |
+| `require_no_word_vml_embedded_ole_objects` | `DFP067` | Candidate has direct VML embedded-OLE markup | Candidate |
+| `no_word_vml_embedded_ole_object_changes` | `DFP068` | VML embedded-OLE-object inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -154,6 +156,8 @@ intentionally retains direct legacy VML linked-OLE markup.
 intentionally retains direct WordprocessingML linked-object-property markup.
 `no_word_embedded_control_changes` provides the equivalent gate when it
 intentionally retains direct WordprocessingML embedded-control anchors.
+`no_word_vml_embedded_ole_object_changes` provides the equivalent gate when it
+intentionally retains direct Office VML embedded-OLE markup.
 `word/styles.xml` is handled by the dedicated style inventory instead.
 
 ## Hidden-text scope
@@ -182,6 +186,9 @@ That broader boundary still captures orphaned relationships and payloads.
 `require_no_word_embedded_controls` is deliberately narrower: it inventories
 only direct `w:control` anchors and complements, rather than replaces, this
 package-level gate.
+`require_no_word_vml_embedded_ole_objects` is another complementary direct
+markup gate: it inventories only Office VML `o:OLEObject Type="Embed"` markers,
+not arbitrary OLE relationships or payloads.
 
 `require_no_alternative_format_imports` fails when a candidate has an `aFChunk`
 relationship, its resolved internal payload, or a direct Word `w:altChunk`
@@ -815,12 +822,13 @@ establishes that Word will honor it.
 ## Legacy VML linked-OLE-object scope
 
 Direct legacy Office VML `o:OLEObject` markup with unqualified `Type="Link"`
-is separate from `Type="Embed"`, WordprocessingML `w:objectLink`, VML image
-data, VML shape links, DrawingML linked pictures, fields, and generic embedded
-OLE/package/control relationship or payload totals. DocFence records every
-direct marker in supported Word stories, including duplicates and markers in
-Markup Compatibility branches. It does not select a client-rendered branch,
-associate a marker with a visual object, or deduplicate an object.
+is separate from the separately inventoried `Type="Embed"`, WordprocessingML
+`w:objectLink`, VML image data, VML shape links, DrawingML linked pictures,
+fields, and generic embedded OLE/package/control relationship or payload
+totals. DocFence records every direct marker in supported Word stories,
+including duplicates and markers in Markup Compatibility branches. It does not
+select a client-rendered branch, associate a marker with a visual object, or
+deduplicate an object.
 
 When a marker carries `r:id`, a standard OLE-object relationship with stored
 external or internal target mode is counted in the respective class. Any other
@@ -846,16 +854,49 @@ inventory signature for a controlled baseline. Neither rule resolves, retrieves,
 opens, updates, activates, evaluates, renders, or executes an OLE object, or
 establishes that Word will honor it.
 
+## Legacy VML embedded-OLE-object scope
+
+Direct legacy Office VML `o:OLEObject` markup with unqualified `Type="Embed"`
+is separate from `Type="Link"`, WordprocessingML `w:objectEmbed` and
+`w:objectLink`, VML image data and shape links, fields, and generic embedded
+OLE/package/control relationship or payload totals. DocFence records every
+direct marker in supported Word stories, including duplicates and markers in
+Markup Compatibility branches. The Office VML contract permits several parent
+forms, so the boundary follows the stored marker without selecting a rendering
+position, client-rendered branch, or visual-object association.
+
+When a marker carries `r:id`, a standard OLE-object relationship with stored
+external or internal target mode is counted in the respective class. Any other
+resolved relationship type or mode is reviewable as unsupported evidence. A
+direct marker without optional `r:id` is retained as a distinct stored-evidence
+class. `UpdateMode` is described for the Link form, so this embedded-object
+inventory deliberately does not report a client-update category. It does not
+retrieve a target or decode a payload, open, activate, render, or execute an
+OLE object, and no count establishes that a Word client will honor it.
+
+Public output exposes only aggregate marker/story and relationship-
+classification counts. Program, shape, and object identifiers, relationship IDs
+and targets, update metadata, field codes, VML markup, story paths, and
+fingerprints never appear in reports. The full direct marker is privately
+fingerprinted, so same-count program, field-code, update-metadata, or target
+rewrites remain visible. Relationship-ID renumbering with unchanged
+relationship semantics remains quiet.
+
+`require_no_word_vml_embedded_ole_objects` fails whenever a candidate contains
+a stored direct VML embedded-OLE marker. Use it for a handoff that must carry no
+such markup. `no_word_vml_embedded_ole_object_changes` compares the private
+inventory signature for a controlled baseline.
+
 ## WordprocessingML linked-object-property scope
 
 Direct WordprocessingML `w:objectLink` markers are counted only when they are
 direct children of `w:object` in a supported Word story. The boundary is
-separate from `w:objectEmbed`, legacy Office VML `o:OLEObject Type="Link"`,
-VML image data and shape links, DrawingML linked pictures, fields, and broad
-embedded OLE/package/control relationship or payload totals. DocFence retains
-duplicates and markers in Markup Compatibility branches, but does not select a
-client-rendered branch, associate a marker with a visual object, or deduplicate
-an object.
+separate from `w:objectEmbed`, legacy Office VML `o:OLEObject Type="Link"` and
+`Type="Embed"`, VML image data and shape links, DrawingML linked pictures,
+fields, and broad embedded OLE/package/control relationship or payload totals.
+DocFence retains duplicates and markers in Markup Compatibility branches, but
+does not select a client-rendered branch, associate a marker with a visual
+object, or deduplicate an object.
 
 When a direct marker carries `r:id`, a standard OLE-object relationship with
 stored external or internal target mode is counted in the respective class. Any
@@ -887,12 +928,12 @@ Direct WordprocessingML `w:control` markers are counted only when they are
 direct children of `w:object` or `w:pict` in a supported Word story. The public
 inventory reports those two direct parent positions separately; arbitrary
 `w:control` elements elsewhere are not treated as anchors. This is separate
-from `w:objectLink`, `w:objectEmbed`, legacy Office VML linked-OLE markup, VML
-image data and shapes, fields, ActiveX-binary relationships, and generic
-embedded OLE/package/control relationship or payload totals. DocFence retains
-duplicates and markers in Markup Compatibility branches, but does not select a
-client-rendered branch, associate a marker with a visual control, or deduplicate
-an object.
+from `w:objectLink`, `w:objectEmbed`, legacy Office VML linked- and
+embedded-OLE markup, VML image data and shapes, fields, ActiveX-binary
+relationships, and generic embedded OLE/package/control relationship or
+payload totals. DocFence retains duplicates and markers in Markup Compatibility
+branches, but does not select a client-rendered branch, associate a marker with
+a visual control, or deduplicate an object.
 
 `r:id` is optional. An anchor without one remains a separate stored-evidence
 class; when it exists, only a standard control relationship is recognized. An

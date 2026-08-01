@@ -629,6 +629,47 @@ class WordVmlLinkedOleObjectInventory:
 
 
 @dataclass(frozen=True)
+class WordVmlEmbeddedOleObjectInventory:
+    """Direct legacy VML Office embedded-OLE markup, aggregate only.
+
+    Program, shape, and object identifiers, relationship IDs and targets,
+    update metadata, field codes, VML markup, story paths, and fingerprints can
+    reveal document context. Public output reports only marker and
+    relationship-classification counts; the private signature retains the
+    direct reviewed marker. A stored marker is not evidence that a Word client
+    will load, render, activate, or otherwise honor an OLE object.
+    """
+
+    vml_embedded_ole_object_count: int
+    vml_embedded_ole_object_story_count: int
+    external_standard_ole_object_relationship_vml_embedded_ole_object_count: int
+    internal_standard_ole_object_relationship_vml_embedded_ole_object_count: int
+    unsupported_relationship_vml_embedded_ole_object_count: int
+    without_relationship_id_vml_embedded_ole_object_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "vml_embedded_ole_object_count": self.vml_embedded_ole_object_count,
+            "vml_embedded_ole_object_story_count": (
+                self.vml_embedded_ole_object_story_count
+            ),
+            "external_standard_ole_object_relationship_vml_embedded_ole_object_count": (
+                self.external_standard_ole_object_relationship_vml_embedded_ole_object_count
+            ),
+            "internal_standard_ole_object_relationship_vml_embedded_ole_object_count": (
+                self.internal_standard_ole_object_relationship_vml_embedded_ole_object_count
+            ),
+            "unsupported_relationship_vml_embedded_ole_object_count": (
+                self.unsupported_relationship_vml_embedded_ole_object_count
+            ),
+            "without_relationship_id_vml_embedded_ole_object_count": (
+                self.without_relationship_id_vml_embedded_ole_object_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordObjectLinkInventory:
     """Direct WordprocessingML linked-object-property markup, aggregate only.
 
@@ -1080,6 +1121,7 @@ class DocumentSnapshot:
     word_vml_external_images: WordVmlExternalImageInventory
     word_vml_image_hyperlinks: WordVmlImageHyperlinkInventory
     word_vml_linked_ole_objects: WordVmlLinkedOleObjectInventory
+    word_vml_embedded_ole_objects: WordVmlEmbeddedOleObjectInventory
     word_object_links: WordObjectLinkInventory
     word_embedded_controls: WordEmbeddedControlInventory
     word_permission_ranges: WordPermissionRangeInventory
@@ -1194,6 +1236,9 @@ class DocumentSnapshot:
             ),
             "word_vml_linked_ole_objects": (
                 self.word_vml_linked_ole_objects.public_dict()
+            ),
+            "word_vml_embedded_ole_objects": (
+                self.word_vml_embedded_ole_objects.public_dict()
             ),
             "word_object_links": self.word_object_links.public_dict(),
             "word_embedded_controls": self.word_embedded_controls.public_dict(),

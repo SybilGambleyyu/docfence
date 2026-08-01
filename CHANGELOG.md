@@ -2,6 +2,37 @@
 
 All notable changes are documented here.
 
+## 0.27.0 — 2026-08-01
+
+- Added a first-class, privacy-safe inventory for direct legacy Office VML
+  `o:OLEObject Type="Embed"` markers in supported Word stories. It is separate
+  from the existing `Type="Link"` inventory, WordprocessingML
+  `w:objectEmbed`/`w:objectLink` markup, VML image and shape links, fields, and
+  broad embedded OLE/package/control relationship or payload totals. The VML
+  contract permits several parent forms, so the boundary follows the stored
+  Office VML marker rather than assigning it a rendered-object position.
+- Added `DFP067` to require a handoff with no direct VML embedded-OLE marker
+  and `DFP068` to protect an approved embedded-OLE marker baseline.
+- Reports expose only aggregate marker/story and backing-relationship classes:
+  standard OLE-object relationships with stored external or internal target
+  mode, unsupported relationships, and markers without optional `r:id`.
+  Program, shape, and object identifiers, relationship IDs and targets, update
+  metadata, field codes, VML markup, story paths, and fingerprints remain
+  private. `UpdateMode` is not reported because it is defined for the Link
+  form, not as embedded-object behavior.
+- The private signature retains every full direct marker with relationship IDs
+  normalized to their stored semantics. Same-count program, field-code,
+  update-metadata, or target rewrites therefore remain review-visible while a
+  relationship-ID renumbering with unchanged semantics remains quiet.
+- Added regression coverage for external/internal/unsupported/missing-ID
+  classes, duplicate and `Type="Link"` separation, body/header stories,
+  Strict encodings, orphan exclusion, unavailable relationships, same-count
+  program/update/target rewrites, relationship-ID renumbering stability,
+  privacy redaction, and policy/SARIF output. Release validation profiles a
+  public Open XML SDK OLE fixture and five public docx4j OLE fixtures; a pinned
+  corpus scan found direct markers in 22 of 503 readable Open XML SDK package
+  candidates and five of 141 docx4j Word packages.
+
 ## 0.26.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct WordprocessingML
