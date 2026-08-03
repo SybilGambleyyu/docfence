@@ -849,6 +849,37 @@ class MailMergeInventory:
 
 
 @dataclass(frozen=True)
+class SaveThroughXsltInventory:
+    """Stored XSLT-on-single-XML-save configuration, aggregate only.
+
+    Transform targets, relationship identifiers, local solution identifiers,
+    Settings-part paths, and private fingerprints can expose environment or
+    workflow details. Public output therefore reports only the configuration
+    shape and enabled-setting state.
+    """
+
+    enabled_setting_count: int
+    disabled_setting_count: int
+    transform_anchor_count: int
+    transform_relationship_count: int
+    solution_identifier_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "save_through_xslt_enabled_setting_count": self.enabled_setting_count,
+            "save_through_xslt_disabled_setting_count": self.disabled_setting_count,
+            "save_through_xslt_anchor_count": self.transform_anchor_count,
+            "save_through_xslt_relationship_count": (
+                self.transform_relationship_count
+            ),
+            "save_through_xslt_solution_identifier_count": (
+                self.solution_identifier_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1126,6 +1157,7 @@ class DocumentSnapshot:
     word_embedded_controls: WordEmbeddedControlInventory
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
+    save_through_xslt: SaveThroughXsltInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1244,6 +1276,7 @@ class DocumentSnapshot:
             "word_embedded_controls": self.word_embedded_controls.public_dict(),
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
+            "save_through_xslt": self.save_through_xslt.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

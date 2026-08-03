@@ -45,6 +45,9 @@ _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.or
 _RECIPIENT_DATA_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/recipientData"
 )
+_SAVE_THROUGH_XSLT_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/transform"
+)
 _STRICT_MAIL_MERGE_SOURCE_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeSource"
 )
@@ -53,6 +56,9 @@ _STRICT_MAIL_MERGE_HEADER_SOURCE_RELATIONSHIP_TYPE = (
 )
 _STRICT_MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/mailMergeRecipientData"
+)
+_STRICT_SAVE_THROUGH_XSLT_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/transform"
 )
 _CUSTOM_XML_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml"
@@ -217,9 +223,7 @@ _SENSITIVITY_LABEL_NAMESPACE = (
 _SENSITIVITY_LABEL_RELATIONSHIP_TYPE = (
     "http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels"
 )
-_SENSITIVITY_LABEL_CONTENT_TYPE = (
-    "application/vnd.ms-office.classificationlabels+xml"
-)
+_SENSITIVITY_LABEL_CONTENT_TYPE = "application/vnd.ms-office.classificationlabels+xml"
 _PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/package/2006/relationships/"
     "digital-signature/origin"
@@ -794,6 +798,192 @@ rules:
         "MAIL_MERGE_FIELD_MAPPING_DO_NOT_LEAK",
         "MAIL_MERGE_RECIPIENT_DO_NOT_LEAK",
         "MAIL_MERGE_RECIPIENT_CHANGED_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
+def test_save_through_xslt_inventory_is_private_and_relationship_id_stable(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    target_changed = tmp_path / "target-changed.docx"
+    disabled = tmp_path / "disabled.docx"
+    disabled_only = tmp_path / "disabled-only.docx"
+    solution_only = tmp_path / "solution-only.docx"
+    solution_changed = tmp_path / "solution-changed.docx"
+    orphaned = tmp_path / "orphaned.docx"
+    renumbered = tmp_path / "renumbered.docx"
+    strict = tmp_path / "strict.docx"
+    wrong_relationship_type = tmp_path / "wrong-relationship-type.docx"
+    internal_target = tmp_path / "internal-target.docx"
+    missing_relationship = tmp_path / "missing-relationship.docx"
+    duplicate_anchor = tmp_path / "duplicate-anchor.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_save_through_xslt_document(before, include_configuration=False)
+    _write_save_through_xslt_document(after)
+    _write_save_through_xslt_document(
+        target_changed,
+        transform_target="https://example.invalid/SAVE_THROUGH_XSLT_CHANGED_DO_NOT_LEAK.xslt",
+    )
+    _write_save_through_xslt_document(disabled, enabled=False)
+    _write_save_through_xslt_document(
+        disabled_only,
+        include_anchor=False,
+        include_relationship=False,
+        enabled=False,
+    )
+    _write_save_through_xslt_document(
+        solution_only,
+        include_relationship=False,
+        anchor_uses_relationship=False,
+        solution_identifier="SAVE_THROUGH_XSLT_SOLUTION_DO_NOT_LEAK",
+    )
+    _write_save_through_xslt_document(
+        solution_changed,
+        include_relationship=False,
+        anchor_uses_relationship=False,
+        solution_identifier="SAVE_THROUGH_XSLT_SOLUTION_CHANGED_DO_NOT_LEAK",
+    )
+    _write_save_through_xslt_document(
+        orphaned,
+        include_anchor=False,
+        include_enabled_setting=False,
+    )
+    _write_save_through_xslt_document(renumbered, relationship_id_suffix="9")
+    _write_save_through_xslt_document(strict, strict_syntax=True)
+    _write_save_through_xslt_document(
+        wrong_relationship_type,
+        relationship_type=_OLE_OBJECT_RELATIONSHIP_TYPE,
+    )
+    _write_save_through_xslt_document(internal_target, target_mode="Internal")
+    _write_save_through_xslt_document(
+        missing_relationship,
+        include_relationship=False,
+    )
+    _write_save_through_xslt_document(duplicate_anchor, duplicate_anchor=True)
+
+    expected_inventory = {
+        "save_through_xslt_enabled_setting_count": 1,
+        "save_through_xslt_disabled_setting_count": 0,
+        "save_through_xslt_anchor_count": 1,
+        "save_through_xslt_relationship_count": 1,
+        "save_through_xslt_solution_identifier_count": 0,
+    }
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["save_through_xslt"] == expected_inventory
+    assert (
+        load_snapshot(strict).public_dict()["save_through_xslt"] == expected_inventory
+    )
+    assert load_snapshot(solution_only).public_dict()["save_through_xslt"] == {
+        "save_through_xslt_enabled_setting_count": 1,
+        "save_through_xslt_disabled_setting_count": 0,
+        "save_through_xslt_anchor_count": 1,
+        "save_through_xslt_relationship_count": 0,
+        "save_through_xslt_solution_identifier_count": 1,
+    }
+    assert load_snapshot(orphaned).public_dict()["save_through_xslt"] == {
+        "save_through_xslt_enabled_setting_count": 0,
+        "save_through_xslt_disabled_setting_count": 0,
+        "save_through_xslt_anchor_count": 0,
+        "save_through_xslt_relationship_count": 1,
+        "save_through_xslt_solution_identifier_count": 0,
+    }
+    assert load_snapshot(disabled).public_dict()["save_through_xslt"] == {
+        **expected_inventory,
+        "save_through_xslt_enabled_setting_count": 0,
+        "save_through_xslt_disabled_setting_count": 1,
+    }
+    assert load_snapshot(disabled_only).public_dict()["save_through_xslt"] == {
+        "save_through_xslt_enabled_setting_count": 0,
+        "save_through_xslt_disabled_setting_count": 1,
+        "save_through_xslt_anchor_count": 0,
+        "save_through_xslt_relationship_count": 0,
+        "save_through_xslt_solution_identifier_count": 0,
+    }
+
+    report = diff_documents(before, after)
+    assert {
+        "external_relationships_changed",
+        "save_through_xslt_inventory_changed",
+    } <= {change.kind for change in report.changes}
+    assert {
+        "external_relationships_changed",
+        "save_through_xslt_inventory_changed",
+    } <= {change.kind for change in diff_documents(after, target_changed).changes}
+    assert "save_through_xslt_inventory_changed" in {
+        change.kind for change in diff_documents(after, disabled).changes
+    }
+    assert "save_through_xslt_inventory_changed" in {
+        change.kind
+        for change in diff_documents(solution_only, solution_changed).changes
+    }
+    assert diff_documents(after, renumbered).changes == ()
+    for invalid_document in (
+        wrong_relationship_type,
+        internal_target,
+        missing_relationship,
+        duplicate_anchor,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(invalid_document)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_save_through_xslt: true
+  no_save_through_xslt_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP069",
+        "DFP070",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, renumbered), policy).findings
+    } == {"DFP069"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, orphaned), policy).findings
+    } == {"DFP069", "DFP070"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, disabled), policy).findings
+    } == {"DFP069", "DFP070"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(before, disabled_only), policy
+        ).findings
+    } == {"DFP069", "DFP070"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_profile(load_snapshot(solution_only), "json"),
+            render_report(diff_documents(solution_only, solution_changed), "markdown"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_SAVE_THROUGH_XSLT_INVENTORY_CHANGED",
+        "DFP069",
+        "DFP070",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "SAVE_THROUGH_XSLT_TARGET_DO_NOT_LEAK",
+        "SAVE_THROUGH_XSLT_CHANGED_DO_NOT_LEAK",
+        "SAVE_THROUGH_XSLT_SOLUTION_DO_NOT_LEAK",
+        "SAVE_THROUGH_XSLT_SOLUTION_CHANGED_DO_NOT_LEAK",
+        "rIdSaveThroughXslt1",
     ):
         assert marker not in rendered
 
@@ -1635,13 +1825,15 @@ def test_web_extension_content_control_markers_follow_created_precedence(
     )
 
     assert (
-        load_snapshot(created_false)
-        .taskpane_web_extensions.web_extension_bound_content_control_count
+        load_snapshot(
+            created_false
+        ).taskpane_web_extensions.web_extension_bound_content_control_count
         == 2
     )
     assert (
-        load_snapshot(created_true)
-        .taskpane_web_extensions.web_extension_bound_content_control_count
+        load_snapshot(
+            created_true
+        ).taskpane_web_extensions.web_extension_bound_content_control_count
         == 3
     )
     assert "taskpane_web_extension_inventory_changed" in {
@@ -1714,8 +1906,7 @@ def test_sensitivity_label_metadata_inventory_is_private_and_semantic(tmp_path) 
         "document_property_inventory_changed",
         "sensitivity_label_inventory_changed",
     } <= {
-        change.kind
-        for change in diff_documents(after, legacy_property_changed).changes
+        change.kind for change in diff_documents(after, legacy_property_changed).changes
     }
     assert diff_documents(after, renumbered).changes == ()
 
@@ -1896,8 +2087,7 @@ def test_package_digital_signature_inventory_is_private_and_semantic(
     before_snapshot = load_snapshot(before)
     after_snapshot = load_snapshot(after)
     assert (
-        after_snapshot.public_dict()["package_digital_signatures"]
-        == expected_inventory
+        after_snapshot.public_dict()["package_digital_signatures"] == expected_inventory
     )
     assert before_snapshot.public_dict()["package_digital_signatures"] == {
         key: 0 for key in expected_inventory
@@ -2061,8 +2251,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         assert snapshot.package_digital_signatures.xml_signature_part_count == 1
     origin_only_snapshot = load_snapshot(conventional_origin_only)
     assert (
-        origin_only_snapshot.package_digital_signatures.signature_origin_part_count
-        == 1
+        origin_only_snapshot.package_digital_signatures.signature_origin_part_count == 1
     )
     assert origin_only_snapshot.package_digital_signatures.xml_signature_part_count == 0
 
@@ -2317,9 +2506,7 @@ def test_word_document_variable_inventory_is_private_and_semantic(tmp_path) -> N
     }
     before_snapshot = load_snapshot(before)
     after_snapshot = load_snapshot(after)
-    assert (
-        after_snapshot.public_dict()["word_document_variables"] == expected_inventory
-    )
+    assert after_snapshot.public_dict()["word_document_variables"] == expected_inventory
     assert before_snapshot.public_dict()["word_document_variables"] == {
         key: 0 for key in expected_inventory
     }
@@ -2332,9 +2519,10 @@ def test_word_document_variable_inventory_is_private_and_semantic(tmp_path) -> N
     assert "word_document_variable_inventory_changed" in {
         change.kind for change in report.changes
     }
-    assert {
-        change.kind for change in diff_documents(after, value_changed).changes
-    } == {"document_settings_changed", "word_document_variable_inventory_changed"}
+    assert {change.kind for change in diff_documents(after, value_changed).changes} == {
+        "document_settings_changed",
+        "word_document_variable_inventory_changed",
+    }
 
     policy_path.write_text(
         """version: 1
@@ -2403,10 +2591,7 @@ def test_word_document_variable_field_inventory_is_private_and_semantic(
         )
 
     def instruction_text(text: str) -> str:
-        return (
-            '<w:r><w:instrText xml:space="preserve">'
-            f"{text}</w:instrText></w:r>"
-        )
+        return f'<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>'
 
     def field_char(field_type: str) -> str:
         return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
@@ -2477,10 +2662,7 @@ def test_word_document_variable_field_inventory_is_private_and_semantic(
         "document_variable_field_story_count": 2,
         "literal_document_variable_field_reference_count": 4,
         "nonliteral_document_variable_field_reference_count": 2,
-        (
-            "literal_document_variable_field_reference_"
-            "matching_stored_variable_count"
-        ): 3,
+        ("literal_document_variable_field_reference_matching_stored_variable_count"): 3,
         (
             "literal_document_variable_field_reference_"
             "not_matching_stored_variable_count"
@@ -2594,10 +2776,7 @@ def test_word_document_variable_fields_keep_revision_variants_and_document_scope
         )
 
     def inserted_instruction_text(text: str) -> str:
-        return (
-            '<w:ins w:id="2"><w:r><w:instrText>'
-            f"{text}</w:instrText></w:r></w:ins>"
-        )
+        return f'<w:ins w:id="2"><w:r><w:instrText>{text}</w:instrText></w:r></w:ins>'
 
     body_markup = "".join(
         (
@@ -2644,10 +2823,7 @@ def test_word_document_variable_fields_keep_revision_variants_and_document_scope
         "document_variable_field_story_count": 2,
         "literal_document_variable_field_reference_count": 5,
         "nonliteral_document_variable_field_reference_count": 0,
-        (
-            "literal_document_variable_field_reference_"
-            "matching_stored_variable_count"
-        ): 4,
+        ("literal_document_variable_field_reference_matching_stored_variable_count"): 4,
         (
             "literal_document_variable_field_reference_"
             "not_matching_stored_variable_count"
@@ -2803,10 +2979,7 @@ def test_word_hyperlink_fields_keep_revision_variants_privately(tmp_path) -> Non
         )
 
     def inserted_instruction_text(text: str) -> str:
-        return (
-            '<w:ins w:id="2"><w:r><w:instrText>'
-            f"{text}</w:instrText></w:r></w:ins>"
-        )
+        return f'<w:ins w:id="2"><w:r><w:instrText>{text}</w:instrText></w:r></w:ins>'
 
     body_markup = "".join(
         (
@@ -3356,8 +3529,7 @@ def test_word_vml_external_image_inventory_is_private_and_semantic(tmp_path) -> 
     raw_source_changed_snapshot = load_snapshot(raw_source_changed)
     renumbered_snapshot = load_snapshot(renumbered)
     assert (
-        after_snapshot.public_dict()["word_vml_external_images"]
-        == expected_inventory
+        after_snapshot.public_dict()["word_vml_external_images"] == expected_inventory
     )
     assert after_snapshot.public_dict()["relationships"] == {
         "relationship_count": 6,
@@ -3535,8 +3707,7 @@ def test_word_vml_image_hyperlink_inventory_is_private_and_semantic(tmp_path) ->
     image_id_changed_snapshot = load_snapshot(image_id_changed)
     renumbered_snapshot = load_snapshot(renumbered)
     assert (
-        after_snapshot.public_dict()["word_vml_image_hyperlinks"]
-        == expected_inventory
+        after_snapshot.public_dict()["word_vml_image_hyperlinks"] == expected_inventory
     )
     assert after_snapshot.public_dict()["relationships"] == {
         "relationship_count": 6,
@@ -3813,9 +3984,7 @@ rules:
 
     gated = apply_policy(report, policy)
     changed_gated = apply_policy(diff_documents(after, changed), policy)
-    moniker_changed_gated = apply_policy(
-        diff_documents(after, moniker_changed), policy
-    )
+    moniker_changed_gated = apply_policy(diff_documents(after, moniker_changed), policy)
     rendered = "\n".join(
         (
             render_profile(after_snapshot, "json"),
@@ -3946,13 +4115,13 @@ def test_word_vml_embedded_ole_object_inventory_is_private_and_semantic(
         "embedded_control_relationship_count": 0,
         "embedded_control_part_count": 0,
     }
+    assert before_snapshot.public_dict()["word_vml_embedded_ole_objects"] == {
+        key: 0 for key in expected_inventory
+    }
     assert (
-        before_snapshot.public_dict()["word_vml_embedded_ole_objects"]
-        == {key: 0 for key in expected_inventory}
-    )
-    assert (
-        after_snapshot.public_dict()["word_vml_linked_ole_objects"]
-        ["vml_linked_ole_object_count"]
+        after_snapshot.public_dict()["word_vml_linked_ole_objects"][
+            "vml_linked_ole_object_count"
+        ]
         == 1
     )
     for inventory_name in (
@@ -3979,10 +4148,9 @@ def test_word_vml_embedded_ole_object_inventory_is_private_and_semantic(
         "embedded_control_relationship_count": 0,
         "embedded_control_part_count": 0,
     }
-    assert (
-        orphaned_snapshot.public_dict()["word_vml_embedded_ole_objects"]
-        == {key: 0 for key in expected_inventory}
-    )
+    assert orphaned_snapshot.public_dict()["word_vml_embedded_ole_objects"] == {
+        key: 0 for key in expected_inventory
+    }
     with pytest.raises(DocumentFormatError, match="unavailable relationship"):
         load_snapshot(unavailable_marker)
     assert (
@@ -4053,9 +4221,7 @@ rules:
 
     gated = apply_policy(report, policy)
     target_changed_gated = apply_policy(diff_documents(after, target_changed), policy)
-    program_changed_gated = apply_policy(
-        diff_documents(after, program_changed), policy
-    )
+    program_changed_gated = apply_policy(diff_documents(after, program_changed), policy)
     update_mode_changed_gated = apply_policy(
         diff_documents(after, update_mode_changed), policy
     )
@@ -4196,8 +4362,7 @@ def test_word_object_link_inventory_is_private_and_semantic(tmp_path) -> None:
     with pytest.raises(DocumentFormatError, match="unavailable relationship"):
         load_snapshot(unavailable_marker)
     assert (
-        load_snapshot(strict).public_dict()["word_object_links"]
-        == expected_inventory
+        load_snapshot(strict).public_dict()["word_object_links"] == expected_inventory
     )
     assert (
         renumbered_snapshot.word_object_links.signature
@@ -4326,8 +4491,7 @@ def test_word_embedded_control_inventory_is_private_and_semantic(tmp_path) -> No
     _write_word_embedded_control_document(
         target_changed,
         external_target=(
-            "https://CHANGED_WORD_EMBEDDED_CONTROL_TARGET_DO_NOT_LEAK.invalid/"
-            "control"
+            "https://CHANGED_WORD_EMBEDDED_CONTROL_TARGET_DO_NOT_LEAK.invalid/control"
         ),
     )
     _write_word_embedded_control_document(
@@ -4371,9 +4535,7 @@ def test_word_embedded_control_inventory_is_private_and_semantic(tmp_path) -> No
     target_changed_snapshot = load_snapshot(target_changed)
     name_changed_snapshot = load_snapshot(name_changed)
     renumbered_snapshot = load_snapshot(renumbered)
-    assert (
-        after_snapshot.public_dict()["word_embedded_controls"] == expected_inventory
-    )
+    assert after_snapshot.public_dict()["word_embedded_controls"] == expected_inventory
     assert after_snapshot.public_dict()["relationships"] == {
         "relationship_count": 7,
         "external_relationship_count": 3,
@@ -4703,8 +4865,7 @@ def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     )
     write_document(
         container_text,
-        '<w:docVars>unexpected<w:docVar w:name="name" w:val="value"/>'
-        "</w:docVars>",
+        '<w:docVars>unexpected<w:docVar w:name="name" w:val="value"/></w:docVars>',
     )
     write_document(unexpected_child, "<w:docVars><w:unexpected/></w:docVars>")
     write_document(
@@ -4721,18 +4882,15 @@ def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     )
     write_document(
         long_name,
-        f'<w:docVars><w:docVar w:name="{"N" * 256}" w:val="value"/>'
-        "</w:docVars>",
+        f'<w:docVars><w:docVar w:name="{"N" * 256}" w:val="value"/></w:docVars>',
     )
     write_document(
         supplementary_long_name,
-        f'<w:docVars><w:docVar w:name="{"🙂" * 128}" w:val="value"/>'
-        "</w:docVars>",
+        f'<w:docVars><w:docVar w:name="{"🙂" * 128}" w:val="value"/></w:docVars>',
     )
     write_document(
         long_value,
-        f'<w:docVars><w:docVar w:name="name" w:val="{"V" * 65_281}"/>'
-        "</w:docVars>",
+        f'<w:docVars><w:docVar w:name="name" w:val="{"V" * 65_281}"/></w:docVars>',
     )
     write_document(
         unsupported_attribute,
@@ -4746,8 +4904,7 @@ def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     )
     write_document(
         residual_text,
-        '<w:docVars><w:docVar w:name="name" w:val="value"/>'
-        "unexpected</w:docVars>",
+        '<w:docVars><w:docVar w:name="name" w:val="value"/>unexpected</w:docVars>',
     )
     write_document(
         invalid_settings_root,
@@ -4771,8 +4928,7 @@ def test_word_document_variable_discovery_and_invalid_markup(tmp_path) -> None:
     empty_snapshot = load_snapshot(empty_value)
     assert empty_snapshot.word_document_variables.document_variable_count == 1
     assert (
-        empty_snapshot.word_document_variables.empty_document_variable_value_count
-        == 1
+        empty_snapshot.word_document_variables.empty_document_variable_value_count == 1
     )
 
     for document in (
@@ -4938,8 +5094,7 @@ def test_word_permission_range_discovery_and_invalid_markup(tmp_path) -> None:
     _write_word_permission_range_document(
         multi_story,
         body_markup=(
-            '<w:permStart w:id="shared" w:edGrp="current"/>'
-            '<w:permEnd w:id="shared"/>'
+            '<w:permStart w:id="shared" w:edGrp="current"/><w:permEnd w:id="shared"/>'
         ),
         header_markup=(
             '<w:permStart w:id="shared" w:edGrp="administrators"/>'
@@ -4974,8 +5129,7 @@ def test_word_permission_range_discovery_and_invalid_markup(tmp_path) -> None:
     _write_word_permission_range_document(
         duplicate_end_identifier,
         body_markup=(
-            '<w:permStart w:id="same"/><w:permEnd w:id="same"/>'
-            '<w:permEnd w:id="same"/>'
+            '<w:permStart w:id="same"/><w:permEnd w:id="same"/><w:permEnd w:id="same"/>'
         ),
     )
     _write_word_permission_range_document(
@@ -4999,10 +5153,7 @@ def test_word_permission_range_discovery_and_invalid_markup(tmp_path) -> None:
     )
 
     multi_story_snapshot = load_snapshot(multi_story)
-    assert (
-        multi_story_snapshot.word_permission_ranges.permission_range_story_count
-        == 2
-    )
+    assert multi_story_snapshot.word_permission_ranges.permission_range_story_count == 2
     assert (
         multi_story_snapshot.word_permission_ranges.paired_permission_range_count == 2
     )
@@ -5013,16 +5164,11 @@ def test_word_permission_range_discovery_and_invalid_markup(tmp_path) -> None:
     )
     strict_snapshot = load_snapshot(strict)
     assert strict_snapshot.word_permission_ranges.paired_permission_range_count == 1
-    assert (
-        strict_snapshot.word_permission_ranges.editor_group_contributors_count == 1
-    )
+    assert strict_snapshot.word_permission_ranges.editor_group_contributors_count == 1
     unmatched_snapshot = load_snapshot(unmatched)
+    assert unmatched_snapshot.word_permission_ranges.paired_permission_range_count == 0
     assert (
-        unmatched_snapshot.word_permission_ranges.paired_permission_range_count == 0
-    )
-    assert (
-        unmatched_snapshot.word_permission_ranges.unpaired_permission_start_count
-        == 1
+        unmatched_snapshot.word_permission_ranges.unpaired_permission_start_count == 1
     )
     assert unmatched_snapshot.word_permission_ranges.unpaired_permission_end_count == 1
 
@@ -5855,7 +6001,7 @@ def _write_sensitivity_label_document(
     label_method = "" if omit_label_method else ' method="Privileged"'
     label_root_name = "notLabelList" if wrong_label_info_root else "labelList"
     label_info_xml = (
-        f'<clbl:{label_root_name} '
+        f"<clbl:{label_root_name} "
         f'xmlns:clbl="{_SENSITIVITY_LABEL_NAMESPACE}" '
         'xmlns:future="urn:docfence:future-label-extension">'
         '<clbl:label id="{A0A00000-0000-0000-0000-000000000010}" '
@@ -6076,7 +6222,7 @@ def _write_package_digital_signature_document(
         ""
         if omit_signature_method
         else (
-            '<ds:SignatureMethod '
+            "<ds:SignatureMethod "
             'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
         )
     )
@@ -6085,7 +6231,7 @@ def _write_package_digital_signature_document(
         f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
         'Id="idPackageSignature">'
         "<ds:SignedInfo>"
-        '<ds:CanonicalizationMethod '
+        "<ds:CanonicalizationMethod "
         'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
         f"{signature_method}"
         '<ds:Reference URI="#idPackageObject">'
@@ -6099,7 +6245,7 @@ def _write_package_digital_signature_document(
         "</ds:X509Data></ds:KeyInfo>"
         '<ds:Object Id="idPackageObject"><ds:Manifest>'
         '<ds:Reference URI="/word/document.xml?ContentType='
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.'
+        "application/vnd.openxmlformats-officedocument.wordprocessingml."
         'document.main+xml">'
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
         "<ds:DigestValue>PACKAGE_MANIFEST_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
@@ -6117,8 +6263,7 @@ def _write_package_digital_signature_document(
     ]
     if include_origin and include_origin_content_type:
         content_types.append(
-            f'<Default Extension="sigs" '
-            f'ContentType="{origin_content_type}"/>'
+            f'<Default Extension="sigs" ContentType="{origin_content_type}"/>'
         )
     if include_xml_signature and include_xml_signature_content_type:
         content_types.append(
@@ -6247,8 +6392,7 @@ def _write_word_protection_document(
         ).encode()
     if settings_relationship_source == "word/glossary/document.xml":
         entries[settings_relationship_source] = (
-            f'<w:glossaryDocument xmlns:w="{W}"><w:docParts/>'
-            "</w:glossaryDocument>"
+            f'<w:glossaryDocument xmlns:w="{W}"><w:docParts/></w:glossaryDocument>'
         ).encode()
     if include_settings_relationship:
         if settings_target_mode == "Internal":
@@ -6263,9 +6407,7 @@ def _write_word_protection_document(
         source_directory, _, source_basename = settings_relationship_source.rpartition(
             "/"
         )
-        relationship_part_name = (
-            f"{source_directory}/_rels/{source_basename}.rels"
-        )
+        relationship_part_name = f"{source_directory}/_rels/{source_basename}.rels"
         entries[relationship_part_name] = (
             f'<Relationships xmlns="{PR}"><Relationship Id="rIdSettings1" '
             f'Type="{settings_relationship_type}" Target="{target}"'
@@ -6311,8 +6453,7 @@ def _write_document_variable_field_document(
             "</w:p><w:sectPr/></w:body></w:document>"
         ).encode(),
         "word/settings.xml": (
-            f'<w:settings xmlns:w="{word_namespace}">'
-            f"{settings_markup}</w:settings>"
+            f'<w:settings xmlns:w="{word_namespace}">{settings_markup}</w:settings>'
         ).encode(),
     }
     if header_markup is not None:
@@ -6367,10 +6508,7 @@ def _write_hyperlink_field_document(
         )
 
     def instruction_text(text: str) -> str:
-        return (
-            '<w:r><w:instrText xml:space="preserve">'
-            f"{text}</w:instrText></w:r>"
-        )
+        return f'<w:r><w:instrText xml:space="preserve">{text}</w:instrText></w:r>'
 
     def field_char(field_type: str) -> str:
         return f'<w:r><w:fldChar w:fldCharType="{field_type}"/></w:r>'
@@ -6406,11 +6544,10 @@ def _write_hyperlink_field_document(
         fields = "".join(
             (
                 simple_field(
-                    f'HYPERLINK "{literal_destination}" '
-                    '\\o "TOOLTIP_DO_NOT_LEAK"'
+                    f'HYPERLINK "{literal_destination}" \\o "TOOLTIP_DO_NOT_LEAK"'
                 ),
                 complex_field(
-                    ' hyperlink SECOND_DESTINATION_DO_NOT_LEAK '
+                    " hyperlink SECOND_DESTINATION_DO_NOT_LEAK "
                     '\\t "TARGET_FRAME_DO_NOT_LEAK"'
                 ),
                 simple_field(
@@ -6418,8 +6555,7 @@ def _write_hyperlink_field_document(
                     '\\o "TOOLTIP_DO_NOT_LEAK"'
                 ),
                 complex_field(
-                    'HYPERLINK \\L SECOND_INTERNAL_LOCATION_DO_NOT_LEAK '
-                    "\\* MERGEFORMAT"
+                    "HYPERLINK \\L SECOND_INTERNAL_LOCATION_DO_NOT_LEAK \\* MERGEFORMAT"
                 ),
                 simple_field(
                     'HYPERLINK "COMPOUND_DESTINATION_DO_NOT_LEAK" '
@@ -6441,9 +6577,7 @@ def _write_hyperlink_field_document(
         )
     )
     header_field = (
-        simple_field("HYPERLINK HEADER_HYPERLINK_DO_NOT_LEAK")
-        if include_fields
-        else ""
+        simple_field("HYPERLINK HEADER_HYPERLINK_DO_NOT_LEAK") if include_fields else ""
     )
     entries = {
         "[Content_Types].xml": (
@@ -6600,16 +6734,16 @@ def _write_drawing_hyperlink_document(
     if include_markup:
         body_markup = "".join(
             (
-                "<w:drawing><wp:inline><wp:docPr id=\"1\" "
-                "name=\"DRAWING_OBJECT_NAME_DO_NOT_LEAK\">"
+                '<w:drawing><wp:inline><wp:docPr id="1" '
+                'name="DRAWING_OBJECT_NAME_DO_NOT_LEAK">'
                 f'<a:hlinkClick r:id="{external_relationship_id}" '
                 f'action="{action}" '
                 'invalidUrl="DRAWING_INVALID_URL_DO_NOT_LEAK" '
                 'tooltip="DRAWING_TOOLTIP_DO_NOT_LEAK" '
                 'tgtFrame="DRAWING_TARGET_FRAME_DO_NOT_LEAK" '
                 'history="true" highlightClick="false" endSnd="true"/>'
-                "</wp:docPr><pic:pic><pic:nvPicPr><pic:cNvPr id=\"101\" "
-                "name=\"DRAWING_PICTURE_OBJECT_DO_NOT_LEAK\">"
+                '</wp:docPr><pic:pic><pic:nvPicPr><pic:cNvPr id="101" '
+                'name="DRAWING_PICTURE_OBJECT_DO_NOT_LEAK">'
                 f'<a:hlinkClick r:id="{external_relationship_id}"/>'
                 "</pic:cNvPr></pic:nvPicPr></pic:pic>"
                 "</wp:inline></w:drawing>",
@@ -6983,9 +7117,7 @@ def _write_vml_linked_ole_object_document(
     include_markup: bool = True,
     include_orphan_ole_relationship: bool = False,
     include_unavailable_link_marker: bool = False,
-    external_target: str = (
-        "https://VML_LINKED_OLE_TARGET_DO_NOT_LEAK.invalid/source"
-    ),
+    external_target: str = ("https://VML_LINKED_OLE_TARGET_DO_NOT_LEAK.invalid/source"),
     moniker: str = "VML_LINKED_OLE_MONIKER_DO_NOT_LEAK",
     external_relationship_id: str = "rIdVmlLinkedOleExternal",
     word_namespace: str = W,
@@ -7201,7 +7333,7 @@ def _write_vml_embedded_ole_object_document(
                 'r:id="rIdVmlEmbeddedOleLink" UpdateMode="Always"/>'
                 "</w:object></w:r>",
                 "<w:r><w:object>"
-                '<w:objectEmbed '
+                "<w:objectEmbed "
                 'w:progId="VML_EMBEDDED_OLE_WORD_OBJECT_EMBED_PROGID_DO_NOT_LEAK" '
                 'r:id="rIdVmlEmbeddedOleWordObjectEmbed"/>'
                 "</w:object></w:r>",
@@ -7569,8 +7701,7 @@ def _write_word_embedded_control_document(
                 'Target="WORD_EMBEDDED_CONTROL_INTERNAL_PAYLOAD_DO_NOT_LEAK.bin"/>'
                 "</Relationships>"
             ).encode(),
-            "word/activeX/"
-            "WORD_EMBEDDED_CONTROL_INTERNAL_PAYLOAD_DO_NOT_LEAK.bin": (
+            "word/activeX/WORD_EMBEDDED_CONTROL_INTERNAL_PAYLOAD_DO_NOT_LEAK.bin": (
                 b"WORD_EMBEDDED_CONTROL_INTERNAL_PAYLOAD_DO_NOT_LEAK"
             ),
             "word/activeX/WORD_EMBEDDED_CONTROL_HEADER_TARGET_DO_NOT_LEAK.xml": (
@@ -7584,8 +7715,7 @@ def _write_word_embedded_control_document(
                 'Target="WORD_EMBEDDED_CONTROL_HEADER_PAYLOAD_DO_NOT_LEAK.bin"/>'
                 "</Relationships>"
             ).encode(),
-            "word/activeX/"
-            "WORD_EMBEDDED_CONTROL_HEADER_PAYLOAD_DO_NOT_LEAK.bin": (
+            "word/activeX/WORD_EMBEDDED_CONTROL_HEADER_PAYLOAD_DO_NOT_LEAK.bin": (
                 b"WORD_EMBEDDED_CONTROL_HEADER_PAYLOAD_DO_NOT_LEAK"
             ),
         }
@@ -7802,9 +7932,7 @@ def _write_vml_hyperlink_document(
                 'target="VML_GROUP_TARGET_FRAME_DO_NOT_LEAK">'
                 '<v:oval href="https://VML_OVAL_HREF_DO_NOT_LEAK.invalid"/>'
                 "</v:group></w:pict></w:r>",
-                "<w:r><w:pict>"
-                '<v:arc href=""/>'
-                "</w:pict></w:r>",
+                '<w:r><w:pict><v:arc href=""/></w:pict></w:r>',
                 "<w:r><w:pict>"
                 '<v:curve href="https://VML_CURVE_HREF_DO_NOT_LEAK.invalid"/>'
                 "</w:pict></w:r>",
@@ -8032,7 +8160,7 @@ def _write_document_task_and_web_extension_document(
 
     def task_user(element_name: str, role: str) -> str:
         return (
-            f'<t:{element_name}\n'
+            f"<t:{element_name}\n"
             f' userId="{task_marker}_{role}_DO_NOT_LEAK"\n'
             f' userName="{task_marker}_{role}_NAME_DO_NOT_LEAK"\n'
             f' userProvider="{task_marker}_PROVIDER_DO_NOT_LEAK"/>'
@@ -8047,16 +8175,16 @@ def _write_document_task_and_web_extension_document(
         children = [task_user("Attribution", "USER")]
         if anchor:
             children.append(
-                f'<t:Anchor><t:Comment\n'
+                f"<t:Anchor><t:Comment\n"
                 f' id="{task_marker}_EVENT_COMMENT_DO_NOT_LEAK"/>'
                 "</t:Anchor>"
             )
         children.append(action)
         return (
-            f'<t:Event\n'
+            f"<t:Event\n"
             f' id="{{00000000-0000-0000-0000-{number:012d}}}"\n'
             f' time="2026-08-01T{number - 1:02d}:00:00Z">'
-            f'{"".join(children)}</t:Event>'
+            f"{''.join(children)}</t:Event>"
         )
 
     task_events = "".join(
@@ -8086,7 +8214,7 @@ def _write_document_task_and_web_extension_document(
     )
     document_task_root_name = "notTasks" if wrong_document_task_root else "Tasks"
     document_task_xml = (
-        f'<t:{document_task_root_name}\n'
+        f"<t:{document_task_root_name}\n"
         f' xmlns:t="{_DOCUMENT_TASK_NAMESPACE}">\n'
         '<t:Task id="{C1F1012D-3D7D-4C88-A44C-9DEB23456789}">\n'
         "<t:Anchor><t:Comment\n"
@@ -8114,7 +8242,7 @@ def _write_document_task_and_web_extension_document(
             "</wetp:taskpane>"
         )
     taskpane_xml = (
-        f'<wetp:{taskpane_root_name}\n'
+        f"<wetp:{taskpane_root_name}\n"
         f' xmlns:wetp="{_TASKPANE_WEB_EXTENSION_TASKPANES_NAMESPACE}"\n'
         f' xmlns:r="{R}">{taskpane_markup}</wetp:{taskpane_root_name}>'
     )
@@ -8147,7 +8275,7 @@ def _write_document_task_and_web_extension_document(
     secondary_property_name = f"{web_extension_marker}_SECOND_PROPERTY_DO_NOT_LEAK"
     secondary_property_value = f"{web_extension_marker}_SECOND_VALUE_DO_NOT_LEAK"
     primary_web_extension_xml = (
-        f'<we:{web_extension_root_name}\n'
+        f"<we:{web_extension_root_name}\n"
         f' xmlns:we="{_TASKPANE_WEB_EXTENSION_NAMESPACE}"\n'
         f' id="{web_extension_marker}_PRIMARY_DO_NOT_LEAK">\n'
         f"{web_reference('REFERENCE', '1.0')}\n"
@@ -8165,7 +8293,7 @@ def _write_document_task_and_web_extension_document(
         f"</we:{web_extension_root_name}>"
     )
     secondary_web_extension_xml = (
-        f'<we:{web_extension_root_name}\n'
+        f"<we:{web_extension_root_name}\n"
         f' xmlns:we="{_TASKPANE_WEB_EXTENSION_NAMESPACE}"\n'
         f' id="{web_extension_marker}_SECONDARY_DO_NOT_LEAK">\n'
         f"{web_reference('SECOND_REFERENCE', '1.0')}\n"
@@ -8184,7 +8312,7 @@ def _write_document_task_and_web_extension_document(
             'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
             '<Default Extension="xml" ContentType="application/xml"/>'
             f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
-            f'{"".join(feature_overrides)}</Types>'
+            f"{''.join(feature_overrides)}</Types>"
         ).encode(),
         "word/document.xml": (
             f'<w:document xmlns:w="{W}" xmlns:w15="{_WORD_2012_NAMESPACE}"><w:body>'
@@ -8195,7 +8323,7 @@ def _write_document_task_and_web_extension_document(
     if document_relationships:
         entries["word/_rels/document.xml.rels"] = (
             f'<Relationships xmlns="{PR}">'
-            f'{"".join(document_relationships)}'
+            f"{''.join(document_relationships)}"
             "</Relationships>"
         ).encode()
     if include_document_tasks:
@@ -8208,11 +8336,9 @@ def _write_document_task_and_web_extension_document(
         )
     if taskpane_relationships:
         taskpane_directory, _, taskpane_filename = taskpane_part_name.rpartition("/")
-        entries[
-            f"{taskpane_directory}/_rels/{taskpane_filename}.rels"
-        ] = (
+        entries[f"{taskpane_directory}/_rels/{taskpane_filename}.rels"] = (
             f'<Relationships xmlns="{PR}">'
-            f'{"".join(taskpane_relationships)}'
+            f"{''.join(taskpane_relationships)}"
             "</Relationships>"
         ).encode()
 
@@ -8634,6 +8760,87 @@ def _write_glossary_attached_template_document(
             "</Relationships>"
         ).encode(),
     }
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_save_through_xslt_document(
+    path,
+    *,
+    include_configuration: bool = True,
+    include_enabled_setting: bool = True,
+    include_anchor: bool = True,
+    include_relationship: bool = True,
+    anchor_uses_relationship: bool = True,
+    enabled: bool = True,
+    relationship_id_suffix: str = "1",
+    strict_syntax: bool = False,
+    relationship_type: str = _SAVE_THROUGH_XSLT_RELATIONSHIP_TYPE,
+    target_mode: str = "External",
+    transform_target: str = "https://example.invalid/SAVE_THROUGH_XSLT_TARGET_DO_NOT_LEAK.xslt",
+    solution_identifier: str | None = None,
+    duplicate_anchor: bool = False,
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    relationship_namespace = _STRICT_RELATIONSHIP_NAMESPACE if strict_syntax else R
+    transform_relationship_type = (
+        _STRICT_SAVE_THROUGH_XSLT_RELATIONSHIP_TYPE
+        if strict_syntax
+        else relationship_type
+    )
+    transform_id = f"rIdSaveThroughXslt{relationship_id_suffix}"
+    enabled_markup = (
+        f'<w:useXSLTWhenSaving w:val="{str(enabled).lower()}"/>'
+        if include_enabled_setting
+        else ""
+    )
+    relationship_markup = f' r:id="{transform_id}"' if anchor_uses_relationship else ""
+    solution_markup = (
+        f' w:solutionID="{solution_identifier}"'
+        if solution_identifier is not None
+        else ""
+    )
+    anchor_markup = (
+        f"<w:saveThroughXslt{relationship_markup}{solution_markup}/>"
+        if include_anchor
+        else ""
+    )
+    if duplicate_anchor:
+        anchor_markup *= 2
+    target_mode_markup = (
+        f' TargetMode="{target_mode}"' if target_mode != "Internal" else ""
+    )
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            '<Default Extension="rels" '
+            'ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_configuration:
+        entries["word/settings.xml"] = (
+            f'<w:settings xmlns:w="{word_namespace}" '
+            f'xmlns:r="{relationship_namespace}">'
+            f"{enabled_markup}{anchor_markup}</w:settings>"
+        ).encode()
+        if include_relationship:
+            entries["word/_rels/settings.xml.rels"] = (
+                f'<Relationships xmlns="{PR}">'
+                f'<Relationship Id="{transform_id}" '
+                f'Type="{transform_relationship_type}" '
+                f'Target="{transform_target}"{target_mode_markup}/>'
+                "</Relationships>"
+            ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

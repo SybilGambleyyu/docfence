@@ -11,7 +11,8 @@ comments, reviewer metadata, relationship targets, field instructions, style
 identifiers, custom XML, macro bytes, embedded-object bytes, and
 alternative-format-import bytes, document-property names, and document-property
 values, mail-merge configuration, source/header targets, connection strings,
-queries, field mappings, recipient data, data-binding XPath expressions,
+queries, field mappings, recipient data, XSLT-on-single-XML-save transform
+targets and solution identifiers, data-binding XPath expressions,
 namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
 values, external-source field paths, connections, queries, application/item
 references, external template/subdocument/frame-source targets, and frame names
@@ -167,6 +168,17 @@ Settings part. Names, values, and paths remain private; public output is
 limited to container, variable, and empty-value counts. Full recognized
 containers are privately fingerprinted, so a same-count name or value rewrite
 remains review-visible without placing automation state into a CI artifact.
+
+XSLT-on-single-XML-save configuration receives a separate private-digest
+treatment. DocFence inventories direct `w:useXSLTWhenSaving` and
+`w:saveThroughXslt` settings from every discovered Document Settings part, as
+well as standard `transform` relationships from those parts. A
+relationship-backed anchor must name a standard external transform
+relationship; a local `w:solutionID`-only anchor is retained only as stored
+configuration evidence. Reports expose aggregate enabled-setting,
+disabled-setting, anchor, relationship, and solution-identifier counts while targets, relationship IDs,
+solution identifiers, Settings-part paths, and fingerprints remain private.
+DocFence does not resolve, retrieve, parse, execute, or apply an XSLT.
 
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
@@ -445,7 +457,11 @@ provenance or sensitivity. The custom-property candidate gate is limited to
 stored custom definitions and is not a general PII detector. Mail-merge counts
 are stored-state evidence, not proof that Word will access a source, run a
 query, or merge recipients. DocFence does not identify, classify, or disclose
-the recipient records or connection details a package may retain. Content-control
+the recipient records or connection details a package may retain.
+XSLT-on-single-XML-save counts are stored-state evidence, not proof that Word
+will save a document as a single XML file, apply a transform, retrieve a
+target, or create any particular output. DocFence does not resolve a local
+solution identifier or assess transform behavior or safety. Content-control
 data-binding counts are stored-state evidence, not proof that a given XPath
 selects a node, that Word will update the visible control, or that an unscoped
 mapping uses any particular custom XML part. DocFence does not evaluate XPath,

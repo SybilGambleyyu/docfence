@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.27 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.28 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -12,7 +12,8 @@ following properties:
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
-  state, Word `HYPERLINK` field-reference state, direct WordprocessingML
+  state, Word Settings XSLT-on-single-XML-save state, Word `HYPERLINK`
+  field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
   linked-picture markup state, direct legacy VML shape-link `href` markup
@@ -95,6 +96,13 @@ following properties:
   findings; and malformed containers/leaves, attributes, required names/values,
   SDK length limits, nonblank text, duplicate containers, and external Settings
   relationships;
+- XSLT-on-single-XML-save configuration is separately inventoried from generic
+  Settings and external-relationship changes. Tests cover enabled and disabled
+  settings, relationship-backed and local-identifier-only anchors, residual
+  relationships, Transitional and Strict namespaces, same-count target and
+  solution-identifier rewrites, relationship-ID renumbering, privacy
+  redaction, policy findings, and malformed relationship type, target mode,
+  missing relationship, and duplicate-anchor state;
 - `DOCVARIABLE` field references are separately inventoried from generic field
   counts and stored-variable state. Tests cover simple and complete complex
   encodings, quoted names, trailing Word formatting switches, nested/dynamic
@@ -267,8 +275,9 @@ following properties:
 - policy failures return a nonzero CI status and SARIF uses no source location;
 - DTD/entity markup, unsafe ZIP member names, and `w:altChunk` markup without a
   matching internal import relationship, malformed recognized document-property
-  roots, malformed recognized mail-merge relationship references, and malformed
-  recognized data-binding custom-XML-properties relationships, and malformed
+  roots, malformed recognized mail-merge relationship references, malformed
+  recognized save-through-XSLT relationship/anchor state, malformed recognized
+  data-binding custom-XML-properties relationships, and malformed
   recognized external-document dependency relationship/anchor state, malformed
   modern-comment metadata roots, external modern-comment metadata
   relationships, document-task roots/relationships, task-pane or
@@ -558,5 +567,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.27 contract; see
+only, not field evaluation. Those limits are explicit in the 0.28 contract; see
 [threat model](threat-model.md).

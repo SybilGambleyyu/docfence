@@ -670,6 +670,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.save_through_xslt.signature != after.save_through_xslt.signature:
+        changes.append(
+            Change(
+                kind="save_through_xslt_inventory_changed",
+                message="Stored XSLT-on-single-XML-save inventory changed.",
+                details={
+                    "before": before.save_through_xslt.public_dict(),
+                    "after": after.save_through_xslt.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

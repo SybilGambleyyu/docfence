@@ -18,7 +18,8 @@ WordprocessingML embedded-control-anchor
 relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
-configuration and recipient-data state, OPC package digital-signature material,
+configuration and recipient-data state, custom XSLT-on-single-XML-save
+configuration, OPC package digital-signature material,
 Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
 password-verifier material,
@@ -100,7 +101,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.27 focuses on Office Open XML Word documents and templates and
+Version 0.28 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -128,7 +129,7 @@ deliberately keeps a small, inspectable contract:
   package digital-signature material, Word editing/write-protection,
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
-  mail-merge, content-control
+  mail-merge, XSLT-on-single-XML-save transform configuration, content-control
   data-binding, modern-comment metadata,
   document-task workflow state, task-pane Office web-extension configuration
   and content-control binding markers,
@@ -704,6 +705,24 @@ or parsing fails closed. A residual recognized relationship remains visible even
 when no current anchor names it. DocFence never retrieves, opens, imports,
 renders, authenticates to, or judges the safety of any dependency target.
 
+XSLT-on-single-XML-save configuration is recorded separately from generic
+Settings and external-relationship changes. `w:saveThroughXslt` can store a
+custom transform for an application to use only when it saves a document as a
+single XML file; `w:useXSLTWhenSaving` controls that optional behavior.
+DocFence inventories direct settings leaves and standard `transform`
+relationships from every discovered Document Settings part. A
+relationship-backed anchor must use the expected relationship type and
+`TargetMode="External"`; a local `w:solutionID`-only anchor is stored as
+application-defined configuration evidence without any lookup. Reports contain
+only enabled-setting, disabled-setting, anchor, relationship, and
+solution-identifier counts;
+transform targets, relationship IDs, solution identifiers, Settings-part paths,
+and fingerprints remain private. `require_no_save_through_xslt` provides a
+clean-handoff gate, while `no_save_through_xslt_changes` protects an approved
+baseline. DocFence never resolves, retrieves, parses, executes, or applies an
+XSLT, and it makes no claim that Word will save a single XML file, contact a
+target, or produce any particular output.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -732,6 +751,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_alternative_format_imports: true
   require_no_custom_document_properties: true
   require_no_mail_merge: true
+  require_no_save_through_xslt: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -761,6 +781,7 @@ later mutation:
   no_alternative_format_import_changes: true
   no_document_property_changes: true
   no_mail_merge_changes: true
+  no_save_through_xslt_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -792,7 +813,8 @@ SHA-256 fingerprints. Public models and renderers intentionally omit package
 part names, paragraph content, reviewer identity, dates, comment content,
 relationship targets, field instructions, style identifiers and names, custom
 XML values, document-property names and values, mail-merge configuration and
-recipient data, data-binding XPath expressions, prefix mappings, storage IDs,
+recipient data, XSLT transform targets and solution identifiers, data-binding
+XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
 external template/subdocument/frame-source targets, and all fingerprints.
 Modern-comment author/contact/provider identifiers, paragraph and durable IDs,
@@ -839,6 +861,13 @@ The mail-merge boundary follows the Open XML SDK's
 [`w:odso` model](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.datasourceobject?view=openxml-3.0.1)
 and Microsoft's documentation that accepting a linked mail-merge source can
 [run its SQL query](https://support.microsoft.com/en-us/word/you-receive-the-opening-this-will-run-the-following-sql-command-message-when-you-open-a-word-mail-me).
+The XSLT-on-single-XML-save boundary follows the Open XML SDK's
+[`w:saveThroughXslt` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.savethroughxslt?view=openxml-3.0.1)
+and [`w:useXSLTWhenSaving` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.usexsltwhensaving?view=openxml-3.0.1),
+plus the OOXML [XSL Transformation relationship
+contract](https://ooxml.info/docs/11/11.9/). Those sources define the
+settings-only, single-XML-save behavior and the required external transform
+relationship; DocFence records that stored configuration without following it.
 The data-binding boundary follows the Open XML SDK's
 [`w:dataBinding` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.databinding?view=openxml-3.0.1)
 and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api/word.xmlmapping),

@@ -34,6 +34,8 @@ _RULES: Final = {
     "require_no_custom_document_properties": "DFP020",
     "require_no_mail_merge": "DFP021",
     "no_mail_merge_changes": "DFP022",
+    "require_no_save_through_xslt": "DFP069",
+    "no_save_through_xslt_changes": "DFP070",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -514,6 +516,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_save_through_xslt_changes") and (
+        before.save_through_xslt.signature != after.save_through_xslt.signature
+    ):
+        findings.append(
+            _finding(
+                "no_save_through_xslt_changes",
+                "XSLT-on-single-XML-save inventory changed.",
+                {
+                    "before": before.save_through_xslt.public_dict(),
+                    "after": after.save_through_xslt.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -872,6 +887,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_mail_merge",
                 "Candidate contains stored mail-merge configuration or data state.",
                 after.mail_merge.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_save_through_xslt") and any(
+        after.save_through_xslt.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_save_through_xslt",
+                "Candidate contains stored XSLT-on-single-XML-save configuration.",
+                after.save_through_xslt.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

@@ -110,6 +110,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
         _word_permission_range_section(document.get("word_permission_ranges", {}))
     )
     lines.extend(_mail_merge_section(document.get("mail_merge", {})))
+    lines.extend(_save_through_xslt_section(document.get("save_through_xslt", {})))
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
@@ -158,6 +159,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_embedded_control_comparison(before, after))
     lines.extend(_word_permission_range_comparison(before, after))
     lines.extend(_mail_merge_comparison(before, after))
+    lines.extend(_save_through_xslt_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
@@ -404,6 +406,10 @@ def _mail_merge_section(value: object) -> list[str]:
     return _inventory_section("Mail-merge inventory", value)
 
 
+def _save_through_xslt_section(value: object) -> list[str]:
+    return _inventory_section("XSLT-on-single-XML-save inventory", value)
+
+
 def _data_binding_section(value: object) -> list[str]:
     return _inventory_section("Content-control data-binding inventory", value)
 
@@ -642,6 +648,16 @@ def _mail_merge_comparison(
         "Mail-merge inventory",
         before.get("mail_merge", {}),
         after.get("mail_merge", {}),
+    )
+
+
+def _save_through_xslt_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "XSLT-on-single-XML-save inventory",
+        before.get("save_through_xslt", {}),
+        after.get("save_through_xslt", {}),
     )
 
 

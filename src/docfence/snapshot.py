@@ -35,6 +35,7 @@ from docfence.models import (
     PackageDigitalSignatureInventory,
     RelationshipInventory,
     RevisionInventory,
+    SaveThroughXsltInventory,
     SensitivityLabelInventory,
     StorySnapshot,
     StyleInventory,
@@ -378,6 +379,12 @@ _MAIL_MERGE_RECIPIENT_DATA_RELATIONSHIP_TYPES: Final = frozenset(
         "http://purl.oclc.org/ooxml/officedocument/relationships/recipientdata",
         "http://purl.oclc.org/ooxml/officedocument/relationships/"
         "mailmergerecipientdata",
+    }
+)
+_SAVE_THROUGH_XSLT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officedocument/2006/relationships/transform",
+        "http://purl.oclc.org/ooxml/officedocument/relationships/transform",
     }
 )
 _CUSTOM_XML_PROPERTIES_RELATIONSHIP_TYPES: Final = frozenset(
@@ -878,6 +885,13 @@ def _load_package(
             mail_merge, mail_merge_parts = _mail_merge_inventory(
                 archive, members, relationship_maps, limits
             )
+            save_through_xslt = _save_through_xslt_inventory(
+                archive,
+                members,
+                relationship_maps,
+                document_settings_parts,
+                limits,
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1041,6 +1055,7 @@ def _load_package(
         word_embedded_controls=word_embedded_controls,
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
+        save_through_xslt=save_through_xslt,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2160,6 +2175,125 @@ def _validate_mail_merge_relationship(
         raise DocumentFormatError("mail merge markup is invalid")
     if expected_target_mode == "internal":
         _internal_relationship_target("word/settings.xml", relationship, members)
+
+
+def _save_through_xslt_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> SaveThroughXsltInventory:
+    """Inventory XSLT-on-save declarations without resolving transforms.
+
+    OOXML stores an optional custom XSLT used only when an application saves a
+    document as a single XML file. A relationship-backed transform must use the
+    standard ``transform`` relationship type and remain external to the
+    package. A ``w:saveThroughXslt`` anchor may instead contain only its
+    application-defined ``w:solutionID``, so it is retained as private
+    configuration evidence without attempting to resolve it.
+    """
+
+    records: list[tuple[str, ...]] = []
+    enabled_setting_count = 0
+    disabled_setting_count = 0
+    transform_anchor_count = 0
+    transform_relationship_count = 0
+    solution_identifier_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        relationships = relationship_maps.get(settings_part, {})
+        for relationship in _relationships_with_types(
+            relationships, _SAVE_THROUGH_XSLT_RELATIONSHIP_TYPES
+        ):
+            _validate_save_through_xslt_relationship(relationship)
+            transform_relationship_count += 1
+            records.append(
+                (
+                    "save_through_xslt_relationship",
+                    settings_part,
+                    *relationship.canonical_value(),
+                )
+            )
+
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        enabled_settings = [
+            element
+            for element in root
+            if _is_word_element(element, "useXSLTWhenSaving")
+        ]
+        transforms = [
+            element
+            for element in root
+            if _is_word_element(element, "saveThroughXslt")
+        ]
+        if len(enabled_settings) > 1 or len(transforms) > 1:
+            raise DocumentFormatError("save-through-XSLT state is invalid")
+
+        for enabled_setting in enabled_settings:
+            _validate_save_through_xslt_leaf(enabled_setting)
+            if _is_enabled(enabled_setting):
+                enabled_setting_count += 1
+            else:
+                disabled_setting_count += 1
+            records.append(
+                (
+                    "use_xslt_when_saving",
+                    settings_part,
+                    _fingerprint_element(enabled_setting, relationships),
+                )
+            )
+
+        for transform in transforms:
+            _validate_save_through_xslt_leaf(transform)
+            _validate_save_through_xslt_anchor(transform, relationships)
+            transform_anchor_count += 1
+            if _word_attribute_value(transform, "solutionID") is not None:
+                solution_identifier_count += 1
+            records.append(
+                (
+                    "save_through_xslt_anchor",
+                    settings_part,
+                    _fingerprint_element(transform, relationships),
+                )
+            )
+
+    return SaveThroughXsltInventory(
+        enabled_setting_count=enabled_setting_count,
+        disabled_setting_count=disabled_setting_count,
+        transform_anchor_count=transform_anchor_count,
+        transform_relationship_count=transform_relationship_count,
+        solution_identifier_count=solution_identifier_count,
+        signature=_digest_records(records),
+    )
+
+
+def _validate_save_through_xslt_leaf(element: ET.Element) -> None:
+    if list(element) or (element.text or "").strip():
+        raise DocumentFormatError("save-through-XSLT state is invalid")
+
+
+def _validate_save_through_xslt_relationship(relationship: _Relationship) -> None:
+    if relationship.target_mode.casefold() != "external":
+        raise DocumentFormatError("save-through-XSLT relationships are invalid")
+
+
+def _validate_save_through_xslt_anchor(
+    element: ET.Element, relationships: dict[str, _Relationship]
+) -> None:
+    relationship_id = _relationship_id_value(element)
+    if relationship_id is None:
+        return
+    relationship = relationships.get(relationship_id)
+    if (
+        relationship is None
+        or relationship.relationship_type.casefold()
+        not in _SAVE_THROUGH_XSLT_RELATIONSHIP_TYPES
+        or relationship.target_mode.casefold() != "external"
+    ):
+        raise DocumentFormatError("save-through-XSLT markup is invalid")
 
 
 def _external_document_dependency_inventory(

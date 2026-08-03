@@ -90,6 +90,8 @@ starter policy.
 | `no_word_embedded_control_changes` | `DFP066` | WordprocessingML embedded-control-anchor inventory differs | Comparison |
 | `require_no_word_vml_embedded_ole_objects` | `DFP067` | Candidate has direct VML embedded-OLE markup | Candidate |
 | `no_word_vml_embedded_ole_object_changes` | `DFP068` | VML embedded-OLE-object inventory differs | Comparison |
+| `require_no_save_through_xslt` | `DFP069` | Candidate has stored XSLT-on-single-XML-save configuration | Candidate |
+| `no_save_through_xslt_changes` | `DFP070` | XSLT-on-single-XML-save inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -113,7 +115,9 @@ intentionally embeds a known payload can instead enable
 `no_alternative_format_import_changes` to preserve that baseline while blocking
 a later mutation. `no_document_property_changes` gives the same controlled
 baseline option for document metadata, and `no_mail_merge_changes` does so for
-mail-merge configuration and recipient state. `no_data_binding_changes` does
+mail-merge configuration and recipient state. `no_save_through_xslt_changes`
+does so for an approved custom XSLT-on-single-XML-save configuration.
+`no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
 controlled template that deliberately retains an attached template, master
@@ -250,6 +254,31 @@ These rules do not connect to a data source, execute a query, select a
 recipient, or decide whether mail-merge state is expected, safe, personal, or
 malicious. Use a clean-handoff gate when no mail merge should remain; use a
 controlled baseline when an approved template legitimately retains it.
+
+## XSLT-on-single-XML-save scope
+
+`w:saveThroughXslt` stores a custom XSLT location for an application to use
+when saving a document as a single XML file. `w:useXSLTWhenSaving` controls
+whether that save-time behavior is enabled. DocFence inventories direct copies
+of both settings from every discovered Document Settings part. A direct
+relationship-backed anchor must resolve to a standard `transform` relationship
+with `TargetMode="External"`; a local `w:solutionID`-only anchor is retained as
+stored application-defined configuration without resolving it. A recognized
+standard transform relationship is also inventoried when residual and
+unanchored.
+
+Public output is limited to enabled-setting, disabled-setting, anchor,
+relationship, and solution-identifier counts. Transform locations, relationship IDs, solution
+identifiers, Settings-part paths, and private fingerprints never leave the
+process. The comparison signature includes the full recognized configuration,
+so a same-count target or local-identifier rewrite remains visible while a
+relationship-ID renumbering with unchanged semantics remains quiet.
+
+`require_no_save_through_xslt` fails whenever the candidate has any stored
+inventory evidence. `no_save_through_xslt_changes` protects an approved
+baseline. Neither rule resolves, fetches, parses, executes, validates, or
+otherwise applies an XSLT; it is not a prediction that Word will save a single
+XML file or contact a transform target.
 
 ## Content-control data-binding scope
 

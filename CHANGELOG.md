@@ -2,6 +2,25 @@
 
 All notable changes are documented here.
 
+## 0.28.0 — 2026-08-02
+
+- Added a first-class, privacy-safe inventory for Word's optional
+  `w:useXSLTWhenSaving` / `w:saveThroughXslt` configuration. It detects the
+  direct Settings leaves, standard external XSLT `transform` relationships, and
+  application-defined local `w:solutionID` anchors without resolving or
+  applying a transform.
+- Added `DFP069` to require a handoff with no stored XSLT-on-single-XML-save
+  configuration and `DFP070` to protect an approved configuration baseline.
+- Reports expose aggregate enabled/disabled-setting, anchor, relationship, and
+  solution-identifier counts only. Transform targets, solution identifiers,
+  relationship IDs, Settings-part paths, and fingerprints remain private.
+  Same-count configuration or target rewrites stay review-visible while a
+  relationship-ID renumbering with unchanged semantics remains quiet.
+- Added regression coverage for conventional and Strict OOXML, enabled and
+  disabled settings, relationship-backed and local-only anchors, residual
+  relationships, target rewrites, malformed topology, privacy redaction, and
+  policy/SARIF output.
+
 ## 0.27.0 — 2026-08-01
 
 - Added a first-class, privacy-safe inventory for direct legacy Office VML
