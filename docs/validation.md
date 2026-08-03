@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.29 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.30 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -12,8 +12,8 @@ following properties:
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
-  state, Word Settings XSLT-on-single-XML-save and attached-custom-XML-schema
-  state, Word `HYPERLINK`
+  state, Word Settings XSLT-on-single-XML-save, attached-custom-XML-schema,
+  and automatic-field-recalculation-on-open state, Word `HYPERLINK`
   field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
@@ -110,6 +110,12 @@ following properties:
   declarations, same-count namespace rewrites, JSON/Markdown/SARIF redaction,
   policy findings, and malformed missing/unsupported attributes, nonblank text,
   and nested markup;
+- automatic field-recalculation-on-open state is separately inventoried from
+  generic Settings and field-code changes. Tests cover absent, implicit-enabled,
+  explicitly enabled, explicitly disabled, and Strict leaves; canonical
+  equivalent enabled spellings; JSON/Markdown/SARIF redaction; policy findings;
+  and malformed unsupported attributes/boolean values, nonblank text, nested
+  markup, and duplicate direct leaves;
 - `DOCVARIABLE` field references are separately inventoried from generic field
   counts and stored-variable state. Tests cover simple and complete complex
   encodings, quoted names, trailing Word formatting switches, nested/dynamic

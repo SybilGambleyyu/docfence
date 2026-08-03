@@ -116,6 +116,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
             document.get("attached_custom_xml_schemas", {})
         )
     )
+    lines.extend(
+        _field_update_on_open_section(document.get("field_updates_on_open", {}))
+    )
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
@@ -166,6 +169,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_mail_merge_comparison(before, after))
     lines.extend(_save_through_xslt_comparison(before, after))
     lines.extend(_attached_custom_xml_schema_comparison(before, after))
+    lines.extend(_field_update_on_open_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
@@ -418,6 +422,10 @@ def _save_through_xslt_section(value: object) -> list[str]:
 
 def _attached_custom_xml_schema_section(value: object) -> list[str]:
     return _inventory_section("Attached custom XML schema inventory", value)
+
+
+def _field_update_on_open_section(value: object) -> list[str]:
+    return _inventory_section("Automatic field-update-on-open inventory", value)
 
 
 def _data_binding_section(value: object) -> list[str]:
@@ -678,6 +686,16 @@ def _attached_custom_xml_schema_comparison(
         "Attached custom XML schema inventory",
         before.get("attached_custom_xml_schemas", {}),
         after.get("attached_custom_xml_schemas", {}),
+    )
+
+
+def _field_update_on_open_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Automatic field-update-on-open inventory",
+        before.get("field_updates_on_open", {}),
+        after.get("field_updates_on_open", {}),
     )
 
 

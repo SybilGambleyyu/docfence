@@ -695,6 +695,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.field_updates_on_open.signature != after.field_updates_on_open.signature:
+        changes.append(
+            Change(
+                kind="field_update_on_open_inventory_changed",
+                message="Stored automatic field-update-on-open inventory changed.",
+                details={
+                    "before": before.field_updates_on_open.public_dict(),
+                    "after": after.field_updates_on_open.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

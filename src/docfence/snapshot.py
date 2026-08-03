@@ -31,6 +31,7 @@ from docfence.models import (
     EmbeddedObjectInventory,
     ExternalDocumentDependencyInventory,
     ExternalFieldInventory,
+    FieldUpdateOnOpenInventory,
     MailMergeInventory,
     ModernCommentMetadataInventory,
     PackageDigitalSignatureInventory,
@@ -108,6 +109,9 @@ _REVISION_METADATA_ATTRIBUTES: Final = frozenset(
 )
 _VOLATILE_ATTRIBUTE_NAMES: Final = frozenset({"editId", "paraId", "rsid", "textId"})
 _FALSE_VALUES: Final = frozenset({"0", "false", "no", "off"})
+_ON_OFF_TRUE_VALUES: Final = frozenset({"1", "on", "true"})
+_ON_OFF_FALSE_VALUES: Final = frozenset({"0", "false", "off"})
+_ON_OFF_VALUES: Final = _ON_OFF_TRUE_VALUES | _ON_OFF_FALSE_VALUES
 _STORY_ROOT_NAMES: Final = {
     "body": "document",
     "header": "hdr",
@@ -900,6 +904,12 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            field_updates_on_open = _field_update_on_open_inventory(
+                archive,
+                members,
+                document_settings_parts,
+                limits,
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1065,6 +1075,7 @@ def _load_package(
         mail_merge=mail_merge,
         save_through_xslt=save_through_xslt,
         attached_custom_xml_schemas=attached_custom_xml_schemas,
+        field_updates_on_open=field_updates_on_open,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2370,6 +2381,78 @@ def _validate_attached_custom_xml_schema(element: ET.Element) -> None:
         attributes.add(local_name)
     if attributes != {"val"}:
         raise DocumentFormatError("attached custom XML schema state is invalid")
+
+
+def _field_update_on_open_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> FieldUpdateOnOpenInventory:
+    """Inventory ``w:updateFields`` without evaluating document fields.
+
+    The direct ``CT_OnOff`` Settings leaf requests automatic field-result
+    recalculation when a supporting host opens the document. Its value is a
+    configuration switch, not an instruction to DocFence to parse, evaluate,
+    resolve, or update a field. Canonical enabled/disabled state keeps lexical
+    equivalents such as ``on`` and ``true`` from creating review noise.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    enabled_setting_count = 0
+    disabled_setting_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        update_settings = [
+            element for element in root if _is_word_element(element, "updateFields")
+        ]
+        if len(update_settings) > 1:
+            raise DocumentFormatError("field-update-on-open state is invalid")
+
+        for setting in update_settings:
+            state = _field_update_on_open_state(setting)
+            if state == "enabled":
+                enabled_setting_count += 1
+            else:
+                disabled_setting_count += 1
+            records.append(("field_update_on_open", settings_part, state))
+
+    return FieldUpdateOnOpenInventory(
+        enabled_setting_count=enabled_setting_count,
+        disabled_setting_count=disabled_setting_count,
+        signature=_digest_records(records),
+    )
+
+
+def _field_update_on_open_state(element: ET.Element) -> str:
+    """Validate one direct ``w:updateFields`` ``CT_OnOff`` leaf."""
+
+    if (
+        not _is_word_element(element, "updateFields")
+        or list(element)
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("field-update-on-open state is invalid")
+
+    value: str | None = None
+    for attribute, raw_value in element.attrib.items():
+        namespace, local_name = _qualified_name(attribute)
+        if (
+            namespace not in _WORD_NAMESPACES
+            or local_name != "val"
+            or value is not None
+        ):
+            raise DocumentFormatError("field-update-on-open state is invalid")
+        value = raw_value.strip().casefold()
+        if value not in _ON_OFF_VALUES:
+            raise DocumentFormatError("field-update-on-open state is invalid")
+
+    if value is None or value in _ON_OFF_TRUE_VALUES:
+        return "enabled"
+    return "disabled"
 
 
 def _external_document_dependency_inventory(

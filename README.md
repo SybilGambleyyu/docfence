@@ -19,7 +19,8 @@ relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, custom XSLT-on-single-XML-save
-configuration, attached custom XML schema declarations, OPC package
+configuration, attached custom XML schema declarations, automatic
+field-recalculation-on-open settings, OPC package
 digital-signature material,
 Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
@@ -104,7 +105,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.29 focuses on Office Open XML Word documents and templates and
+Version 0.30 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -133,7 +134,8 @@ deliberately keeps a small, inspectable contract:
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
   mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
-  XML schema declarations, content-control data-binding, modern-comment
+  XML schema declarations, automatic field-recalculation-on-open configuration,
+  content-control data-binding, modern-comment
   metadata,
   document-task workflow state, task-pane Office web-extension configuration
   and content-control binding markers,
@@ -739,6 +741,24 @@ baseline, including same-count namespace rewrites. DocFence never resolves,
 retrieves, loads, or validates against a declared schema, and it does not claim
 that a host has a schema available or will validate any document markup.
 
+Automatic field recalculation on open is recorded separately from generic
+Settings and field-code changes. A direct `w:updateFields` `CT_OnOff` leaf asks
+an application that supports field calculations to recalculate field results
+when the document opens. DocFence accepts one direct leaf per discovered
+Settings part in either Word namespace, validates its optional Word-namespace
+`w:val` as a standard on/off token, and reports enabled and explicitly disabled
+setting counts only. Settings-part paths and private fingerprints remain local.
+The private signature retains the canonical stored state, so an enabled-to-
+disabled transition remains review-visible while equivalent enabled spellings
+such as omitted `w:val`, `on`, and `true` remain quiet.
+
+`require_no_field_updates_on_open` fails only when a candidate explicitly
+requests automatic recalculation. `no_field_update_on_open_changes` protects a
+controlled baseline, including an explicitly disabled setting. Neither rule
+parses or evaluates field instructions, updates field results, opens Word,
+locates a field source, starts an application, follows a link, or claims that a
+client will honor the request.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -769,6 +789,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_mail_merge: true
   require_no_save_through_xslt: true
   require_no_attached_custom_xml_schemas: true
+  require_no_field_updates_on_open: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -800,6 +821,7 @@ later mutation:
   no_mail_merge_changes: true
   no_save_through_xslt_changes: true
   no_attached_custom_xml_schema_changes: true
+  no_field_update_on_open_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -893,6 +915,13 @@ The attached-schema boundary follows the Open XML SDK's
 which specifies a target-namespace association when a matching schema is
 available to the host. DocFence records that declaration without locating or
 using a schema.
+The automatic-field-recalculation-on-open boundary follows the Open XML SDK's
+[`w:updateFields` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.updatefieldsonopen?view=openxml-3.0.1),
+which specifies a request to recalculate field results on open in a supporting
+application, and the Office interoperability definition of
+[`ST_OnOff`](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-oi29500/815fcc39-dc6c-44f8-ad27-87b1d9f21571).
+DocFence records the direct stored setting without evaluating a field or
+emulating a document client.
 The data-binding boundary follows the Open XML SDK's
 [`w:dataBinding` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.databinding?view=openxml-3.0.1)
 and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api/word.xmlmapping),

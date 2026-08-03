@@ -896,6 +896,26 @@ class AttachedCustomXmlSchemaInventory:
 
 
 @dataclass(frozen=True)
+class FieldUpdateOnOpenInventory:
+    """Stored automatic-field-recalculation settings, aggregate only.
+
+    Settings-part paths and private fingerprints remain local. Public output
+    records only whether explicitly stored settings request or decline automatic
+    recalculation when a capable document host opens the package.
+    """
+
+    enabled_setting_count: int
+    disabled_setting_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "field_update_on_open_enabled_setting_count": self.enabled_setting_count,
+            "field_update_on_open_disabled_setting_count": self.disabled_setting_count,
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1175,6 +1195,7 @@ class DocumentSnapshot:
     mail_merge: MailMergeInventory
     save_through_xslt: SaveThroughXsltInventory
     attached_custom_xml_schemas: AttachedCustomXmlSchemaInventory
+    field_updates_on_open: FieldUpdateOnOpenInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1297,6 +1318,7 @@ class DocumentSnapshot:
             "attached_custom_xml_schemas": (
                 self.attached_custom_xml_schemas.public_dict()
             ),
+            "field_updates_on_open": self.field_updates_on_open.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

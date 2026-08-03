@@ -191,6 +191,18 @@ review-visible without copying a private vocabulary identifier into a report.
 DocFence does not resolve, retrieve, load, or validate against a declared
 schema, and it does not claim that a host has a matching schema available.
 
+Automatic field-recalculation-on-open settings receive a separate private-
+digest treatment. DocFence recognizes at most one direct `w:updateFields`
+`CT_OnOff` leaf per discovered Document Settings part and validates its leaf
+shape, Word-namespace attribute vocabulary, and standard on/off token. Public
+output is limited to enabled and explicitly disabled setting counts;
+Settings-part paths and fingerprints remain private. The private signature
+retains canonical enabled/disabled state so a state transition stays
+review-visible without treating equivalent token spellings as distinct events.
+DocFence does not parse, evaluate, or update a field, open Word, access a
+source, follow a link, start an application, or claim a host will recalculate a
+field.
+
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
 pre-separator instructions across supported stories, retaining current and
@@ -477,6 +489,10 @@ Attached custom XML schema declaration counts are stored-state evidence, not
 proof that a host has a referenced schema available, will associate it with the
 document, or will validate any custom markup. DocFence does not locate, fetch,
 load, or apply a schema.
+Automatic-field-recalculation-on-open counts are likewise stored-state
+evidence, not proof that a host supports field calculations, will recalculate a
+particular field, access an external source, or produce a particular result.
+DocFence does not emulate a document open or any field runtime.
 Content-control
 data-binding counts are stored-state evidence, not proof that a given XPath
 selects a node, that Word will update the visible control, or that an unscoped

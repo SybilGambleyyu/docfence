@@ -38,6 +38,8 @@ _RULES: Final = {
     "no_save_through_xslt_changes": "DFP070",
     "require_no_attached_custom_xml_schemas": "DFP071",
     "no_attached_custom_xml_schema_changes": "DFP072",
+    "require_no_field_updates_on_open": "DFP073",
+    "no_field_update_on_open_changes": "DFP074",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -545,6 +547,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_field_update_on_open_changes") and (
+        before.field_updates_on_open.signature != after.field_updates_on_open.signature
+    ):
+        findings.append(
+            _finding(
+                "no_field_update_on_open_changes",
+                "Automatic field-update-on-open inventory changed.",
+                {
+                    "before": before.field_updates_on_open.public_dict(),
+                    "after": after.field_updates_on_open.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -923,6 +938,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_attached_custom_xml_schemas",
                 "Candidate contains attached custom XML schema declarations.",
                 after.attached_custom_xml_schemas.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_field_updates_on_open") and (
+        after.field_updates_on_open.enabled_setting_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_field_updates_on_open",
+                "Candidate requests automatic field recalculation on open.",
+                after.field_updates_on_open.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

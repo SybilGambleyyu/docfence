@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.30.0 — 2026-08-03
+
+- Added a first-class, privacy-safe inventory for direct Word Settings
+  `w:updateFields` `CT_OnOff` declarations. The inventory records the stored
+  automatic-field-recalculation-on-open request without parsing or evaluating a
+  field, opening Word, accessing a source, or making a client-behavior claim.
+- Added `DFP073` to require that a candidate not request automatic field
+  recalculation on open and `DFP074` to protect an approved stored baseline.
+- Reports expose enabled and explicitly disabled setting counts only.
+  Settings-part paths and fingerprints remain private. Canonical state avoids
+  noise for equivalent enabled spellings while an enabled/disabled transition
+  remains review-visible.
+- Added regression coverage for conventional and Strict leaves, implicit and
+  explicit forms, malformed shape/value rejection, duplicate state, privacy
+  redaction, policy findings, and SARIF output.
+
 ## 0.29.0 — 2026-08-02
 
 - Added a first-class, privacy-safe inventory for Word's direct

@@ -94,6 +94,8 @@ starter policy.
 | `no_save_through_xslt_changes` | `DFP070` | XSLT-on-single-XML-save inventory differs | Comparison |
 | `require_no_attached_custom_xml_schemas` | `DFP071` | Candidate has attached custom XML schema declarations | Candidate |
 | `no_attached_custom_xml_schema_changes` | `DFP072` | Attached custom XML schema inventory differs | Comparison |
+| `require_no_field_updates_on_open` | `DFP073` | Candidate requests automatic field recalculation on open | Candidate |
+| `no_field_update_on_open_changes` | `DFP074` | Automatic field-update-on-open inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -121,6 +123,8 @@ mail-merge configuration and recipient state. `no_save_through_xslt_changes`
 does so for an approved custom XSLT-on-single-XML-save configuration.
 `no_attached_custom_xml_schema_changes` does so for an approved set of attached
 custom XML schema declarations.
+`no_field_update_on_open_changes` does so for an approved automatic-field-
+recalculation-on-open setting.
 `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
@@ -302,6 +306,30 @@ least one declaration. `no_attached_custom_xml_schema_changes` protects an
 approved baseline. Neither rule resolves, retrieves, loads, or validates
 against a schema, nor does it claim that a host has the schema available or
 will validate custom markup.
+
+## Automatic field-recalculation-on-open scope
+
+DocFence inventories direct `w:updateFields` children of every discovered
+Document Settings part. The standard `CT_OnOff` leaf may omit `w:val`, which
+means enabled when the element is present; an explicitly supplied
+Word-namespace `w:val` must be one of `true`, `false`, `on`, `off`, `1`, or
+`0`. The inventory rejects duplicate direct leaves, child markup, nonblank
+text, unsupported attributes, and unsupported boolean values.
+
+Public output contains only
+`field_update_on_open_enabled_setting_count` and
+`field_update_on_open_disabled_setting_count`. Settings-part paths and private
+fingerprints never leave the process. The comparison signature records the
+canonical enabled/disabled state: a state change is review-visible, while
+equivalent enabled spellings do not add noise.
+
+`require_no_field_updates_on_open` fails only when the candidate has an enabled
+direct setting. An absent leaf or an explicitly disabled leaf does not request
+automatic recalculation. `no_field_update_on_open_changes` protects any
+approved stored baseline. Neither rule parses field instructions, recalculates
+or updates a field, opens a document client, accesses a field source, follows a
+link, starts an application, or claims that a particular client will honor the
+stored request.
 
 ## Content-control data-binding scope
 
