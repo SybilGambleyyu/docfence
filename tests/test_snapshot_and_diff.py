@@ -988,6 +988,119 @@ rules:
         assert marker not in rendered
 
 
+def test_attached_custom_xml_schema_inventory_is_private_and_strict(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    namespace_changed = tmp_path / "namespace-changed.docx"
+    multiple = tmp_path / "multiple.docx"
+    strict = tmp_path / "strict.docx"
+    missing_value = tmp_path / "missing-value.docx"
+    unexpected_attribute = tmp_path / "unexpected-attribute.docx"
+    nonblank_text = tmp_path / "nonblank-text.docx"
+    nested_markup = tmp_path / "nested-markup.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_attached_custom_xml_schema_document(before, include_settings=False)
+    _write_attached_custom_xml_schema_document(after)
+    _write_attached_custom_xml_schema_document(
+        namespace_changed,
+        schema_namespaces=(
+            "https://example.invalid/ATTACHED_SCHEMA_NAMESPACE_CHANGED_DO_NOT_LEAK",
+        ),
+    )
+    _write_attached_custom_xml_schema_document(
+        multiple,
+        schema_namespaces=(
+            "https://example.invalid/ATTACHED_SCHEMA_NAMESPACE_DO_NOT_LEAK",
+            "https://example.invalid/SECOND_ATTACHED_SCHEMA_NAMESPACE_DO_NOT_LEAK",
+        ),
+    )
+    _write_attached_custom_xml_schema_document(strict, strict_syntax=True)
+    _write_attached_custom_xml_schema_document(missing_value, include_value=False)
+    _write_attached_custom_xml_schema_document(
+        unexpected_attribute,
+        extra_attribute=' w:unexpected="ATTACHED_SCHEMA_ATTRIBUTE_DO_NOT_LEAK"',
+    )
+    _write_attached_custom_xml_schema_document(
+        nonblank_text,
+        text="ATTACHED_SCHEMA_TEXT_DO_NOT_LEAK",
+    )
+    _write_attached_custom_xml_schema_document(
+        nested_markup,
+        child_markup="<w:unexpected/>",
+    )
+
+    expected_inventory = {"attached_custom_xml_schema_count": 1}
+    snapshot = load_snapshot(after)
+    assert snapshot.public_dict()["attached_custom_xml_schemas"] == expected_inventory
+    assert (
+        load_snapshot(strict).public_dict()["attached_custom_xml_schemas"]
+        == expected_inventory
+    )
+    assert load_snapshot(multiple).public_dict()["attached_custom_xml_schemas"] == {
+        "attached_custom_xml_schema_count": 2
+    }
+
+    report = diff_documents(before, after)
+    assert "attached_custom_xml_schema_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "attached_custom_xml_schema_inventory_changed" in {
+        change.kind for change in diff_documents(after, namespace_changed).changes
+    }
+    for invalid_document in (
+        missing_value,
+        unexpected_attribute,
+        nonblank_text,
+        nested_markup,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(invalid_document)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_attached_custom_xml_schemas: true
+  no_attached_custom_xml_schema_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP071",
+        "DFP072",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, after), policy).findings
+    } == {"DFP071"}
+
+    gated = apply_policy(report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_report(diff_documents(after, namespace_changed), "markdown"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_ATTACHED_CUSTOM_XML_SCHEMA_INVENTORY_CHANGED",
+        "DFP071",
+        "DFP072",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "ATTACHED_SCHEMA_NAMESPACE_DO_NOT_LEAK",
+        "ATTACHED_SCHEMA_NAMESPACE_CHANGED_DO_NOT_LEAK",
+        "SECOND_ATTACHED_SCHEMA_NAMESPACE_DO_NOT_LEAK",
+        "ATTACHED_SCHEMA_ATTRIBUTE_DO_NOT_LEAK",
+        "ATTACHED_SCHEMA_TEXT_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
+
+
 def test_data_binding_inventory_is_private_and_relationship_id_stable(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -8841,6 +8954,50 @@ def _write_save_through_xslt_document(
                 f'Target="{transform_target}"{target_mode_markup}/>'
                 "</Relationships>"
             ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_attached_custom_xml_schema_document(
+    path,
+    *,
+    schema_namespaces: tuple[str, ...] = (
+        "https://example.invalid/ATTACHED_SCHEMA_NAMESPACE_DO_NOT_LEAK",
+    ),
+    include_settings: bool = True,
+    include_value: bool = True,
+    strict_syntax: bool = False,
+    extra_attribute: str = "",
+    text: str = "",
+    child_markup: str = "",
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    schema_markups: list[str] = []
+    for namespace in schema_namespaces:
+        value_markup = f' w:val="{namespace}"' if include_value else ""
+        schema_markups.append(
+            f"<w:attachedSchema{value_markup}{extra_attribute}>"
+            f"{text}{child_markup}</w:attachedSchema>"
+        )
+    schema_markup = "".join(schema_markups)
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_settings:
+        entries["word/settings.xml"] = (
+            f'<w:settings xmlns:w="{word_namespace}">{schema_markup}</w:settings>'
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

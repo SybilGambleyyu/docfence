@@ -23,6 +23,7 @@ from typing import Final
 from docfence.errors import DocumentFormatError, DocumentSafetyError
 from docfence.models import (
     AlternativeFormatImportInventory,
+    AttachedCustomXmlSchemaInventory,
     DataBindingInventory,
     DocumentPropertyInventory,
     DocumentSnapshot,
@@ -892,6 +893,13 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            attached_custom_xml_schemas = _attached_custom_xml_schema_inventory(
+                archive,
+                members,
+                relationship_maps,
+                document_settings_parts,
+                limits,
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1056,6 +1064,7 @@ def _load_package(
         word_permission_ranges=word_permission_ranges,
         mail_merge=mail_merge,
         save_through_xslt=save_through_xslt,
+        attached_custom_xml_schemas=attached_custom_xml_schemas,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2294,6 +2303,73 @@ def _validate_save_through_xslt_anchor(
         or relationship.target_mode.casefold() != "external"
     ):
         raise DocumentFormatError("save-through-XSLT markup is invalid")
+
+
+def _attached_custom_xml_schema_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> AttachedCustomXmlSchemaInventory:
+    """Inventory attached custom XML schemas without exposing identifiers.
+
+    ``w:attachedSchema`` declares a custom XML schema by target namespace for
+    association when a host loads the document, provided the host has that
+    schema available.  The declaration does not name a package payload or a
+    fetchable target, and DocFence never resolves, retrieves, loads, or
+    validates against the declared schema.
+    """
+
+    records: list[tuple[str, ...]] = []
+    attached_schema_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        relationships = relationship_maps.get(settings_part, {})
+        for element in root:
+            if not _is_word_element(element, "attachedSchema"):
+                continue
+            _validate_attached_custom_xml_schema(element)
+            attached_schema_count += 1
+            records.append(
+                (
+                    "attached_custom_xml_schema",
+                    settings_part,
+                    _fingerprint_element(element, relationships),
+                )
+            )
+
+    return AttachedCustomXmlSchemaInventory(
+        attached_schema_count=attached_schema_count,
+        signature=_digest_records(records),
+    )
+
+
+def _validate_attached_custom_xml_schema(element: ET.Element) -> None:
+    """Validate the direct ``CT_String`` attached-schema leaf."""
+
+    if (
+        not _is_word_element(element, "attachedSchema")
+        or list(element)
+        or (element.text or "").strip()
+    ):
+        raise DocumentFormatError("attached custom XML schema state is invalid")
+
+    attributes: set[str] = set()
+    for attribute in element.attrib:
+        namespace, local_name = _qualified_name(attribute)
+        if (
+            namespace not in _WORD_NAMESPACES
+            or local_name != "val"
+            or local_name in attributes
+        ):
+            raise DocumentFormatError("attached custom XML schema state is invalid")
+        attributes.add(local_name)
+    if attributes != {"val"}:
+        raise DocumentFormatError("attached custom XML schema state is invalid")
 
 
 def _external_document_dependency_inventory(

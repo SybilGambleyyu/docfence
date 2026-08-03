@@ -880,6 +880,22 @@ class SaveThroughXsltInventory:
 
 
 @dataclass(frozen=True)
+class AttachedCustomXmlSchemaInventory:
+    """Stored custom-XML schema associations, exposed only as a count.
+
+    Attached-schema namespace identifiers can identify private vocabularies or
+    workflow systems.  Their values and Settings-part paths stay inside the
+    private signature; public output reports only how many declarations exist.
+    """
+
+    attached_schema_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {"attached_custom_xml_schema_count": self.attached_schema_count}
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1158,6 +1174,7 @@ class DocumentSnapshot:
     word_permission_ranges: WordPermissionRangeInventory
     mail_merge: MailMergeInventory
     save_through_xslt: SaveThroughXsltInventory
+    attached_custom_xml_schemas: AttachedCustomXmlSchemaInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1277,6 +1294,9 @@ class DocumentSnapshot:
             "word_permission_ranges": self.word_permission_ranges.public_dict(),
             "mail_merge": self.mail_merge.public_dict(),
             "save_through_xslt": self.save_through_xslt.public_dict(),
+            "attached_custom_xml_schemas": (
+                self.attached_custom_xml_schemas.public_dict()
+            ),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

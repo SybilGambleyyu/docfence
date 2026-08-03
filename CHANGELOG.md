@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.29.0 — 2026-08-02
+
+- Added a first-class, privacy-safe inventory for Word's direct
+  `w:attachedSchema` declarations. Each declaration names a custom XML schema
+  target namespace that a host may associate when loading a document if that
+  schema is available; DocFence records the stored declaration without locating
+  or using a schema.
+- Added `DFP071` to require a handoff with no attached custom XML schema
+  declarations and `DFP072` to protect an approved declaration baseline.
+- Reports expose only an aggregate declaration count. Namespace identifiers,
+  Settings-part paths, and fingerprints remain private. Same-count namespace
+  rewrites remain review-visible.
+- Added regression coverage for conventional and Strict OOXML, multiple
+  declarations, same-count namespace rewrites, malformed leaves, privacy
+  redaction, and policy/SARIF output.
+
 ## 0.28.0 — 2026-08-02
 
 - Added a first-class, privacy-safe inventory for Word's optional

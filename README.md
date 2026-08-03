@@ -19,7 +19,8 @@ relationships, custom XML, macros,
 core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, custom XSLT-on-single-XML-save
-configuration, OPC package digital-signature material,
+configuration, attached custom XML schema declarations, OPC package
+digital-signature material,
 Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
 password-verifier material,
@@ -46,6 +47,8 @@ values, signed-reference targets, and signature-part paths are private too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are private too.
 Word document-variable names, values, and Settings-part paths are private too.
+Attached custom XML schema namespace identifiers and Settings-part paths are
+private too.
 DOCVARIABLE field instructions, literal field arguments, and story-part paths
 are private too.
 HYPERLINK field instructions, destinations, internal locations, ScreenTips,
@@ -101,7 +104,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.28 focuses on Office Open XML Word documents and templates and
+Version 0.29 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -129,8 +132,9 @@ deliberately keeps a small, inspectable contract:
   package digital-signature material, Word editing/write-protection,
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
-  mail-merge, XSLT-on-single-XML-save transform configuration, content-control
-  data-binding, modern-comment metadata,
+  mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
+  XML schema declarations, content-control data-binding, modern-comment
+  metadata,
   document-task workflow state, task-pane Office web-extension configuration
   and content-control binding markers,
   attached-template/master-subdocument/frameset-source external document
@@ -723,6 +727,18 @@ baseline. DocFence never resolves, retrieves, parses, executes, or applies an
 XSLT, and it makes no claim that Word will save a single XML file, contact a
 target, or produce any particular output.
 
+Attached custom XML schema declarations are recorded separately from generic
+Settings and custom-XML payload changes. A direct
+`w:attachedSchema/@w:val` declaration identifies the target namespace of a
+custom XML schema that a host may associate with the document when loading it,
+if the schema is available to that host. Reports contain only an aggregate
+declaration count; namespace values, Settings-part paths, and fingerprints stay
+private. `require_no_attached_custom_xml_schemas` provides a clean-handoff
+gate, while `no_attached_custom_xml_schema_changes` protects an approved
+baseline, including same-count namespace rewrites. DocFence never resolves,
+retrieves, loads, or validates against a declared schema, and it does not claim
+that a host has a schema available or will validate any document markup.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -752,6 +768,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_custom_document_properties: true
   require_no_mail_merge: true
   require_no_save_through_xslt: true
+  require_no_attached_custom_xml_schemas: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -782,6 +799,7 @@ later mutation:
   no_document_property_changes: true
   no_mail_merge_changes: true
   no_save_through_xslt_changes: true
+  no_attached_custom_xml_schema_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -817,6 +835,8 @@ recipient data, XSLT transform targets and solution identifiers, data-binding
 XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
 external template/subdocument/frame-source targets, and all fingerprints.
+Attached custom XML schema namespace identifiers and Settings-part paths remain
+private too.
 Modern-comment author/contact/provider identifiers, paragraph and durable IDs,
 timestamps, thread associations, and reaction identities receive the same
 private treatment.
@@ -868,6 +888,11 @@ plus the OOXML [XSL Transformation relationship
 contract](https://ooxml.info/docs/11/11.9/). Those sources define the
 settings-only, single-XML-save behavior and the required external transform
 relationship; DocFence records that stored configuration without following it.
+The attached-schema boundary follows the Open XML SDK's
+[`w:attachedSchema` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.attachedschema?view=openxml-3.0.1),
+which specifies a target-namespace association when a matching schema is
+available to the host. DocFence records that declaration without locating or
+using a schema.
 The data-binding boundary follows the Open XML SDK's
 [`w:dataBinding` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.databinding?view=openxml-3.0.1)
 and Word's [`XMLMapping` model](https://learn.microsoft.com/en-us/office/vba/api/word.xmlmapping),

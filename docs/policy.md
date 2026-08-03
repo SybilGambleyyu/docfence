@@ -92,6 +92,8 @@ starter policy.
 | `no_word_vml_embedded_ole_object_changes` | `DFP068` | VML embedded-OLE-object inventory differs | Comparison |
 | `require_no_save_through_xslt` | `DFP069` | Candidate has stored XSLT-on-single-XML-save configuration | Candidate |
 | `no_save_through_xslt_changes` | `DFP070` | XSLT-on-single-XML-save inventory differs | Comparison |
+| `require_no_attached_custom_xml_schemas` | `DFP071` | Candidate has attached custom XML schema declarations | Candidate |
+| `no_attached_custom_xml_schema_changes` | `DFP072` | Attached custom XML schema inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -117,6 +119,8 @@ a later mutation. `no_document_property_changes` gives the same controlled
 baseline option for document metadata, and `no_mail_merge_changes` does so for
 mail-merge configuration and recipient state. `no_save_through_xslt_changes`
 does so for an approved custom XSLT-on-single-XML-save configuration.
+`no_attached_custom_xml_schema_changes` does so for an approved set of attached
+custom XML schema declarations.
 `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
@@ -279,6 +283,25 @@ inventory evidence. `no_save_through_xslt_changes` protects an approved
 baseline. Neither rule resolves, fetches, parses, executes, validates, or
 otherwise applies an XSLT; it is not a prediction that Word will save a single
 XML file or contact a transform target.
+
+## Attached custom XML schema scope
+
+DocFence inventories direct `w:attachedSchema` children of every discovered
+Document Settings part. Each standard `CT_String` leaf must contain exactly its
+required Word-namespace `w:val` attribute. The value names a custom XML schema
+target namespace that a host may associate with a document when loading it if a
+matching schema is available; it is not a package path or a fetch request.
+
+Public output reports only `attached_custom_xml_schema_count`. Namespace
+identifiers, Settings-part paths, and private fingerprints never leave the
+process. The comparison signature retains each declaration, so a same-count
+namespace rewrite remains review-visible.
+
+`require_no_attached_custom_xml_schemas` fails whenever the candidate has at
+least one declaration. `no_attached_custom_xml_schema_changes` protects an
+approved baseline. Neither rule resolves, retrieves, loads, or validates
+against a schema, nor does it claim that a host has the schema available or
+will validate custom markup.
 
 ## Content-control data-binding scope
 

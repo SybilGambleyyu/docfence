@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.28 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.29 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -12,7 +12,8 @@ following properties:
   OPC package digital-signature origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
-  state, Word Settings XSLT-on-single-XML-save state, Word `HYPERLINK`
+  state, Word Settings XSLT-on-single-XML-save and attached-custom-XML-schema
+  state, Word `HYPERLINK`
   field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
@@ -103,6 +104,12 @@ following properties:
   solution-identifier rewrites, relationship-ID renumbering, privacy
   redaction, policy findings, and malformed relationship type, target mode,
   missing relationship, and duplicate-anchor state;
+- attached custom XML schema declarations are separately inventoried from
+  generic Settings and custom-XML payload changes. Tests cover direct
+  `w:attachedSchema` leaves in conventional and Strict OOXML, multiple
+  declarations, same-count namespace rewrites, JSON/Markdown/SARIF redaction,
+  policy findings, and malformed missing/unsupported attributes, nonblank text,
+  and nested markup;
 - `DOCVARIABLE` field references are separately inventoried from generic field
   counts and stored-variable state. Tests cover simple and complete complex
   encodings, quoted names, trailing Word formatting switches, nested/dynamic
@@ -567,5 +574,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.28 contract; see
+only, not field evaluation. Those limits are explicit in the 0.29 contract; see
 [threat model](threat-model.md).

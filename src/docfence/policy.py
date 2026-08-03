@@ -36,6 +36,8 @@ _RULES: Final = {
     "no_mail_merge_changes": "DFP022",
     "require_no_save_through_xslt": "DFP069",
     "no_save_through_xslt_changes": "DFP070",
+    "require_no_attached_custom_xml_schemas": "DFP071",
+    "no_attached_custom_xml_schema_changes": "DFP072",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -529,6 +531,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_attached_custom_xml_schema_changes") and (
+        before.attached_custom_xml_schemas.signature
+        != after.attached_custom_xml_schemas.signature
+    ):
+        findings.append(
+            _finding(
+                "no_attached_custom_xml_schema_changes",
+                "Attached custom XML schema inventory changed.",
+                {
+                    "before": before.attached_custom_xml_schemas.public_dict(),
+                    "after": after.attached_custom_xml_schemas.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -897,6 +913,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_save_through_xslt",
                 "Candidate contains stored XSLT-on-single-XML-save configuration.",
                 after.save_through_xslt.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_attached_custom_xml_schemas") and any(
+        after.attached_custom_xml_schemas.public_dict().values()
+    ):
+        findings.append(
+            _finding(
+                "require_no_attached_custom_xml_schemas",
+                "Candidate contains attached custom XML schema declarations.",
+                after.attached_custom_xml_schemas.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

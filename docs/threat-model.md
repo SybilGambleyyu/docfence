@@ -14,7 +14,8 @@ values, mail-merge configuration, source/header targets, connection strings,
 queries, field mappings, recipient data, XSLT-on-single-XML-save transform
 targets and solution identifiers, data-binding XPath expressions,
 namespace-prefix mappings, custom XML storage IDs, and referenced custom XML
-values, external-source field paths, connections, queries, application/item
+values, attached custom XML schema namespace identifiers and Settings-part
+paths, external-source field paths, connections, queries, application/item
 references, external template/subdocument/frame-source targets, and frame names
 must not become DocFence report content. Modern-comment author names, contact
 providers and user IDs, comment paragraph and durable IDs, timestamps, thread
@@ -179,6 +180,16 @@ configuration evidence. Reports expose aggregate enabled-setting,
 disabled-setting, anchor, relationship, and solution-identifier counts while targets, relationship IDs,
 solution identifiers, Settings-part paths, and fingerprints remain private.
 DocFence does not resolve, retrieve, parse, execute, or apply an XSLT.
+
+Attached custom XML schema declarations receive a separate private-digest
+treatment. DocFence recognizes direct `w:attachedSchema` leaves from every
+discovered Document Settings part after validating the standard required
+Word-namespace `w:val` attribute and leaf shape. Public output is limited to a
+declaration count; namespace identifiers, Settings-part paths, and fingerprints
+remain private. A same-count namespace rewrite therefore remains
+review-visible without copying a private vocabulary identifier into a report.
+DocFence does not resolve, retrieve, load, or validate against a declared
+schema, and it does not claim that a host has a matching schema available.
 
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
@@ -461,7 +472,12 @@ the recipient records or connection details a package may retain.
 XSLT-on-single-XML-save counts are stored-state evidence, not proof that Word
 will save a document as a single XML file, apply a transform, retrieve a
 target, or create any particular output. DocFence does not resolve a local
-solution identifier or assess transform behavior or safety. Content-control
+solution identifier or assess transform behavior or safety.
+Attached custom XML schema declaration counts are stored-state evidence, not
+proof that a host has a referenced schema available, will associate it with the
+document, or will validate any custom markup. DocFence does not locate, fetch,
+load, or apply a schema.
+Content-control
 data-binding counts are stored-state evidence, not proof that a given XPath
 selects a node, that Word will update the visible control, or that an unscoped
 mapping uses any particular custom XML part. DocFence does not evaluate XPath,

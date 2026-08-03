@@ -681,6 +681,20 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.attached_custom_xml_schemas.signature
+        != after.attached_custom_xml_schemas.signature
+    ):
+        changes.append(
+            Change(
+                kind="attached_custom_xml_schema_inventory_changed",
+                message="Attached custom XML schema inventory changed.",
+                details={
+                    "before": before.attached_custom_xml_schemas.public_dict(),
+                    "after": after.attached_custom_xml_schemas.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(
