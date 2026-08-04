@@ -354,6 +354,7 @@ _XMLDSIG_NAMESPACE: Final = "http://www.w3.org/2000/09/xmldsig#"
 _OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
     "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
+_OPC_PACKAGE_SPECIFIC_OBJECT_ID: Final = "idPackageObject"
 _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM: Final = (
     "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
 )
@@ -2528,35 +2529,14 @@ def _declared_package_signature_coverage(
     content_types: dict[str, str],
     relationship_maps: dict[str, dict[str, _Relationship]],
 ) -> _DeclaredPackageSignatureCoverage:
-    """Resolve one signature's explicitly bound package-manifest objects."""
+    """Resolve one signature's single bounded OPC package-specific object."""
 
     signed_info = next(
         child
         for child in root
         if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignedInfo")
     )
-    manifest_objects: dict[str, ET.Element] = {}
-    ambiguous_manifest_object_ids: set[str] = set()
-    for object_element in root:
-        if _qualified_name(object_element.tag) != (_XMLDSIG_NAMESPACE, "Object"):
-            continue
-        object_id = object_element.attrib.get("Id")
-        manifests = [
-            child
-            for child in object_element
-            if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Manifest")
-        ]
-        if not object_id or len(manifests) != 1:
-            continue
-        if object_id in manifest_objects:
-            ambiguous_manifest_object_ids.add(object_id)
-            del manifest_objects[object_id]
-            continue
-        if object_id not in ambiguous_manifest_object_ids:
-            manifest_objects[object_id] = manifests[0]
-
     records: list[tuple[str, ...]] = []
-    bound_manifest_object_ids: set[str] = set()
     for reference in signed_info:
         if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
             continue
@@ -2566,11 +2546,16 @@ def _declared_package_signature_coverage(
                 _digest_bytes(ET.tostring(reference, encoding="utf-8")),
             )
         )
-        object_id = _signature_fragment_identifier(reference.attrib.get("URI"))
-        if object_id is not None and object_id in manifest_objects:
-            bound_manifest_object_ids.add(object_id)
 
-    if not bound_manifest_object_ids:
+    manifest = _package_specific_object_manifest(root)
+    package_object_references = [
+        reference
+        for reference in signed_info
+        if _qualified_name(reference.tag) == (_XMLDSIG_NAMESPACE, "Reference")
+        and _signature_fragment_identifier(reference.attrib.get("URI"))
+        == _OPC_PACKAGE_SPECIFIC_OBJECT_ID
+    ]
+    if manifest is None or len(package_object_references) != 1:
         return _DeclaredPackageSignatureCoverage(
             has_declared_package_coverage=False,
             covered_part_names=frozenset(),
@@ -2586,28 +2571,26 @@ def _declared_package_signature_coverage(
     unsupported_reference_count = 0
 
     # OPC limits a relationships part to one relationship transform per XML
-    # signature. Bound package manifests can live in several direct objects,
-    # so this has to be counted before resolving their references one at a time.
+    # signature. Count this single package manifest before resolving its
+    # references, so a duplicate never contributes partial coverage.
     relationship_transform_counts_by_part: dict[str, int] = {}
-    for object_id in sorted(bound_manifest_object_ids):
-        manifest = manifest_objects[object_id]
-        for reference in manifest:
-            if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
-                continue
-            parsed_reference = _package_manifest_reference_member_name(
-                reference.attrib.get("URI")
+    for reference in manifest:
+        if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
+            continue
+        parsed_reference = _package_manifest_reference_member_name(
+            reference.attrib.get("URI")
+        )
+        if parsed_reference is None:
+            continue
+        part_name, _ = parsed_reference
+        if not part_name.endswith(".rels"):
+            continue
+        relationship_transform_count = _relationship_transform_count(reference)
+        if relationship_transform_count:
+            relationship_transform_counts_by_part[part_name] = (
+                relationship_transform_counts_by_part.get(part_name, 0)
+                + relationship_transform_count
             )
-            if parsed_reference is None:
-                continue
-            part_name, _ = parsed_reference
-            if not part_name.endswith(".rels"):
-                continue
-            relationship_transform_count = _relationship_transform_count(reference)
-            if relationship_transform_count:
-                relationship_transform_counts_by_part[part_name] = (
-                    relationship_transform_counts_by_part.get(part_name, 0)
-                    + relationship_transform_count
-                )
     duplicate_relationship_transform_part_names = frozenset(
         part_name
         for part_name, relationship_transform_count in (
@@ -2616,66 +2599,64 @@ def _declared_package_signature_coverage(
         if relationship_transform_count > 1
     )
 
-    for object_id in sorted(bound_manifest_object_ids):
-        manifest = manifest_objects[object_id]
-        records.append(
-            (
-                "package_signature_coverage_bound_manifest_object",
-                _digest_bytes(object_id.encode("utf-8")),
-            )
+    records.append(
+        (
+            "package_signature_coverage_bound_manifest_object",
+            _digest_bytes(_OPC_PACKAGE_SPECIFIC_OBJECT_ID.encode("utf-8")),
         )
-        for reference in manifest:
-            if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
-                unsupported_reference_count += 1
-                records.append(
-                    (
-                        "package_signature_coverage_unsupported_manifest_child",
-                        _digest_bytes(ET.tostring(reference, encoding="utf-8")),
-                    )
-                )
-                continue
-            parsed_reference = _package_manifest_reference_member_name(
-                reference.attrib.get("URI")
-            )
-            relationship_transform_is_duplicated = (
-                parsed_reference is not None
-                and parsed_reference[0] in duplicate_relationship_transform_part_names
-                and _relationship_transform_count(reference) > 0
-            )
-            if relationship_transform_is_duplicated:
-                resolution = _ManifestReferenceResolution(
-                    covered_part_name=None,
-                    covered_relationship_ids=frozenset(),
-                    unresolved_reference_count=0,
-                    unsupported_reference_count=1,
-                )
-            else:
-                resolution = _resolve_package_manifest_reference(
-                    reference,
-                    members,
-                    content_types,
-                    relationship_maps,
-                )
-            covered_part_names.update(
-                part_name
-                for part_name in (resolution.covered_part_name,)
-                if part_name is not None
-            )
-            covered_relationship_ids.update(resolution.covered_relationship_ids)
-            unresolved_reference_count += resolution.unresolved_reference_count
-            unsupported_reference_count += resolution.unsupported_reference_count
+    )
+    for reference in manifest:
+        if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
+            unsupported_reference_count += 1
             records.append(
                 (
-                    "package_signature_coverage_manifest_reference",
+                    "package_signature_coverage_unsupported_manifest_child",
                     _digest_bytes(ET.tostring(reference, encoding="utf-8")),
-                    "resolved"
-                    if (
-                        resolution.covered_part_name is not None
-                        or resolution.covered_relationship_ids
-                    )
-                    else "indeterminate",
                 )
             )
+            continue
+        parsed_reference = _package_manifest_reference_member_name(
+            reference.attrib.get("URI")
+        )
+        relationship_transform_is_duplicated = (
+            parsed_reference is not None
+            and parsed_reference[0] in duplicate_relationship_transform_part_names
+            and _relationship_transform_count(reference) > 0
+        )
+        if relationship_transform_is_duplicated:
+            resolution = _ManifestReferenceResolution(
+                covered_part_name=None,
+                covered_relationship_ids=frozenset(),
+                unresolved_reference_count=0,
+                unsupported_reference_count=1,
+            )
+        else:
+            resolution = _resolve_package_manifest_reference(
+                reference,
+                members,
+                content_types,
+                relationship_maps,
+            )
+        covered_part_names.update(
+            part_name
+            for part_name in (resolution.covered_part_name,)
+            if part_name is not None
+        )
+        covered_relationship_ids.update(resolution.covered_relationship_ids)
+        unresolved_reference_count += resolution.unresolved_reference_count
+        unsupported_reference_count += resolution.unsupported_reference_count
+        records.append(
+            (
+                "package_signature_coverage_manifest_reference",
+                _digest_bytes(ET.tostring(reference, encoding="utf-8")),
+                "resolved"
+                if (
+                    resolution.covered_part_name is not None
+                    or resolution.covered_relationship_ids
+                )
+                else "indeterminate",
+            )
+        )
 
     return _DeclaredPackageSignatureCoverage(
         has_declared_package_coverage=True,
@@ -2685,6 +2666,30 @@ def _declared_package_signature_coverage(
         unsupported_reference_count=unsupported_reference_count,
         records=tuple(records),
     )
+
+
+def _package_specific_object_manifest(root: ET.Element) -> ET.Element | None:
+    """Return OPC's one exact package-specific object manifest, if present."""
+
+    package_specific_objects = [
+        child
+        for child in root
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Object")
+        and child.attrib.get("Id") == _OPC_PACKAGE_SPECIFIC_OBJECT_ID
+    ]
+    if len(package_specific_objects) != 1:
+        return None
+
+    package_object = package_specific_objects[0]
+    children = list(package_object)
+    if package_object.attrib != {"Id": _OPC_PACKAGE_SPECIFIC_OBJECT_ID} or [
+        _qualified_name(child.tag) for child in children
+    ] != [
+        (_XMLDSIG_NAMESPACE, "Manifest"),
+        (_XMLDSIG_NAMESPACE, "SignatureProperties"),
+    ]:
+        return None
+    return children[0]
 
 
 def _signature_fragment_identifier(uri: str | None) -> str | None:

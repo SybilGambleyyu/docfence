@@ -196,11 +196,15 @@ times, comments, provider data, relationship IDs, paths, or digests. A
 same-count signature or certificate rewrite is therefore visible without
 copying signature material into a report.
 
-A separate static declaration audit follows only a direct `SignedInfo` local
-fragment reference to a direct `ds:Object` with exactly one direct package
-`ds:Manifest`. From that bounded link, it resolves exact part URI/content-type
-references with case-sensitive content-type matching. Before a manifest
-reference is credited, its direct XMLDSIG children must be optional
+A separate static declaration audit follows only one direct
+`ds:Object Id="idPackageObject"` with no other attributes and exactly direct
+`ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
+direct `SignedInfo` local-fragment reference to that object. It resolves only
+that package-specific manifest, using the binding reference's direct URI
+fragment without parsing or validating its digest or transforms. From that
+bounded link, it resolves exact part URI/content-type references with
+case-sensitive content-type matching. Before a manifest reference is credited,
+its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. It then
@@ -217,10 +221,10 @@ IDs/types, part paths, and digest material remain private. A same-count
 coverage reassignment is retained in the private semantic signature.
 
 Within one XML signature, the audit also counts relationship transforms for
-each relationships part across all bound manifests. More than one transform for
-the same part is unsupported and credits none of those selectors. That preserves
-the OPC per-relationships-part constraint without exposing the part, selector,
-or relationship identity.
+each relationships part within that one package-specific manifest. More than
+one transform for the same part is unsupported and credits none of those
+selectors. That preserves the OPC per-relationships-part constraint without
+exposing the part, selector, or relationship identity.
 
 For a non-relationship package part, the audit accepts no transform list or one
 direct nonempty list of only the two OPC XML Canonicalization algorithms. Empty,

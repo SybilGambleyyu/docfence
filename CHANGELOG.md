@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.46.0 — 2026-08-04
+
+- Hardened the static package-signature declaration boundary to OPC's exact
+  package-specific topology. A recognized signature now receives declaration
+  coverage only from one direct `ds:Object Id="idPackageObject"` with no other
+  attributes and exactly direct `ds:Manifest` then `ds:SignatureProperties`
+  children, plus exactly one direct `SignedInfo` reference to that object.
+  Missing or nonstandard IDs, missing or extra package-object children,
+  duplicate package objects, and duplicate bindings leave coverage unavailable
+  rather than combining arbitrary manifests.
+- Added regression coverage for every rejected topology above and updated the
+  deterministic DCAB package-signature fixtures to use the OPC identifier.
+  This remains a bounded structural audit: DocFence does not parse or validate
+  the binding reference's digest or transforms, recompute manifest digests,
+  validate signatures or certificates, establish trust, or predict Office
+  client behavior.
+
 ## 0.45.0 — 2026-08-04
 
 - Hardened the bounded XMLDSIG `Reference` shape required before a bound

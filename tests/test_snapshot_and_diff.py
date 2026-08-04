@@ -3564,8 +3564,20 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     duplicate_relationship_transform = (
         tmp_path / "duplicate-relationship-transform.docx"
     )
-    duplicate_relationship_transform_across_manifests = (
-        tmp_path / "duplicate-relationship-transform-across-manifests.docx"
+    missing_package_signature_properties = (
+        tmp_path / "missing-package-signature-properties.docx"
+    )
+    nonstandard_package_specific_object_id = (
+        tmp_path / "nonstandard-package-specific-object-id.docx"
+    )
+    extra_package_specific_object_child = (
+        tmp_path / "extra-package-specific-object-child.docx"
+    )
+    duplicate_package_specific_object = (
+        tmp_path / "duplicate-package-specific-object.docx"
+    )
+    duplicate_package_specific_object_reference = (
+        tmp_path / "duplicate-package-specific-object-reference.docx"
     )
     canonicalized_word_part = tmp_path / "canonicalized-word-part.docx"
     canonicalized_word_part_with_comments = (
@@ -3659,8 +3671,24 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         include_duplicate_word_relationship_manifest_reference=True,
     )
     _write_package_signature_coverage_document(
-        duplicate_relationship_transform_across_manifests,
-        include_second_bound_manifest_with_duplicate_word_relationship=True,
+        missing_package_signature_properties,
+        include_package_signature_properties=False,
+    )
+    _write_package_signature_coverage_document(
+        nonstandard_package_specific_object_id,
+        package_object_id="idNonstandardPackageObject",
+    )
+    _write_package_signature_coverage_document(
+        extra_package_specific_object_child,
+        include_extra_package_object_child=True,
+    )
+    _write_package_signature_coverage_document(
+        duplicate_package_specific_object,
+        include_duplicate_package_object=True,
+    )
+    _write_package_signature_coverage_document(
+        duplicate_package_specific_object_reference,
+        include_duplicate_package_object_reference=True,
     )
     _write_package_signature_coverage_document(
         canonicalized_word_part,
@@ -3727,6 +3755,18 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "unresolved_package_manifest_reference_count": 0,
         "unsupported_package_manifest_reference_count": 0,
     }
+    expected_without_declared_package_coverage = {
+        "signature_with_declared_package_coverage_count": 0,
+        "signature_without_declared_package_coverage_count": 1,
+        "declared_covered_word_part_count": 0,
+        "declared_uncovered_word_part_count": 2,
+        "declared_covered_root_document_relationship_count": 0,
+        "declared_uncovered_root_document_relationship_count": 1,
+        "declared_covered_word_relationship_count": 0,
+        "declared_uncovered_word_relationship_count": 1,
+        "unresolved_package_manifest_reference_count": 0,
+        "unsupported_package_manifest_reference_count": 0,
+    }
     fully_declared_snapshot = load_snapshot(fully_declared)
     assert (
         fully_declared_snapshot.public_dict()["package_signature_coverage"]
@@ -3744,18 +3784,21 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     }
 
     unbound_snapshot = load_snapshot(unbound_package_object)
-    assert unbound_snapshot.public_dict()["package_signature_coverage"] == {
-        "signature_with_declared_package_coverage_count": 0,
-        "signature_without_declared_package_coverage_count": 1,
-        "declared_covered_word_part_count": 0,
-        "declared_uncovered_word_part_count": 2,
-        "declared_covered_root_document_relationship_count": 0,
-        "declared_uncovered_root_document_relationship_count": 1,
-        "declared_covered_word_relationship_count": 0,
-        "declared_uncovered_word_relationship_count": 1,
-        "unresolved_package_manifest_reference_count": 0,
-        "unsupported_package_manifest_reference_count": 0,
-    }
+    assert (
+        unbound_snapshot.public_dict()["package_signature_coverage"]
+        == expected_without_declared_package_coverage
+    )
+    for document in (
+        missing_package_signature_properties,
+        nonstandard_package_specific_object_id,
+        extra_package_specific_object_child,
+        duplicate_package_specific_object,
+        duplicate_package_specific_object_reference,
+    ):
+        assert (
+            load_snapshot(document).public_dict()["package_signature_coverage"]
+            == expected_without_declared_package_coverage
+        )
     assert (
         load_snapshot(
             unresolved_manifest_reference
@@ -3838,14 +3881,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_unsupported_relationship_transform
         )
-    for document in (
-        duplicate_relationship_transform,
-        duplicate_relationship_transform_across_manifests,
-    ):
-        assert load_snapshot(document).public_dict()["package_signature_coverage"] == {
-            **expected_unsupported_relationship_transform,
-            "unsupported_package_manifest_reference_count": 2,
-        }
+    assert load_snapshot(duplicate_relationship_transform).public_dict()[
+        "package_signature_coverage"
+    ] == {
+        **expected_unsupported_relationship_transform,
+        "unsupported_package_manifest_reference_count": 2,
+    }
     for document in (
         canonicalized_word_part,
         canonicalized_word_part_with_comments,
@@ -3935,9 +3976,19 @@ rules:
                 diff_documents(fully_declared, document), policy
             ).findings
         } == {"DFP092", "DFP093"}
+    for document in (duplicate_relationship_transform,):
+        assert {
+            finding.rule_id
+            for finding in apply_policy(
+                diff_documents(fully_declared, document), policy
+            ).findings
+        } == {"DFP092", "DFP093"}
     for document in (
-        duplicate_relationship_transform,
-        duplicate_relationship_transform_across_manifests,
+        missing_package_signature_properties,
+        nonstandard_package_specific_object_id,
+        extra_package_specific_object_child,
+        duplicate_package_specific_object,
+        duplicate_package_specific_object_reference,
     ):
         assert {
             finding.rule_id
@@ -8317,7 +8368,11 @@ def _write_package_signature_coverage_document(
     use_nonstandard_source_type_selector: bool = False,
     word_relationship_transform_mode: str = "standard",
     include_duplicate_word_relationship_manifest_reference: bool = False,
-    include_second_bound_manifest_with_duplicate_word_relationship: bool = False,
+    package_object_id: str = "idPackageObject",
+    include_package_signature_properties: bool = True,
+    include_extra_package_object_child: bool = False,
+    include_duplicate_package_object: bool = False,
+    include_duplicate_package_object_reference: bool = False,
     word_part_transform_mode: str = "none",
     word_part_digest_mode: str = "standard",
 ) -> None:
@@ -8348,7 +8403,7 @@ def _write_package_signature_coverage_document(
         )
 
     signed_info_reference = (
-        "#idPackageObject"
+        f"#{package_object_id}"
         if signed_info_references_package_object
         else "#PACKAGE_COVERAGE_PRIVATE_OBJECT_DO_NOT_LEAK"
     )
@@ -8394,16 +8449,31 @@ def _write_package_signature_coverage_document(
         if include_duplicate_word_relationship_manifest_reference
         else ""
     )
-    additional_signed_info_reference = (
-        f'<ds:Reference URI="#idSecondPackageObject">{digest_reference}</ds:Reference>'
-        if include_second_bound_manifest_with_duplicate_word_relationship
+    duplicate_package_object_reference = (
+        f'<ds:Reference Type="{_XMLDSIG_NAMESPACE}Object" URI="#{package_object_id}">'
+        f"{digest_reference}</ds:Reference>"
+        if include_duplicate_package_object_reference
         else ""
     )
-    additional_package_object = (
-        '<ds:Object Id="idSecondPackageObject"><ds:Manifest>'
+    package_signature_properties = (
+        "<ds:SignatureProperties><ds:SignatureProperty "
+        'Id="idSignatureTime" Target="#idPackageSignature">'
+        "<opc:SignatureTime><opc:Format>YYYY-MM-DDThh:mm:ssTZD</opc:Format>"
+        "<opc:Value>1980-01-01T00:00:00Z</opc:Value>"
+        "</opc:SignatureTime></ds:SignatureProperty></ds:SignatureProperties>"
+        if include_package_signature_properties
+        else ""
+    )
+    extra_package_object_child = (
+        "<opc:UnexpectedPackageObjectChild/>"
+        if include_extra_package_object_child
+        else ""
+    )
+    duplicate_package_object = (
+        f'<ds:Object Id="{package_object_id}"><ds:Manifest>'
         f"{word_relationship_manifest_reference}"
-        "</ds:Manifest></ds:Object>"
-        if include_second_bound_manifest_with_duplicate_word_relationship
+        f"</ds:Manifest>{package_signature_properties}</ds:Object>"
+        if include_duplicate_package_object
         else ""
     )
     word_part_manifest_transforms = _package_signature_part_transforms(
@@ -8436,11 +8506,12 @@ def _write_package_signature_coverage_document(
         'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
         "<ds:SignatureMethod "
         'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
-        f'<ds:Reference URI="{signed_info_reference}">'
-        f"{digest_reference}</ds:Reference>{additional_signed_info_reference}"
+        f'<ds:Reference Type="{_XMLDSIG_NAMESPACE}Object" '
+        f'URI="{signed_info_reference}">'
+        f"{digest_reference}</ds:Reference>{duplicate_package_object_reference}"
         "</ds:SignedInfo>"
         "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
-        '<ds:Object Id="idPackageObject"><ds:Manifest>'
+        f'<ds:Object Id="{package_object_id}"><ds:Manifest>'
         f"{root_relationship_manifest_reference}"
         f"{word_relationship_manifest_reference}"
         f"{duplicate_word_relationship_manifest_reference}"
@@ -8451,7 +8522,8 @@ def _write_package_signature_coverage_document(
         f"{digest_reference}</ds:Reference>"
         f"{unresolved_manifest_reference}"
         f"{unsupported_manifest_reference}"
-        f"</ds:Manifest></ds:Object>{additional_package_object}</ds:Signature>"
+        f"</ds:Manifest>{package_signature_properties}{extra_package_object_child}"
+        f"</ds:Object>{duplicate_package_object}</ds:Signature>"
     ).encode()
 
     entries: dict[str, bytes] = {

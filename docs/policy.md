@@ -783,12 +783,19 @@ of `require_no_package_digital_signatures`: the latter rejects all stored
 package-signature material, while this rule requires a bounded declaration
 surface to be present and complete.
 
-For every recognized XML signature part, DocFence requires at least one direct
-`SignedInfo` `Reference` to a local `#` fragment that identifies a direct
-`ds:Object` with exactly one direct `ds:Manifest`. It resolves the references
-from each such bound manifest only. Supported part references use an exact
-local part URI plus case-sensitive matching content type. Before a manifest
-reference is credited, its direct XMLDSIG children must be optional
+For every recognized XML signature part, DocFence requires exactly one direct
+`ds:Object` whose only attribute is `Id="idPackageObject"` and whose direct
+children are exactly one `ds:Manifest` followed by one
+`ds:SignatureProperties`. It also requires exactly one direct `SignedInfo`
+`Reference` whose local fragment is `#idPackageObject`. Only that one
+package-specific manifest is resolved; a missing or nonstandard object,
+missing or extra direct child, duplicate object, or duplicate binding is not
+combined with another manifest and leaves declaration coverage unavailable.
+The binding check uses its direct URI fragment only: DocFence does not parse
+or validate that reference's digest or transforms. Supported manifest part
+references use an exact local part URI plus case-sensitive matching content
+type. Before a manifest reference is credited, its direct XMLDSIG children must
+be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. Supported
@@ -805,10 +812,9 @@ as an aggregate unresolved reference.
 
 OPC permits no more than one relationship transform for a particular
 relationships part in one XML signature. DocFence counts transform-bearing
-references to each relationship part across every bound manifest in that
-signature. If a part has more than one, every such declaration remains an
-aggregate unsupported reference and none of its selectors are credited with
-coverage.
+references to each relationship part within that one package-specific manifest.
+If a part has more than one, every such declaration remains an aggregate
+unsupported reference and none of its selectors are credited with coverage.
 
 For a non-relationship package part, supported references have no
 `ds:Transforms` element or exactly one direct nonempty `ds:Transforms` list of
@@ -820,11 +826,12 @@ coverage.
 The bounded Word scope comprises every non-relationship member under `word/`,
 root-package relationships whose type is `officeDocument`, and every stored
 relationship sourced by a Word part. `DFP092` fails if no recognized XML
-signature is present, any recognized XML signature lacks a bound manifest,
-any of those bounded parts or relationships is undeclared, or a bound manifest
-contains unresolved or unsupported references. It does not assert that this
-scope is all package content or all content an Office client may use.
-Coverage is the union of all bound manifests; the rule does not require each
+signature is present, any recognized XML signature lacks this
+package-specific-object topology, any of those bounded parts or relationships
+is undeclared, or its one manifest contains unresolved or unsupported
+references. It does not assert that this scope is all package content or all
+content an Office client may use. Coverage is the union of each qualifying
+signature's one package-specific manifest; the rule does not require each
 individual signature to select every bounded item itself.
 
 ```yaml
