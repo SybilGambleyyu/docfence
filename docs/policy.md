@@ -107,6 +107,8 @@ starter policy.
 | `no_markup_compatibility_changes` | `DFP083` | OOXML Markup Compatibility inventory differs | Comparison |
 | `require_no_hidden_drawing_objects` | `DFP084` | Candidate has a stored hidden or invalid supported DrawingML nonvisual declaration | Candidate |
 | `no_drawing_object_visibility_changes` | `DFP085` | DrawingML nonvisual visibility inventory differs | Comparison |
+| `require_no_save_forms_data` | `DFP086` | Candidate requests form-data-only saving | Candidate |
+| `no_save_forms_data_changes` | `DFP087` | Form-data-only-save inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -136,6 +138,11 @@ does so for an approved custom XSLT-on-single-XML-save configuration.
 custom XML schema declarations.
 `no_field_update_on_open_changes` does so for an approved automatic-field-
 recalculation-on-open setting.
+`no_save_forms_data_changes` does so for an approved form-data-only-save
+setting, while `require_no_save_forms_data` rejects a candidate that stores an
+enabled request. These rules inspect only the direct stored Settings leaf; they
+do not discover or evaluate form fields, read field values, save a document,
+emit a delimited record, or predict client behavior.
 `no_package_thumbnail_changes` does so for a controlled template that retains
 an approved relationship-bound OPC thumbnail image.
 `no_markup_compatibility_changes` does so for a controlled template that

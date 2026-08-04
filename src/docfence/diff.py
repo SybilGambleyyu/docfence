@@ -767,6 +767,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.save_forms_data.signature != after.save_forms_data.signature:
+        changes.append(
+            Change(
+                kind="save_forms_data_inventory_changed",
+                message="Stored form-data-only-save inventory changed.",
+                details={
+                    "before": before.save_forms_data.public_dict(),
+                    "after": after.save_forms_data.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

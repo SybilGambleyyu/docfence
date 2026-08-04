@@ -1036,6 +1036,26 @@ class PersonalInformationRemovalOnSaveInventory:
 
 
 @dataclass(frozen=True)
+class SaveFormsDataInventory:
+    """Stored form-data-only-save settings, aggregate only.
+
+    Settings-part paths and private fingerprints remain local. Public output
+    records only whether explicitly stored settings request or decline a
+    form-data-only save when a capable document host saves the package.
+    """
+
+    enabled_setting_count: int
+    disabled_setting_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "save_forms_data_enabled_setting_count": self.enabled_setting_count,
+            "save_forms_data_disabled_setting_count": self.disabled_setting_count,
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1321,6 +1341,7 @@ class DocumentSnapshot:
     field_updates_on_open: FieldUpdateOnOpenInventory
     template_style_updates_on_open: TemplateStyleUpdateOnOpenInventory
     personal_information_removal_on_save: PersonalInformationRemovalOnSaveInventory
+    save_forms_data: SaveFormsDataInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1447,6 +1468,7 @@ class DocumentSnapshot:
             "personal_information_removal_on_save": (
                 self.personal_information_removal_on_save.public_dict()
             ),
+            "save_forms_data": self.save_forms_data.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

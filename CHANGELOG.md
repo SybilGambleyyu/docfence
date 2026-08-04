@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.37.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for direct stored Word Settings
+  `w:saveFormsData` `CT_OnOff` declarations. Public reports contain only
+  enabled and explicitly disabled setting counts; Settings-part paths and
+  private fingerprints remain local. Canonical on/off state prevents lexical
+  equivalent declarations from adding review noise while an enabled/disabled
+  transition remains review-visible.
+- Added DFP086 to reject a candidate that requests form-data-only saving and
+  DFP087 to protect an approved stored configuration baseline.
+- Added regression coverage for absent, implicit-enabled, explicit,
+  disabled, and Strict leaves; malformed direct state; private output;
+  Markdown, JSON, and SARIF output; and policy findings. DocFence does not
+  find or evaluate form fields, read field values, open Word, save a document,
+  emit a delimited record, determine a delimiter, or predict Office client
+  behavior.
+
 ## 0.36.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for direct stored DrawingML

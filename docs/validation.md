@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.36 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.37 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -15,7 +15,7 @@ following properties:
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
   state, Word Settings XSLT-on-single-XML-save, attached-custom-XML-schema,
-  and automatic-field-recalculation-on-open state, Word `HYPERLINK`
+  automatic-field-recalculation-on-open, and form-data-only-save state, Word `HYPERLINK`
   field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML nonvisual hidden-state
@@ -132,6 +132,14 @@ following properties:
   positive-request and baseline policy findings; and malformed unsupported
   attributes/boolean values, nonblank text, nested markup, and duplicate direct
   leaves;
+- form-data-only-save state is separately inventoried from generic Settings
+  and field-code changes. Tests cover absent, implicit-enabled, explicitly
+  enabled, explicitly disabled, and Strict leaves; canonical equivalent enabled
+  spellings; JSON/Markdown/SARIF redaction; candidate and baseline policy
+  findings; and malformed unsupported attributes/boolean values, nonblank text,
+  nested markup, and duplicate direct leaves. This validates stored
+  configuration only: no test opens Word, evaluates a form field, reads a field
+  value, saves a document, or emits a delimited record;
 - the conventional custom-XML candidate gate is separately tested from the
   baseline-comparison rule. A document with unbound `customXml/` data triggers
   `DFP079` even against itself, a clean document passes, and JSON, Markdown,

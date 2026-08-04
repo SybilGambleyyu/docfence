@@ -21,7 +21,7 @@ core/extended/custom document
 properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, custom XSLT-on-single-XML-save
 configuration, attached custom XML schema declarations, automatic
-field-recalculation-on-open settings, OPC package
+field-recalculation-on-open settings, form-data-only-save settings, OPC package
 digital-signature material, relationship-bound OPC package thumbnail images,
 OOXML Markup Compatibility `mc:AlternateContent` branches and compatibility
 rule attributes,
@@ -114,7 +114,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.36 focuses on Office Open XML Word documents and templates and
+Version 0.37 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -149,6 +149,7 @@ deliberately keeps a small, inspectable contract:
   XML schema declarations, automatic field-recalculation-on-open configuration,
   automatic template-style-update-on-open configuration,
   personal-information-removal-on-save configuration,
+  form-data-only-save configuration,
   content-control data-binding, modern-comment
   metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -880,6 +881,25 @@ baseline. Neither rule opens Word, saves a document, identifies authors,
 rewrites properties, removes comments or revisions, or claims that a client
 will honor the request.
 
+Form-data-only save configuration is recorded separately from generic Settings
+and field-code changes. A direct `w:saveFormsData` `CT_OnOff` leaf stores a
+request for a capable document host to save only legacy form-field content as a
+delimited record on a later save. DocFence accepts one direct leaf per
+discovered Settings part in either Word namespace, validates its optional
+Word-namespace `w:val` as a standard on/off token, and reports enabled and
+explicitly disabled setting counts only. Settings-part paths and private
+fingerprints remain local. The private signature retains canonical stored
+state, so an enabled-to-disabled transition remains review-visible while
+equivalent enabled spellings such as omitted `w:val`, `on`, and `true` remain
+quiet.
+
+`require_no_save_forms_data` fails only when a candidate explicitly requests
+form-data-only saving. `no_save_forms_data_changes` protects a controlled
+stored baseline, including an explicitly disabled setting. Neither rule finds
+or evaluates form fields, reads field values, opens Word, saves a document,
+emits a delimited record, determines a delimiter, or claims that a particular
+client will honor the request.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -916,6 +936,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_field_updates_on_open: true
   require_no_template_style_updates_on_open: true
   require_personal_information_removal_on_save: true
+  require_no_save_forms_data: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -952,6 +973,7 @@ later mutation:
   no_field_update_on_open_changes: true
   no_template_style_update_on_open_changes: true
   no_personal_information_removal_on_save_changes: true
+  no_save_forms_data_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -1146,6 +1168,11 @@ which specifies a request to remove authors' personal information when a
 document is saved while leaving the definition and extent of that information
 undefined. DocFence records the direct stored request without identifying,
 removing, or rewriting any document material.
+The form-data-only-save boundary follows the Open XML SDK's
+[`w:saveFormsData` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.saveformsdata?view=openxml-3.0.1).
+It describes a stored request for form-field-content-only saving; DocFence
+records only the direct declaration and never attempts that save or inspects a
+field value.
 The Word document-variable and `DOCVARIABLE`-field boundary follows the Open XML SDK's
 [`w:docVar` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.documentvariable?view=openxml-3.0.1)
 and Word's [Variable object documentation](https://learn.microsoft.com/en-us/office/vba/api/word.variable):

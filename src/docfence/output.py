@@ -132,6 +132,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
             document.get("personal_information_removal_on_save", {})
         )
     )
+    lines.extend(_save_forms_data_section(document.get("save_forms_data", {})))
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
@@ -186,6 +187,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_field_update_on_open_comparison(before, after))
     lines.extend(_template_style_update_on_open_comparison(before, after))
     lines.extend(_personal_information_removal_on_save_comparison(before, after))
+    lines.extend(_save_forms_data_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
@@ -464,6 +466,10 @@ def _template_style_update_on_open_section(value: object) -> list[str]:
 
 def _personal_information_removal_on_save_section(value: object) -> list[str]:
     return _inventory_section("Personal-information-removal-on-save inventory", value)
+
+
+def _save_forms_data_section(value: object) -> list[str]:
+    return _inventory_section("Form-data-only-save inventory", value)
 
 
 def _data_binding_section(value: object) -> list[str]:
@@ -784,6 +790,16 @@ def _personal_information_removal_on_save_comparison(
         "Personal-information-removal-on-save inventory",
         before.get("personal_information_removal_on_save", {}),
         after.get("personal_information_removal_on_save", {}),
+    )
+
+
+def _save_forms_data_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Form-data-only-save inventory",
+        before.get("save_forms_data", {}),
+        after.get("save_forms_data", {}),
     )
 
 

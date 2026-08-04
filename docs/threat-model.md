@@ -278,6 +278,18 @@ distinct events. DocFence does not open or save a document, identify authors,
 inspect or rewrite document properties, remove comments or revisions, or claim
 that a host will honor the stored request.
 
+Form-data-only-save settings receive a separate private-digest treatment.
+DocFence recognizes at most one direct `w:saveFormsData` `CT_OnOff` leaf per
+discovered Document Settings part and validates its leaf shape, Word-namespace
+attribute vocabulary, and standard on/off token. Public output is limited to
+enabled and explicitly disabled setting counts; Settings-part paths and
+fingerprints remain private. The private signature retains canonical
+enabled/disabled state so a state transition stays review-visible without
+treating equivalent token spellings as distinct events. DocFence does not find
+or evaluate a legacy form field, read a field value, open Word, save a
+document, emit a delimited record, determine a delimiter, or claim that a host
+will honor the stored request.
+
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
 pre-separator instructions across supported stories, retaining current and

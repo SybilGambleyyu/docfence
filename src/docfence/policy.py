@@ -44,6 +44,8 @@ _RULES: Final = {
     "no_template_style_update_on_open_changes": "DFP076",
     "require_personal_information_removal_on_save": "DFP077",
     "no_personal_information_removal_on_save_changes": "DFP078",
+    "require_no_save_forms_data": "DFP086",
+    "no_save_forms_data_changes": "DFP087",
     "require_no_custom_xml_data": "DFP079",
     "require_no_package_thumbnails": "DFP080",
     "no_package_thumbnail_changes": "DFP081",
@@ -640,6 +642,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_save_forms_data_changes") and (
+        before.save_forms_data.signature != after.save_forms_data.signature
+    ):
+        findings.append(
+            _finding(
+                "no_save_forms_data_changes",
+                "Form-data-only-save inventory changed.",
+                {
+                    "before": before.save_forms_data.public_dict(),
+                    "after": after.save_forms_data.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -1091,6 +1106,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_personal_information_removal_on_save",
                 "Candidate does not request personal-information removal on save.",
                 after.personal_information_removal_on_save.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_save_forms_data") and (
+        after.save_forms_data.enabled_setting_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_save_forms_data",
+                "Candidate requests form-data-only saving.",
+                after.save_forms_data.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (
