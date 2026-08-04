@@ -22,7 +22,8 @@ properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, custom XSLT-on-single-XML-save
 configuration, attached custom XML schema declarations, automatic
 field-recalculation-on-open settings, form-data-only-save settings,
-preview-thumbnail-on-save settings, OPC package digital-signature material,
+preview-thumbnail-on-save settings, OPC package digital-signature material and
+static declared package-signature coverage,
 relationship-bound OPC package thumbnail images,
 OOXML Markup Compatibility `mc:AlternateContent` branches and compatibility
 rule attributes,
@@ -118,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.39 focuses on Office Open XML Word documents and templates and
+Version 0.40 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -146,8 +147,8 @@ deliberately keeps a small, inspectable contract:
   custom-XML, macro,
   core/extended/custom document-property, relationship-bound OPC package
   thumbnail image, OOXML Markup Compatibility branch and compatibility-rule,
-  sensitivity-label metadata, OPC package digital-signature
-  material, Word editing/write-protection,
+  sensitivity-label metadata, OPC package digital-signature material and
+  static declared package-signature coverage, Word editing/write-protection,
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
   mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
@@ -289,10 +290,30 @@ certificate, and signature-property counts. Signer/certificate data, signature
 values, algorithms, signing times, comments, provider data, reference URIs,
 relationship IDs, part paths, and fingerprints remain private. The full
 recognized material is privately digested, so a same-count signature or
-certificate mutation remains review-visible. This is deliberately not a
-cryptographic verifier: DocFence does not validate a signature value,
-certificate chain, revocation or timestamp, signer identity, signing policy,
-what a signature covers, or whether a consumer should trust it.
+certificate mutation remains review-visible.
+
+The companion static declared package-signature coverage inventory follows a
+small, inspectable declaration chain. For each recognized XML signature, it
+looks for a direct `SignedInfo` local-fragment reference to a direct
+`ds:Object` with exactly one direct package `ds:Manifest`. From those bound
+manifests it resolves exact local part URI/content-type references with
+case-sensitive content-type matching, and standard OPC relationship-transform
+`SourceId`/`SourceType` selectors. Public output
+contains only aggregate counts for signatures with and without that declaration
+chain; covered and uncovered `word/` non-relationship parts; covered and
+uncovered root `officeDocument` relationships; covered and uncovered
+relationships sourced by Word parts; and unresolved or unsupported manifest
+references. Object identifiers, manifest-reference URIs, part paths,
+relationship identifiers and types, and digest material remain private. A
+private semantic signature keeps a same-count selection reassignment
+review-visible.
+
+This remains deliberately narrower than cryptographic or client-effective
+coverage. DocFence does not recompute reference digests or canonicalization,
+evaluate arbitrary transforms, validate a signature value, certificate chain,
+revocation or timestamp, establish signer identity, decide what an Office
+consumer will validate or render, or decide whether a signature should be
+trusted. It reports only bounded static declarations present in the package.
 
 Word editing and write-protection state has its own inventory because a generic
 Settings-part fingerprint cannot tell a reviewer whether a document retained an
@@ -994,6 +1015,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_taskpane_web_extensions: true
   require_no_sensitivity_label_metadata: true
   require_no_package_digital_signatures: true
+  require_complete_package_signature_coverage: true
   require_no_word_protection: true
   require_no_word_permission_ranges: true
   require_no_word_document_variables: true
@@ -1033,6 +1055,7 @@ later mutation:
   no_taskpane_web_extension_changes: true
   no_sensitivity_label_metadata_changes: true
   no_package_digital_signature_changes: true
+  no_package_signature_coverage_changes: true
   no_word_protection_changes: true
   no_word_permission_range_changes: true
   no_word_document_variable_changes: true
@@ -1049,6 +1072,15 @@ later mutation:
 YAML anchors, aliases, sequences, nested mappings, duplicate keys, unknown
 rules, and non-boolean values are rejected. That keeps a policy reviewable and
 avoids making the CLI's safety contract depend on a broad YAML loader.
+
+`require_complete_package_signature_coverage` is the opt-in alternative for a
+handoff that is expected to retain package signatures: it requires every
+recognized XML signature to provide a bound manifest and requires their
+combined declarations to cover the bounded Word scope described above. It is
+intentionally incompatible in purpose with
+`require_no_package_digital_signatures`, which instead rejects all stored
+package-signature material. `no_package_signature_coverage_changes` protects
+an approved declaration-coverage baseline without claiming signature validity.
 
 ## Privacy contract
 
@@ -1080,7 +1112,8 @@ Sensitivity-label IDs, tenant site IDs, label names, methods, set dates, action
 IDs, label-extension data, legacy MIP custom attributes, and Word content
 marking values remain private as well.
 Package-signature signer and certificate material, signature values, reference
-URIs, signing times, comments, provider data, relationship IDs, and part paths
+URIs, signing times, comments, provider data, relationship IDs, part paths,
+manifest object identifiers, static coverage selectors, and digest material
 remain private as well.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths remain private as well.
@@ -1203,7 +1236,8 @@ also documents legacy `MSIP_Label_` attributes and custom extensions; DocFence
 keeps them private while comparing their stored state.
 The package-signature boundary follows the OPC
 [digital-signature model](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/opc/open-packaging-conventions-overview)
-and the [ECMA-376 Open Packaging Conventions standard](https://ecma-international.org/publications-and-standards/standards/ecma-376/).
+and the [ECMA-376 Open Packaging Conventions standard](https://ecma-international.org/publications-and-standards/standards/ecma-376/),
+including its [relationship transform](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_Digital_topic_ID0EHROM.html).
 Microsoft explicitly leaves signer identity and trust decisions to the package
 consumer; DocFence therefore inventories structure without claiming signature
 validity. Independent [OOXML-signature security research](https://www.usenix.org/conference/usenixsecurity23/presentation/rohlmann)

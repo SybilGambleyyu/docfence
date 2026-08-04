@@ -113,6 +113,8 @@ starter policy.
 | `no_save_preview_picture_changes` | `DFP089` | Preview-thumbnail-on-save inventory differs | Comparison |
 | `require_content_control_locks` | `DFP090` | Candidate has a content control without a direct non-`unlocked` lock declaration | Candidate |
 | `no_content_control_lock_changes` | `DFP091` | Content-control lock inventory differs | Comparison |
+| `require_complete_package_signature_coverage` | `DFP092` | Candidate lacks complete static declared OPC package-signature coverage in DocFence's bounded Word scope | Candidate |
+| `no_package_signature_coverage_changes` | `DFP093` | Static declared OPC package-signature coverage inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -770,8 +772,61 @@ handoff that must not retain signer, certificate, or signature residue.
 `no_package_digital_signature_changes` protects an approved stored baseline.
 Neither rule verifies a cryptographic signature or digest, validates a
 certificate or chain, checks revocation or a timestamp, establishes signer
-identity, determines what content is covered, assesses an Office client, or
-decides whether a signature should be trusted.
+identity, assesses an Office client, or decides whether a signature should be
+trusted.
+
+### Static declared package-signature coverage
+
+`require_complete_package_signature_coverage` is an opt-in gate for a
+handoff that is expected to retain package signatures. It is not a softer form
+of `require_no_package_digital_signatures`: the latter rejects all stored
+package-signature material, while this rule requires a bounded declaration
+surface to be present and complete.
+
+For every recognized XML signature part, DocFence requires at least one direct
+`SignedInfo` `Reference` to a local `#` fragment that identifies a direct
+`ds:Object` with exactly one direct `ds:Manifest`. It resolves the references
+from each such bound manifest only. Supported part references use an exact
+local part URI plus case-sensitive matching content type. Supported relationship
+references use the standard OPC relationship transform and exact `SourceId` or
+`SourceType` selectors. An unsupported URI or relationship-transform/selector
+syntax is not assumed to be coverage: it is reported only as an aggregate
+unsupported reference; a missing member, content-type mismatch, missing
+relationship item, or selector that selects no stored relationship is reported
+as an aggregate unresolved reference.
+
+The bounded Word scope comprises every non-relationship member under `word/`,
+root-package relationships whose type is `officeDocument`, and every stored
+relationship sourced by a Word part. `DFP092` fails if no recognized XML
+signature is present, any recognized XML signature lacks a bound manifest,
+any of those bounded parts or relationships is undeclared, or a bound manifest
+contains unresolved or unsupported references. It does not assert that this
+scope is all package content or all content an Office client may use.
+Coverage is the union of all bound manifests; the rule does not require each
+individual signature to select every bounded item itself.
+
+```yaml
+version: 1
+rules:
+  require_complete_package_signature_coverage: true
+```
+
+`no_package_signature_coverage_changes` compares a private semantic signature
+of the declaration resolution. It catches same-count coverage reassignment
+without exposing part paths, object identifiers, reference URIs, relationship
+identifiers or types, selectors, or digest material.
+
+```yaml
+version: 1
+rules:
+  no_package_signature_coverage_changes: true
+```
+
+The audit does not recompute reference digests or canonicalization, evaluate
+arbitrary XMLDSIG transforms, verify a signature value, validate a certificate
+or trust chain, check revocation or timestamps, establish signer identity, or
+determine the effective coverage, rendering, or trust decision of an Office
+consumer. It resolves only this local, static declaration subset.
 
 ## Word editing and write-protection scope
 

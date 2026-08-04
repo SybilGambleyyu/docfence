@@ -62,6 +62,11 @@ def _profile_markdown(document: dict[str, object]) -> str:
             document.get("package_digital_signatures", {})
         )
     )
+    lines.extend(
+        _package_signature_coverage_section(
+            document.get("package_signature_coverage", {})
+        )
+    )
     lines.extend(_word_protection_section(document.get("word_protection", {})))
     lines.extend(
         _word_document_variable_section(document.get("word_document_variables", {}))
@@ -171,6 +176,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_markup_compatibility_comparison(before, after))
     lines.extend(_sensitivity_label_comparison(before, after))
     lines.extend(_package_digital_signature_comparison(before, after))
+    lines.extend(_package_signature_coverage_comparison(before, after))
     lines.extend(_word_protection_comparison(before, after))
     lines.extend(_word_document_variable_comparison(before, after))
     lines.extend(_word_document_variable_field_comparison(before, after))
@@ -382,6 +388,10 @@ def _package_digital_signature_section(value: object) -> list[str]:
     return _inventory_section("OPC package digital-signature inventory", value)
 
 
+def _package_signature_coverage_section(value: object) -> list[str]:
+    return _inventory_section("Static declared OPC package-signature coverage", value)
+
+
 def _word_protection_section(value: object) -> list[str]:
     return _inventory_section("Word editing and write-protection inventory", value)
 
@@ -586,6 +596,16 @@ def _package_digital_signature_comparison(
         "OPC package digital-signature inventory",
         before.get("package_digital_signatures", {}),
         after.get("package_digital_signatures", {}),
+    )
+
+
+def _package_signature_coverage_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Static declared OPC package-signature coverage",
+        before.get("package_signature_coverage", {}),
+        after.get("package_signature_coverage", {}),
     )
 
 

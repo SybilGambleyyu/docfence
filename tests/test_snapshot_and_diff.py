@@ -262,6 +262,12 @@ _XMLDSIG_NAMESPACE = "http://www.w3.org/2000/09/xmldsig#"
 _OPC_DIGITAL_SIGNATURE_NAMESPACE = (
     "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
+_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM = (
+    "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
+)
+_PACKAGE_RELATIONSHIP_CONTENT_TYPE = (
+    "application/vnd.openxmlformats-package.relationships+xml"
+)
 
 
 def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None:
@@ -3523,6 +3529,218 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     ):
         with pytest.raises(DocumentFormatError):
             load_snapshot(document)
+
+
+def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
+    fully_declared = tmp_path / "fully-declared.docx"
+    unsigned_word_surface = tmp_path / "unsigned-word-surface.docx"
+    unbound_package_object = tmp_path / "unbound-package-object.docx"
+    unresolved_manifest_reference = tmp_path / "unresolved-manifest-reference.docx"
+    mismatched_manifest_content_type = (
+        tmp_path / "mismatched-manifest-content-type.docx"
+    )
+    unsupported_manifest_reference = tmp_path / "unsupported-manifest-reference.docx"
+    selected_styles = tmp_path / "selected-styles.docx"
+    selected_duplicate = tmp_path / "selected-duplicate.docx"
+    source_type_selector = tmp_path / "source-type-selector.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_package_signature_coverage_document(fully_declared)
+    _write_package_signature_coverage_document(
+        unsigned_word_surface,
+        include_unsigned_word_surface=True,
+    )
+    _write_package_signature_coverage_document(
+        unbound_package_object,
+        signed_info_references_package_object=False,
+    )
+    _write_package_signature_coverage_document(
+        unresolved_manifest_reference,
+        include_unresolved_manifest_reference=True,
+    )
+    _write_package_signature_coverage_document(
+        mismatched_manifest_content_type,
+        include_case_mismatched_manifest_content_type=True,
+    )
+    _write_package_signature_coverage_document(
+        unsupported_manifest_reference,
+        include_unsupported_manifest_reference=True,
+    )
+    _write_package_signature_coverage_document(
+        selected_styles,
+        include_duplicate_style_relationship=True,
+        selected_word_relationship_id="rIdStyles",
+    )
+    _write_package_signature_coverage_document(
+        selected_duplicate,
+        include_duplicate_style_relationship=True,
+        selected_word_relationship_id="rIdStyleDuplicate",
+    )
+    _write_package_signature_coverage_document(
+        source_type_selector,
+        include_duplicate_style_relationship=True,
+        select_word_relationship_by_type=True,
+    )
+
+    expected_fully_declared = {
+        "signature_with_declared_package_coverage_count": 1,
+        "signature_without_declared_package_coverage_count": 0,
+        "declared_covered_word_part_count": 2,
+        "declared_uncovered_word_part_count": 0,
+        "declared_covered_root_document_relationship_count": 1,
+        "declared_uncovered_root_document_relationship_count": 0,
+        "declared_covered_word_relationship_count": 1,
+        "declared_uncovered_word_relationship_count": 0,
+        "unresolved_package_manifest_reference_count": 0,
+        "unsupported_package_manifest_reference_count": 0,
+    }
+    fully_declared_snapshot = load_snapshot(fully_declared)
+    assert (
+        fully_declared_snapshot.public_dict()["package_signature_coverage"]
+        == expected_fully_declared
+    )
+
+    unsigned_snapshot = load_snapshot(unsigned_word_surface)
+    assert unsigned_snapshot.package_digital_signatures == (
+        fully_declared_snapshot.package_digital_signatures
+    )
+    assert unsigned_snapshot.public_dict()["package_signature_coverage"] == {
+        **expected_fully_declared,
+        "declared_uncovered_word_part_count": 1,
+        "declared_uncovered_word_relationship_count": 1,
+    }
+
+    unbound_snapshot = load_snapshot(unbound_package_object)
+    assert unbound_snapshot.public_dict()["package_signature_coverage"] == {
+        "signature_with_declared_package_coverage_count": 0,
+        "signature_without_declared_package_coverage_count": 1,
+        "declared_covered_word_part_count": 0,
+        "declared_uncovered_word_part_count": 2,
+        "declared_covered_root_document_relationship_count": 0,
+        "declared_uncovered_root_document_relationship_count": 1,
+        "declared_covered_word_relationship_count": 0,
+        "declared_uncovered_word_relationship_count": 1,
+        "unresolved_package_manifest_reference_count": 0,
+        "unsupported_package_manifest_reference_count": 0,
+    }
+    assert (
+        load_snapshot(
+            unresolved_manifest_reference
+        ).package_signature_coverage.unresolved_package_manifest_reference_count
+        == 1
+    )
+    assert (
+        load_snapshot(
+            mismatched_manifest_content_type
+        ).package_signature_coverage.unresolved_package_manifest_reference_count
+        == 1
+    )
+    assert (
+        load_snapshot(
+            unsupported_manifest_reference
+        ).package_signature_coverage.unsupported_package_manifest_reference_count
+        == 1
+    )
+
+    surface_report = diff_documents(fully_declared, unsigned_word_surface)
+    assert "package_signature_coverage_changed" in {
+        change.kind for change in surface_report.changes
+    }
+    assert "package_digital_signature_inventory_changed" not in {
+        change.kind for change in surface_report.changes
+    }
+
+    selection_before = load_snapshot(selected_styles)
+    selection_after = load_snapshot(selected_duplicate)
+    assert (
+        selection_before.package_signature_coverage.public_dict()
+        == selection_after.package_signature_coverage.public_dict()
+    )
+    assert (
+        selection_before.package_signature_coverage.signature
+        != selection_after.package_signature_coverage.signature
+    )
+    assert "package_signature_coverage_changed" in {
+        change.kind
+        for change in diff_documents(selection_before, selection_after).changes
+    }
+
+    assert load_snapshot(source_type_selector).public_dict()[
+        "package_signature_coverage"
+    ] == {
+        **expected_fully_declared,
+        "declared_covered_word_relationship_count": 2,
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_complete_package_signature_coverage: true
+  no_package_signature_coverage_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert not apply_policy(
+        diff_documents(fully_declared, fully_declared), policy
+    ).findings
+    assert not apply_policy(
+        diff_documents(source_type_selector, source_type_selector), policy
+    ).findings
+    assert {
+        finding.rule_id for finding in apply_policy(surface_report, policy).findings
+    } == {
+        "DFP092",
+        "DFP093",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(fully_declared, unbound_package_object), policy
+        ).findings
+    } == {"DFP092", "DFP093"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(fully_declared, unresolved_manifest_reference), policy
+        ).findings
+    } == {"DFP092", "DFP093"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(fully_declared, mismatched_manifest_content_type), policy
+        ).findings
+    } == {"DFP092", "DFP093"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(fully_declared, unsupported_manifest_reference), policy
+        ).findings
+    } == {"DFP092", "DFP093"}
+
+    rendered = "\n".join(
+        (
+            render_profile(unsigned_snapshot, "json"),
+            render_profile(unsigned_snapshot, "markdown"),
+            render_report(apply_policy(surface_report, policy), "json"),
+            render_report(apply_policy(surface_report, policy), "markdown"),
+            render_report(apply_policy(surface_report, policy), "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(apply_policy(surface_report, policy), "sarif"))
+    assert {
+        "DFC_PACKAGE_SIGNATURE_COVERAGE_CHANGED",
+        "DFP092",
+        "DFP093",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK",
+        "PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK",
+        "PACKAGE_COVERAGE_PRIVATE_PART_DO_NOT_LEAK",
+        "PACKAGE_COVERAGE_PRIVATE_RELATIONSHIP_DO_NOT_LEAK",
+        "PACKAGE_COVERAGE_PRIVATE_OBJECT_DO_NOT_LEAK",
+    ):
+        assert marker not in rendered
 
 
 def test_word_protection_inventory_is_private_and_semantic(tmp_path) -> None:
@@ -7832,6 +8050,163 @@ def _write_package_digital_signature_document(
         entries[relationship_part_name] = (
             f'<Relationships xmlns="{PR}">{"".join(relationships)}</Relationships>'
         ).encode()
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_package_signature_coverage_document(
+    path,
+    *,
+    signed_info_references_package_object: bool = True,
+    include_unsigned_word_surface: bool = False,
+    include_unresolved_manifest_reference: bool = False,
+    include_case_mismatched_manifest_content_type: bool = False,
+    include_unsupported_manifest_reference: bool = False,
+    include_duplicate_style_relationship: bool = False,
+    selected_word_relationship_id: str = "rIdStyles",
+    select_word_relationship_by_type: bool = False,
+) -> None:
+    """Write a non-cryptographic package-signature coverage fixture.
+
+    The markers are deliberately not valid signature material. The fixture
+    exercises only DocFence's bounded static declaration audit and never asks
+    it to verify a digest, signature, certificate, or client behavior.
+    """
+
+    styles_relationship_type = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
+    )
+    word_relationships = [
+        '<Relationship Id="rIdStyles" '
+        f'Type="{styles_relationship_type}" Target="styles.xml"/>'
+    ]
+    if include_duplicate_style_relationship:
+        word_relationships.append(
+            '<Relationship Id="rIdStyleDuplicate" '
+            f'Type="{styles_relationship_type}" Target="styles.xml"/>'
+        )
+    if include_unsigned_word_surface:
+        word_relationships.append(
+            '<Relationship Id="PACKAGE_COVERAGE_PRIVATE_RELATIONSHIP_DO_NOT_LEAK" '
+            'Type="urn:docfence:coverage:private" '
+            'Target="PACKAGE_COVERAGE_PRIVATE_PART_DO_NOT_LEAK.xml"/>'
+        )
+
+    signed_info_reference = (
+        "#idPackageObject"
+        if signed_info_references_package_object
+        else "#PACKAGE_COVERAGE_PRIVATE_OBJECT_DO_NOT_LEAK"
+    )
+    digest_reference = (
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+        "<ds:DigestValue>PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+    )
+    root_relationship_manifest_reference = (
+        f'<ds:Reference URI="/_rels/.rels?ContentType='
+        f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
+        f'<ds:Transforms><ds:Transform Algorithm="'
+        f'{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
+        '<opc:RelationshipReference SourceId="rIdDocument"/>'
+        f"</ds:Transform></ds:Transforms>{digest_reference}</ds:Reference>"
+    )
+    word_relationship_selector = (
+        f'<opc:RelationshipReference SourceType="{styles_relationship_type}"/>'
+        if select_word_relationship_by_type
+        else (
+            f'<opc:RelationshipReference SourceId="{selected_word_relationship_id}"/>'
+        )
+    )
+    word_relationship_manifest_reference = (
+        f'<ds:Reference URI="/word/_rels/document.xml.rels?ContentType='
+        f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
+        f'<ds:Transforms><ds:Transform Algorithm="'
+        f'{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
+        f"{word_relationship_selector}"
+        f"</ds:Transform></ds:Transforms>{digest_reference}</ds:Reference>"
+    )
+    unresolved_manifest_reference = (
+        '<ds:Reference URI="/word/missing.xml?ContentType=application/xml">'
+        f"{digest_reference}</ds:Reference>"
+        if include_unresolved_manifest_reference
+        else ""
+    )
+    unsupported_manifest_reference = (
+        f'<ds:Reference URI="word/unsupported.xml">{digest_reference}</ds:Reference>'
+        if include_unsupported_manifest_reference
+        else ""
+    )
+    styles_manifest_content_type = (
+        "APPLICATION/XML"
+        if include_case_mismatched_manifest_content_type
+        else "application/xml"
+    )
+    signature_xml = (
+        f'<ds:Signature xmlns:ds="{_XMLDSIG_NAMESPACE}" '
+        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" Id="idPackageSignature">'
+        "<ds:SignedInfo><ds:CanonicalizationMethod "
+        'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
+        "<ds:SignatureMethod "
+        'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
+        f'<ds:Reference URI="{signed_info_reference}">'
+        f"{digest_reference}</ds:Reference></ds:SignedInfo>"
+        "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
+        '<ds:Object Id="idPackageObject"><ds:Manifest>'
+        f"{root_relationship_manifest_reference}"
+        f"{word_relationship_manifest_reference}"
+        f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}">'
+        f"{digest_reference}</ds:Reference>"
+        f'<ds:Reference URI="/word/styles.xml?ContentType='
+        f'{styles_manifest_content_type}">'
+        f"{digest_reference}</ds:Reference>"
+        f"{unresolved_manifest_reference}"
+        f"{unsupported_manifest_reference}"
+        "</ds:Manifest></ds:Object></ds:Signature>"
+    ).encode()
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/><Default Extension="rels" '
+            f'ContentType="{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}"/>'
+            f'<Default Extension="sigs" ContentType="'
+            f'{_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_CONTENT_TYPE}"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/>'
+            f'<Override PartName="/_xmlsignatures/sig1.xml" '
+            f'ContentType="{_PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "_rels/.rels": (
+            f'<Relationships xmlns="{PR}"><Relationship Id="rIdDocument" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/officeDocument" Target="word/document.xml"/>'
+            f'<Relationship Id="rIdOrigin" Type="'
+            f'{_PACKAGE_DIGITAL_SIGNATURE_ORIGIN_RELATIONSHIP_TYPE}" '
+            'Target="_xmlsignatures/origin.sigs"/></Relationships>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "VISIBLE_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/styles.xml": f'<w:styles xmlns:w="{W}"/>'.encode(),
+        "word/_rels/document.xml.rels": (
+            f'<Relationships xmlns="{PR}">{"".join(word_relationships)}</Relationships>'
+        ).encode(),
+        "_xmlsignatures/origin.sigs": b"",
+        "_xmlsignatures/_rels/origin.sigs.rels": (
+            f'<Relationships xmlns="{PR}"><Relationship Id="rIdSignature" '
+            f'Type="{_PACKAGE_DIGITAL_SIGNATURE_RELATIONSHIP_TYPE}" '
+            'Target="sig1.xml"/></Relationships>'
+        ).encode(),
+        "_xmlsignatures/sig1.xml": signature_xml,
+    }
+    if include_unsigned_word_surface:
+        entries["word/PACKAGE_COVERAGE_PRIVATE_PART_DO_NOT_LEAK.xml"] = (
+            b"<privateCoverageSurface/>"
+        )
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

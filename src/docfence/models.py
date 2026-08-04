@@ -224,6 +224,62 @@ class PackageDigitalSignatureInventory:
 
 
 @dataclass(frozen=True)
+class PackageSignatureCoverageInventory:
+    """Static declared OPC signature coverage, aggregate only.
+
+    This inventory resolves only local XMLDSIG/OPC declaration structure. It
+    does not recompute digests, verify a signature value, validate certificates
+    or trust chains, or determine what an Office client will render or accept.
+    Package part names, relationship identifiers and types, reference URIs,
+    digest values, and object identifiers remain in the private signature.
+    """
+
+    signature_with_declared_package_coverage_count: int
+    signature_without_declared_package_coverage_count: int
+    declared_covered_word_part_count: int
+    declared_uncovered_word_part_count: int
+    declared_covered_root_document_relationship_count: int
+    declared_uncovered_root_document_relationship_count: int
+    declared_covered_word_relationship_count: int
+    declared_uncovered_word_relationship_count: int
+    unresolved_package_manifest_reference_count: int
+    unsupported_package_manifest_reference_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "signature_with_declared_package_coverage_count": (
+                self.signature_with_declared_package_coverage_count
+            ),
+            "signature_without_declared_package_coverage_count": (
+                self.signature_without_declared_package_coverage_count
+            ),
+            "declared_covered_word_part_count": (self.declared_covered_word_part_count),
+            "declared_uncovered_word_part_count": (
+                self.declared_uncovered_word_part_count
+            ),
+            "declared_covered_root_document_relationship_count": (
+                self.declared_covered_root_document_relationship_count
+            ),
+            "declared_uncovered_root_document_relationship_count": (
+                self.declared_uncovered_root_document_relationship_count
+            ),
+            "declared_covered_word_relationship_count": (
+                self.declared_covered_word_relationship_count
+            ),
+            "declared_uncovered_word_relationship_count": (
+                self.declared_uncovered_word_relationship_count
+            ),
+            "unresolved_package_manifest_reference_count": (
+                self.unresolved_package_manifest_reference_count
+            ),
+            "unsupported_package_manifest_reference_count": (
+                self.unsupported_package_manifest_reference_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class WordProtectionInventory:
     """Stored Word editing and write-protection evidence, aggregate only."""
 
@@ -1370,6 +1426,7 @@ class DocumentSnapshot:
     markup_compatibility: MarkupCompatibilityInventory
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
+    package_signature_coverage: PackageSignatureCoverageInventory
     word_protection: WordProtectionInventory
     word_document_variables: WordDocumentVariableInventory
     word_document_variable_fields: WordDocumentVariableFieldInventory
@@ -1484,6 +1541,9 @@ class DocumentSnapshot:
             "sensitivity_labels": self.sensitivity_labels.public_dict(),
             "package_digital_signatures": (
                 self.package_digital_signatures.public_dict()
+            ),
+            "package_signature_coverage": (
+                self.package_signature_coverage.public_dict()
             ),
             "word_protection": self.word_protection.public_dict(),
             "word_document_variables": (self.word_document_variables.public_dict()),

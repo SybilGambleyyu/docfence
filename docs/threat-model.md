@@ -196,6 +196,17 @@ times, comments, provider data, relationship IDs, paths, or digests. A
 same-count signature or certificate rewrite is therefore visible without
 copying signature material into a report.
 
+A separate static declaration audit follows only a direct `SignedInfo` local
+fragment reference to a direct `ds:Object` with exactly one direct package
+`ds:Manifest`. From that bounded link, it resolves exact part URI/content-type
+references with case-sensitive content-type matching and standard
+relationship-transform selectors. Its public surface
+is aggregate-only: signatures with or without a declaration link; covered and
+uncovered Word parts and relationships; and unresolved or unsupported
+references. Object identifiers, raw reference URIs, selectors, relationship
+IDs/types, part paths, and digest material remain private. A same-count
+coverage reassignment is retained in the private semantic signature.
+
 Word editing/write-protection state receives the same dedicated treatment.
 DocFence discovers document Settings parts through Word's conventional
 `word/settings.xml` path and Transitional or Strict settings relationships from
@@ -634,13 +645,16 @@ that a file is encrypted or accessible. DocFence does not decrypt IRM-protected
 files, read a LabelInfo stream from an encrypted storage, interpret label
 policy, calculate permissions, apply/remove a label, or render a label's
 header, footer, or watermark.
-Package-signature counts are stored-state evidence, not a statement that a
-signature is cryptographically valid, that a certificate is trusted or current,
-that a signer is who the package claims, that all relevant content is covered,
-or that an Office client will make a particular trust decision. DocFence does
-not verify XMLDSIG values or reference digests, build or validate certificate
-chains, check revocation or timestamps, establish signer identity, evaluate a
-signing policy, or calculate signature coverage.
+Package-signature counts and static declaration-coverage counts are stored
+state evidence, not a statement that a signature is cryptographically valid,
+that a certificate is trusted or current, that a signer is who the package
+claims, that all relevant content is effectively covered, or that an Office
+client will make a particular trust decision. DocFence does not verify XMLDSIG
+values, recompute reference digests or canonicalization, evaluate arbitrary
+transforms, build or validate certificate chains, check revocation or
+timestamps, establish signer identity, evaluate a signing policy, or calculate
+cryptographic or client-effective signature coverage. It resolves only the
+bounded static declarations described above.
 Word-protection counts are stored-state evidence, not a statement that a
 restriction is encrypted, difficult to circumvent, currently effective in a
 particular client, or appropriate for a document. DocFence does not validate

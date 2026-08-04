@@ -2,6 +2,28 @@
 
 All notable changes are documented here.
 
+## 0.40.0 — 2026-08-04
+
+- Added a first-class, privacy-safe static declared OPC package-signature
+  coverage inventory. It reports only aggregate counts for signatures with or
+  without a bound package manifest, covered/uncovered bounded Word parts and
+  relationships, and unresolved/unsupported references; object identifiers,
+  manifest URIs, relationship selectors, paths, and digest material remain
+  private.
+- Added DFP092 to require a recognized XML signature and complete static
+  declaration coverage in the bounded Word scope, and DFP093 to protect an
+  approved declaration-coverage baseline. These are opt-in structural gates,
+  not substitutes for `require_no_package_digital_signatures`.
+- Added regression coverage for direct manifest binding, case-sensitive part
+  content-type and relationship declaration resolution, same-count selector
+  reassignment, privacy redaction, Markdown/JSON/SARIF output, and both policy
+  modes. A public USENIX OOXML
+  Signature Security corpus smoke accepts the unmodified content-injection
+  baseline and rejects the selected published attacker variants on declaration
+  gaps. DocFence does not recompute XMLDSIG digests or canonicalization, verify
+  signature values or certificates, establish trust, or predict Office client
+  behavior.
+
 ## 0.39.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for direct Word content-control

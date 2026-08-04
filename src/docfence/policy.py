@@ -50,6 +50,8 @@ _RULES: Final = {
     "no_save_preview_picture_changes": "DFP089",
     "require_content_control_locks": "DFP090",
     "no_content_control_lock_changes": "DFP091",
+    "require_complete_package_signature_coverage": "DFP092",
+    "no_package_signature_coverage_changes": "DFP093",
     "require_no_custom_xml_data": "DFP079",
     "require_no_package_thumbnails": "DFP080",
     "no_package_thumbnail_changes": "DFP081",
@@ -343,6 +345,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 {
                     "before": before.package_digital_signatures.public_dict(),
                     "after": after.package_digital_signatures.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_package_signature_coverage_changes") and (
+        before.package_signature_coverage.signature
+        != after.package_signature_coverage.signature
+    ):
+        findings.append(
+            _finding(
+                "no_package_signature_coverage_changes",
+                "Static declared OPC package-signature coverage inventory changed.",
+                {
+                    "before": before.package_signature_coverage.public_dict(),
+                    "after": after.package_signature_coverage.public_dict(),
                 },
             )
         )
@@ -909,6 +925,33 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_package_digital_signatures",
                 "Candidate contains stored OPC package digital-signature material.",
                 after.package_digital_signatures.public_dict(),
+            )
+        )
+    coverage = after.package_signature_coverage
+    if policy.enabled("require_complete_package_signature_coverage") and (
+        after.package_digital_signatures.xml_signature_part_count == 0
+        or coverage.signature_without_declared_package_coverage_count
+        or coverage.signature_with_declared_package_coverage_count
+        != after.package_digital_signatures.xml_signature_part_count
+        or coverage.declared_uncovered_word_part_count
+        or coverage.declared_uncovered_root_document_relationship_count
+        or coverage.declared_uncovered_word_relationship_count
+        or coverage.unresolved_package_manifest_reference_count
+        or coverage.unsupported_package_manifest_reference_count
+    ):
+        findings.append(
+            _finding(
+                "require_complete_package_signature_coverage",
+                (
+                    "Candidate lacks complete static declared OPC package-signature "
+                    "coverage in DocFence's bounded Word scope."
+                ),
+                {
+                    "xml_signature_part_count": (
+                        after.package_digital_signatures.xml_signature_part_count
+                    ),
+                    **coverage.public_dict(),
+                },
             )
         )
     if policy.enabled("require_no_word_protection") and any(

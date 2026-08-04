@@ -37,6 +37,7 @@ from docfence.models import (
     MarkupCompatibilityInventory,
     ModernCommentMetadataInventory,
     PackageDigitalSignatureInventory,
+    PackageSignatureCoverageInventory,
     PackageThumbnailInventory,
     PersonalInformationRemovalOnSaveInventory,
     RelationshipInventory,
@@ -353,6 +354,19 @@ _XMLDSIG_NAMESPACE: Final = "http://www.w3.org/2000/09/xmldsig#"
 _OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
     "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
+_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM: Final = (
+    "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
+)
+_PACKAGE_RELATIONSHIP_CONTENT_TYPE: Final = (
+    "application/vnd.openxmlformats-package.relationships+xml"
+)
+_ROOT_OFFICE_DOCUMENT_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/"
+        "officeDocument",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument",
+    }
+)
 _DOCUMENT_PROTECTION_EDIT_VALUES: Final = frozenset(
     {"none", "readOnly", "comments", "trackedChanges", "forms"}
 )
@@ -668,6 +682,28 @@ class _Relationship:
 
 
 @dataclass(frozen=True)
+class _ManifestReferenceResolution:
+    """Private static result for one package-object manifest reference."""
+
+    covered_part_name: str | None
+    covered_relationship_ids: frozenset[tuple[str, str]]
+    unresolved_reference_count: int
+    unsupported_reference_count: int
+
+
+@dataclass(frozen=True)
+class _DeclaredPackageSignatureCoverage:
+    """Private union contributed by one XML signature part."""
+
+    has_declared_package_coverage: bool
+    covered_part_names: frozenset[str]
+    covered_relationship_ids: frozenset[tuple[str, str]]
+    unresolved_reference_count: int
+    unsupported_reference_count: int
+    records: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
 class _DataBindingReference:
     """One private standard Word data-binding declaration in a story."""
 
@@ -955,6 +991,14 @@ def _load_package(
             ) = _package_digital_signature_inventory(
                 archive, members, content_types, relationship_maps, limits
             )
+            package_signature_coverage = _package_signature_coverage_inventory(
+                archive,
+                members,
+                content_types,
+                relationship_maps,
+                package_digital_signature_parts,
+                limits,
+            )
             (
                 settings_enabled,
                 settings_signature,
@@ -1193,6 +1237,7 @@ def _load_package(
         markup_compatibility=markup_compatibility,
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
+        package_signature_coverage=package_signature_coverage,
         word_protection=word_protection,
         word_document_variables=word_document_variables,
         word_document_variable_fields=word_document_variable_fields,
@@ -2301,6 +2346,461 @@ def _package_digital_signature_inventory(
             signature=_digest_records(records),
         ),
         signature_parts,
+    )
+
+
+def _package_signature_coverage_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    package_digital_signature_parts: frozenset[str],
+    limits: PackageLimits,
+) -> PackageSignatureCoverageInventory:
+    """Resolve declared local OPC coverage without verifying a signature.
+
+    XMLDSIG verification, certificate trust, and Office rendering behavior are
+    intentionally outside this boundary.  The inventory identifies only an
+    XML signature whose ``SignedInfo`` directly references an in-package
+    ``ds:Object`` containing a direct package ``ds:Manifest``.  From that
+    object it resolves exact local part references and selected relationship
+    IDs/types.  Any unknown syntax is reported as aggregate indeterminate
+    evidence instead of being treated as coverage.
+    """
+
+    signature_part_names = sorted(
+        part_name
+        for part_name in package_digital_signature_parts
+        if content_types.get(part_name, "").casefold()
+        == _PACKAGE_DIGITAL_SIGNATURE_XML_CONTENT_TYPE.casefold()
+    )
+    if not signature_part_names:
+        return PackageSignatureCoverageInventory(
+            signature_with_declared_package_coverage_count=0,
+            signature_without_declared_package_coverage_count=0,
+            declared_covered_word_part_count=0,
+            declared_uncovered_word_part_count=0,
+            declared_covered_root_document_relationship_count=0,
+            declared_uncovered_root_document_relationship_count=0,
+            declared_covered_word_relationship_count=0,
+            declared_uncovered_word_relationship_count=0,
+            unresolved_package_manifest_reference_count=0,
+            unsupported_package_manifest_reference_count=0,
+            signature=_digest_records([]),
+        )
+
+    records: list[tuple[str, ...]] = []
+    covered_part_names: set[str] = set()
+    covered_relationship_ids: set[tuple[str, str]] = set()
+    signature_with_declared_package_coverage_count = 0
+    signature_without_declared_package_coverage_count = 0
+    unresolved_package_manifest_reference_count = 0
+    unsupported_package_manifest_reference_count = 0
+
+    for part_name in signature_part_names:
+        root = _parse_xml(_read_member(archive, members[part_name], limits), limits)
+        declared_coverage = _declared_package_signature_coverage(
+            root,
+            members,
+            content_types,
+            relationship_maps,
+        )
+        if declared_coverage.has_declared_package_coverage:
+            signature_with_declared_package_coverage_count += 1
+        else:
+            signature_without_declared_package_coverage_count += 1
+        covered_part_names.update(declared_coverage.covered_part_names)
+        covered_relationship_ids.update(declared_coverage.covered_relationship_ids)
+        unresolved_package_manifest_reference_count += (
+            declared_coverage.unresolved_reference_count
+        )
+        unsupported_package_manifest_reference_count += (
+            declared_coverage.unsupported_reference_count
+        )
+        records.append(
+            (
+                "package_signature_coverage_signature_part",
+                part_name,
+                "declared"
+                if declared_coverage.has_declared_package_coverage
+                else "none",
+            )
+        )
+        records.extend(declared_coverage.records)
+
+    word_part_names = {
+        part_name
+        for part_name in members
+        if part_name.startswith("word/")
+        and "/_rels/" not in part_name
+        and not part_name.endswith(".rels")
+    }
+    root_document_relationship_ids = {
+        ("/", relationship_id)
+        for relationship_id, relationship in relationship_maps.get("/", {}).items()
+        if relationship.relationship_type in _ROOT_OFFICE_DOCUMENT_RELATIONSHIP_TYPES
+    }
+    word_relationship_ids = {
+        (source_part, relationship_id)
+        for source_part, relationships in relationship_maps.items()
+        if source_part.startswith("word/")
+        for relationship_id in relationships
+    }
+    covered_root_document_relationship_ids = (
+        root_document_relationship_ids & covered_relationship_ids
+    )
+    covered_word_relationship_ids = word_relationship_ids & covered_relationship_ids
+
+    for part_name in sorted(word_part_names):
+        records.append(
+            (
+                "package_signature_coverage_word_part",
+                part_name,
+                "covered" if part_name in covered_part_names else "uncovered",
+            )
+        )
+    for source_part, relationship_id in sorted(root_document_relationship_ids):
+        records.append(
+            (
+                "package_signature_coverage_root_relationship",
+                source_part,
+                relationship_id,
+                "covered"
+                if (source_part, relationship_id)
+                in covered_root_document_relationship_ids
+                else "uncovered",
+            )
+        )
+    for source_part, relationship_id in sorted(word_relationship_ids):
+        records.append(
+            (
+                "package_signature_coverage_word_relationship",
+                source_part,
+                relationship_id,
+                "covered"
+                if (source_part, relationship_id) in covered_word_relationship_ids
+                else "uncovered",
+            )
+        )
+
+    return PackageSignatureCoverageInventory(
+        signature_with_declared_package_coverage_count=(
+            signature_with_declared_package_coverage_count
+        ),
+        signature_without_declared_package_coverage_count=(
+            signature_without_declared_package_coverage_count
+        ),
+        declared_covered_word_part_count=len(word_part_names & covered_part_names),
+        declared_uncovered_word_part_count=len(word_part_names - covered_part_names),
+        declared_covered_root_document_relationship_count=len(
+            covered_root_document_relationship_ids
+        ),
+        declared_uncovered_root_document_relationship_count=len(
+            root_document_relationship_ids - covered_relationship_ids
+        ),
+        declared_covered_word_relationship_count=len(covered_word_relationship_ids),
+        declared_uncovered_word_relationship_count=len(
+            word_relationship_ids - covered_relationship_ids
+        ),
+        unresolved_package_manifest_reference_count=(
+            unresolved_package_manifest_reference_count
+        ),
+        unsupported_package_manifest_reference_count=(
+            unsupported_package_manifest_reference_count
+        ),
+        signature=_digest_records(records),
+    )
+
+
+def _declared_package_signature_coverage(
+    root: ET.Element,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> _DeclaredPackageSignatureCoverage:
+    """Resolve one signature's explicitly bound package-manifest objects."""
+
+    signed_info = next(
+        child
+        for child in root
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignedInfo")
+    )
+    manifest_objects: dict[str, ET.Element] = {}
+    ambiguous_manifest_object_ids: set[str] = set()
+    for object_element in root:
+        if _qualified_name(object_element.tag) != (_XMLDSIG_NAMESPACE, "Object"):
+            continue
+        object_id = object_element.attrib.get("Id")
+        manifests = [
+            child
+            for child in object_element
+            if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Manifest")
+        ]
+        if not object_id or len(manifests) != 1:
+            continue
+        if object_id in manifest_objects:
+            ambiguous_manifest_object_ids.add(object_id)
+            del manifest_objects[object_id]
+            continue
+        if object_id not in ambiguous_manifest_object_ids:
+            manifest_objects[object_id] = manifests[0]
+
+    records: list[tuple[str, ...]] = []
+    bound_manifest_object_ids: set[str] = set()
+    for reference in signed_info:
+        if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
+            continue
+        records.append(
+            (
+                "package_signature_coverage_signed_info_reference",
+                _digest_bytes(ET.tostring(reference, encoding="utf-8")),
+            )
+        )
+        object_id = _signature_fragment_identifier(reference.attrib.get("URI"))
+        if object_id is not None and object_id in manifest_objects:
+            bound_manifest_object_ids.add(object_id)
+
+    if not bound_manifest_object_ids:
+        return _DeclaredPackageSignatureCoverage(
+            has_declared_package_coverage=False,
+            covered_part_names=frozenset(),
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=0,
+            records=tuple(records),
+        )
+
+    covered_part_names: set[str] = set()
+    covered_relationship_ids: set[tuple[str, str]] = set()
+    unresolved_reference_count = 0
+    unsupported_reference_count = 0
+    for object_id in sorted(bound_manifest_object_ids):
+        manifest = manifest_objects[object_id]
+        records.append(
+            (
+                "package_signature_coverage_bound_manifest_object",
+                _digest_bytes(object_id.encode("utf-8")),
+            )
+        )
+        for reference in manifest:
+            if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
+                unsupported_reference_count += 1
+                records.append(
+                    (
+                        "package_signature_coverage_unsupported_manifest_child",
+                        _digest_bytes(ET.tostring(reference, encoding="utf-8")),
+                    )
+                )
+                continue
+            resolution = _resolve_package_manifest_reference(
+                reference,
+                members,
+                content_types,
+                relationship_maps,
+            )
+            covered_part_names.update(
+                part_name
+                for part_name in (resolution.covered_part_name,)
+                if part_name is not None
+            )
+            covered_relationship_ids.update(resolution.covered_relationship_ids)
+            unresolved_reference_count += resolution.unresolved_reference_count
+            unsupported_reference_count += resolution.unsupported_reference_count
+            records.append(
+                (
+                    "package_signature_coverage_manifest_reference",
+                    _digest_bytes(ET.tostring(reference, encoding="utf-8")),
+                    "resolved"
+                    if (
+                        resolution.covered_part_name is not None
+                        or resolution.covered_relationship_ids
+                    )
+                    else "indeterminate",
+                )
+            )
+
+    return _DeclaredPackageSignatureCoverage(
+        has_declared_package_coverage=True,
+        covered_part_names=frozenset(covered_part_names),
+        covered_relationship_ids=frozenset(covered_relationship_ids),
+        unresolved_reference_count=unresolved_reference_count,
+        unsupported_reference_count=unsupported_reference_count,
+        records=tuple(records),
+    )
+
+
+def _signature_fragment_identifier(uri: str | None) -> str | None:
+    """Return a direct local XMLDSIG fragment identifier, if present."""
+
+    if (
+        uri is None
+        or not uri.startswith("#")
+        or len(uri) == 1
+        or any(marker in uri[1:] for marker in ("#", "?", "/"))
+    ):
+        return None
+    return uri[1:]
+
+
+def _resolve_package_manifest_reference(
+    reference: ET.Element,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+) -> _ManifestReferenceResolution:
+    """Resolve one bounded package-object manifest reference locally."""
+
+    parsed_reference = _package_manifest_reference_member_name(
+        reference.attrib.get("URI")
+    )
+    if parsed_reference is None:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+    part_name, expected_content_type = parsed_reference
+    if part_name not in members:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=1,
+            unsupported_reference_count=0,
+        )
+    if not part_name.endswith(".rels"):
+        if content_types.get(part_name, "") != expected_content_type:
+            return _ManifestReferenceResolution(
+                covered_part_name=None,
+                covered_relationship_ids=frozenset(),
+                unresolved_reference_count=1,
+                unsupported_reference_count=0,
+            )
+        return _ManifestReferenceResolution(
+            covered_part_name=part_name,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=0,
+        )
+    if expected_content_type != _PACKAGE_RELATIONSHIP_CONTENT_TYPE:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+    actual_content_type = content_types.get(part_name)
+    if actual_content_type is not None and actual_content_type != expected_content_type:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=1,
+            unsupported_reference_count=0,
+        )
+
+    source_part = _relationship_source_part(part_name)
+    relationships = relationship_maps.get(source_part)
+    if relationships is None:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=1,
+            unsupported_reference_count=0,
+        )
+    return _relationship_manifest_reference_coverage(
+        reference, source_part, relationships
+    )
+
+
+def _package_manifest_reference_member_name(uri: str | None) -> tuple[str, str] | None:
+    """Parse the exact local part URI form used by OPC manifest references."""
+
+    if uri is None or not uri.startswith("/") or "#" in uri:
+        return None
+    path, separator, query = uri.partition("?")
+    if not separator or "?" in query:
+        return None
+    part_name = path.removeprefix("/")
+    if (
+        not part_name
+        or part_name.startswith("/")
+        or part_name.endswith("/")
+        or "//" in part_name
+        or any(segment in {".", ".."} for segment in part_name.split("/"))
+    ):
+        return None
+    name, equals, value = query.partition("=")
+    if name != "ContentType" or not equals or not value or "&" in value:
+        return None
+    return part_name, value
+
+
+def _relationship_manifest_reference_coverage(
+    reference: ET.Element,
+    source_part: str,
+    relationships: dict[str, _Relationship],
+) -> _ManifestReferenceResolution:
+    """Resolve declared relationship-transform selectors without hashing XML."""
+
+    relationship_transforms = [
+        transform
+        for transforms in reference
+        if _qualified_name(transforms.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
+        for transform in transforms
+        if _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
+        and transform.attrib.get("Algorithm") == _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+    ]
+    if len(relationship_transforms) != 1:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+
+    selected_relationship_ids: set[tuple[str, str]] = set()
+    unresolved_reference_count = 0
+    unsupported_reference_count = 0
+    selectors = list(relationship_transforms[0])
+    if not selectors:
+        unsupported_reference_count += 1
+    for selector in selectors:
+        if (
+            _qualified_name(selector.tag)
+            != (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference")
+            or list(selector)
+            or (selector.text or "").strip()
+            or set(selector.attrib) - {"SourceId", "SourceType"}
+        ):
+            unsupported_reference_count += 1
+            continue
+        source_id = selector.attrib.get("SourceId")
+        source_type = selector.attrib.get("SourceType")
+        if source_id is None and source_type is None:
+            unsupported_reference_count += 1
+            continue
+        if source_id is not None:
+            if source_id in relationships:
+                selected_relationship_ids.add((source_part, source_id))
+            else:
+                unresolved_reference_count += 1
+        if source_type is not None:
+            matching_ids = [
+                relationship_id
+                for relationship_id, relationship in relationships.items()
+                if relationship.relationship_type == source_type
+            ]
+            if not matching_ids:
+                unresolved_reference_count += 1
+            selected_relationship_ids.update(
+                (source_part, relationship_id) for relationship_id in matching_ids
+            )
+
+    return _ManifestReferenceResolution(
+        covered_part_name=None,
+        covered_relationship_ids=frozenset(selected_relationship_ids),
+        unresolved_reference_count=unresolved_reference_count,
+        unsupported_reference_count=unsupported_reference_count,
     )
 
 

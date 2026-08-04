@@ -475,6 +475,22 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.package_signature_coverage.signature
+        != after.package_signature_coverage.signature
+    ):
+        changes.append(
+            Change(
+                kind="package_signature_coverage_changed",
+                message=(
+                    "Static declared OPC package-signature coverage inventory changed."
+                ),
+                details={
+                    "before": before.package_signature_coverage.public_dict(),
+                    "after": after.package_signature_coverage.public_dict(),
+                },
+            )
+        )
     if before.word_protection.signature != after.word_protection.signature:
         changes.append(
             Change(

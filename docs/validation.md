@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.39 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.40 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -88,7 +88,12 @@ following properties:
   conventional orphan origins, same-count signature/certificate mutations,
   JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
   SignedInfo shape, unavailable/external/non-root/duplicate origin
-  relationships, and unavailable/external signature and certificate targets;
+  relationships, and unavailable/external signature and certificate targets.
+  The static declared-coverage boundary has a fully declared synthetic package
+  fixture plus uncovered Word parts and relationships, an unbound package
+  object, unresolved and unsupported manifest references, a case-mismatched
+  content type, same-count selector reassignment, private-output redaction,
+  Markdown/JSON/SARIF projection, and both coverage policy modes;
 - Word editing/write-protection state is separately inventoried from generic
   Settings-part changes. Tests cover conventional, Transitional, and Strict
   Settings discovery; aggregate editing/write/recommendation/password-material
@@ -597,10 +602,14 @@ a claim of widespread contemporary Word authoring behavior.
 
 For the package-signature boundary, the release check profiles the signed DOCX
 fixture from the public [USENIX 2023 OOXML Signature Security
-artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). It confirms
-the standard origin, XML-signature, and origin-relationship topology and the
-aggregate count projection without treating that fixture's signature as trusted.
-It is a compatibility smoke test, not a runtime dependency.
+artifacts](https://github.com/RUB-NDS/OOXML_Signature_Security). Its unmodified
+content-injection baseline satisfies the strict static declaration-coverage
+gate. The published content-injection, universal-signature-forgery,
+duplicate-document, and evil-type attacker variants are rejected for static
+declaration gaps. This is a structural compatibility smoke test over a bounded
+scope, not a claim that signatures are valid, trusted, exhaustive, or that a
+client will handle any sample in a particular way; the fixtures are not runtime
+dependencies.
 
 For the Word-protection boundary, the release check profiles two independent
 Wordprocessing protection assets from Microsoft's open-source
@@ -659,14 +668,15 @@ The style/default layer is a stored declaration inventory, not a renderer. It
 does not decrypt an IRM-protected file, resolve a sensitivity-label policy, calculate
 permissions, or predict label markings. It also does not verify a package
 digital signature or digest, validate certificates or trust chains, check
-revocation or timestamps, establish signer identity, determine coverage, or
-make an Office trust decision. It does not validate Word password-verifier
-construction or strength, recover or test a password, bypass a Word
-restriction, infer effective enforcement, or treat Word protection as
+revocation or timestamps, establish signer identity, calculate cryptographic
+or client-effective coverage, or make an Office trust decision. It resolves
+only a bounded static package-manifest declaration subset. It does not validate
+Word password-verifier construction or strength, recover or test a password,
+bypass a Word restriction, infer effective enforcement, or treat Word protection as
 encryption/security. It does not authenticate a stored editable-range editor,
 resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.29 contract; see
+only, not field evaluation. Those limits are explicit in the 0.40 contract; see
 [threat model](threat-model.md).
