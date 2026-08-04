@@ -103,6 +103,8 @@ starter policy.
 | `require_no_custom_xml_data` | `DFP079` | Candidate has stored conventional custom-XML package parts | Candidate |
 | `require_no_package_thumbnails` | `DFP080` | Candidate has relationship-bound OPC package thumbnail images | Candidate |
 | `no_package_thumbnail_changes` | `DFP081` | OPC package thumbnail inventory differs | Comparison |
+| `require_no_markup_compatibility` | `DFP082` | Candidate has stored OOXML Markup Compatibility markup | Candidate |
+| `no_markup_compatibility_changes` | `DFP083` | OOXML Markup Compatibility inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -134,6 +136,8 @@ custom XML schema declarations.
 recalculation-on-open setting.
 `no_package_thumbnail_changes` does so for a controlled template that retains
 an approved relationship-bound OPC thumbnail image.
+`no_markup_compatibility_changes` does so for a controlled template that
+retains approved OOXML Markup Compatibility markup.
 `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
@@ -638,6 +642,32 @@ thumbnail part. `no_package_thumbnail_changes` protects an approved stored
 baseline instead. Neither rule decodes, renders, classifies, or otherwise
 interprets an image; searches arbitrary filenames for lookalikes; or predicts
 whether Word, Explorer, or another client will display a thumbnail.
+
+## OOXML Markup Compatibility scope
+
+Markup Compatibility and Extensibility (MCE) can retain stored alternatives
+that a consumer selects according to its own supported features and processing
+settings. That makes `mc:AlternateContent` and its compatibility-rule
+attributes a separate review boundary from ordinary text, rendering, or a
+generic XML payload change.
+
+DocFence scans stored non-relationship `word/*.xml` members that use the
+standard `http://schemas.openxmlformats.org/markup-compatibility/2006`
+namespace. It reports only aggregate MCE-part, `AlternateContent`, `Choice`,
+and `Fallback` counts plus whitespace-token counts for `Choice/@Requires` and
+the `mc:Ignorable`, `mc:MustUnderstand`, `mc:ProcessContent`,
+`mc:PreserveElements`, and `mc:PreserveAttributes` attributes. Branch bodies,
+feature-prefix and qualified-name values, compatibility-rule values, XML
+member paths, and private fingerprints never leave the process. The private
+signature retains the recognized elements and attributes, so a same-count
+branch or rule-value rewrite remains review-visible.
+
+`require_no_markup_compatibility` fails whenever a candidate contains a
+recognized MCE element or attribute. `no_markup_compatibility_changes` protects
+an approved baseline instead. Neither rule validates MCE conformance, selects
+a branch, resolves a feature prefix, applies a target Office version,
+preprocesses or saves a package, or predicts what any document client will
+load or render.
 
 ## OPC package digital-signature scope
 

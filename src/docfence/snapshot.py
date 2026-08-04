@@ -33,6 +33,7 @@ from docfence.models import (
     ExternalFieldInventory,
     FieldUpdateOnOpenInventory,
     MailMergeInventory,
+    MarkupCompatibilityInventory,
     ModernCommentMetadataInventory,
     PackageDigitalSignatureInventory,
     PackageThumbnailInventory,
@@ -256,10 +257,23 @@ _PACKAGE_THUMBNAIL_RELATIONSHIP_TYPES: Final = frozenset(
             "http://schemas.openxmlformats.org/package/2006/relationships/"
             "metadata/thumbnail"
         ),
-        (
-            "http://purl.oclc.org/ooxml/officedocument/relationships/"
-            "metadata/thumbnail"
-        ),
+        ("http://purl.oclc.org/ooxml/officedocument/relationships/metadata/thumbnail"),
+    }
+)
+_MARKUP_COMPATIBILITY_NAMESPACE: Final = (
+    "http://schemas.openxmlformats.org/markup-compatibility/2006"
+)
+_MARKUP_COMPATIBILITY_MARKER: Final = b"markup-compatibility/2006"
+_MARKUP_COMPATIBILITY_ELEMENT_NAMES: Final = frozenset(
+    {"AlternateContent", "Choice", "Fallback"}
+)
+_MARKUP_COMPATIBILITY_ATTRIBUTE_NAMES: Final = frozenset(
+    {
+        "Ignorable",
+        "MustUnderstand",
+        "ProcessContent",
+        "PreserveElements",
+        "PreserveAttributes",
     }
 )
 _SENSITIVITY_LABEL_NAMESPACE: Final = (
@@ -343,9 +357,7 @@ _WORD_DOCUMENT_VARIABLE_VALUE_MAX_UTF16_CODE_UNITS: Final = 65_280
 _WORD_PERMISSION_START_ATTRIBUTE_NAMES: Final = frozenset(
     {"id", "ed", "edGrp", "colFirst", "colLast", "displacedByCustomXml"}
 )
-_WORD_PERMISSION_END_ATTRIBUTE_NAMES: Final = frozenset(
-    {"id", "displacedByCustomXml"}
-)
+_WORD_PERMISSION_END_ATTRIBUTE_NAMES: Final = frozenset({"id", "displacedByCustomXml"})
 _WORD_PERMISSION_EDITOR_GROUPS: Final = frozenset(
     {
         "none",
@@ -357,9 +369,7 @@ _WORD_PERMISSION_EDITOR_GROUPS: Final = frozenset(
         "current",
     }
 )
-_WORD_PERMISSION_DISPLACED_BY_CUSTOM_XML_VALUES: Final = frozenset(
-    {"next", "prev"}
-)
+_WORD_PERMISSION_DISPLACED_BY_CUSTOM_XML_VALUES: Final = frozenset({"next", "prev"})
 _WORD_PERMISSION_COLUMN_VALUE: Final = re.compile(r"^[0-9]+$")
 _SENSITIVITY_LABEL_GUID: Final = re.compile(
     r"^\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
@@ -578,8 +588,7 @@ _TASKPANE_WEB_EXTENSION_PART_CONTENT_TYPES: Final = {
 }
 _TASKPANE_WEB_EXTENSION_PART_RELATIONSHIP_TYPES: Final = {
     (
-        "http://schemas.microsoft.com/office/2011/relationships/"
-        "webextensiontaskpanes"
+        "http://schemas.microsoft.com/office/2011/relationships/webextensiontaskpanes"
     ): "taskpanes",
     "http://schemas.microsoft.com/office/2011/relationships/webextension": (
         "web_extension"
@@ -869,6 +878,12 @@ def _load_package(
                 relationship_maps,
                 limits,
             )
+            markup_compatibility = _markup_compatibility_inventory(
+                archive,
+                members,
+                relationship_maps,
+                limits,
+            )
             sensitivity_labels, sensitivity_label_parts = _sensitivity_label_inventory(
                 archive, members, content_types, relationship_maps, limits
             )
@@ -1093,6 +1108,7 @@ def _load_package(
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
         package_thumbnails=package_thumbnails,
+        markup_compatibility=markup_compatibility,
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
         word_protection=word_protection,
@@ -1617,6 +1633,128 @@ def _package_thumbnail_inventory(
     )
 
 
+def _markup_compatibility_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> MarkupCompatibilityInventory:
+    """Inventory OOXML Markup Compatibility markup without preprocessing it.
+
+    The inventory covers stored XML members under ``word/`` only. It records
+    aggregate MCE branch and compatibility-rule evidence without selecting an
+    AlternateContent branch, resolving feature prefixes, or rendering content.
+    """
+
+    counts = {
+        "alternate_content": 0,
+        "choice": 0,
+        "fallback": 0,
+        "choice_requires_prefix": 0,
+        "ignorable_prefix": 0,
+        "must_understand_prefix": 0,
+        "process_content_name": 0,
+        "preserve_element_name": 0,
+        "preserve_attribute_name": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    part_count = 0
+
+    for part_name in _markup_compatibility_candidate_parts(members):
+        payload = _read_member(archive, members[part_name], limits)
+        if _MARKUP_COMPATIBILITY_MARKER not in payload:
+            continue
+        root = _parse_xml(payload, limits)
+        relationships = relationship_maps.get(part_name, {})
+        part_has_markup_compatibility = False
+
+        for element in root.iter():
+            namespace, local_name = _qualified_name(element.tag)
+            if (
+                namespace == _MARKUP_COMPATIBILITY_NAMESPACE
+                and local_name in _MARKUP_COMPATIBILITY_ELEMENT_NAMES
+            ):
+                part_has_markup_compatibility = True
+                records.append(
+                    (
+                        "markup_compatibility_element",
+                        part_name,
+                        local_name,
+                        _fingerprint_element(element, relationships),
+                    )
+                )
+                if local_name == "AlternateContent":
+                    counts["alternate_content"] += 1
+                elif local_name == "Choice":
+                    counts["choice"] += 1
+                    counts["choice_requires_prefix"] += _token_count(
+                        _unqualified_attribute_value(element, "Requires")
+                    )
+                else:
+                    counts["fallback"] += 1
+
+            for attribute, value in element.attrib.items():
+                attribute_namespace, attribute_local_name = _qualified_name(attribute)
+                if (
+                    attribute_namespace != _MARKUP_COMPATIBILITY_NAMESPACE
+                    or attribute_local_name not in _MARKUP_COMPATIBILITY_ATTRIBUTE_NAMES
+                ):
+                    continue
+                part_has_markup_compatibility = True
+                records.append(
+                    (
+                        "markup_compatibility_attribute",
+                        part_name,
+                        element.tag,
+                        attribute_local_name,
+                        value,
+                    )
+                )
+                if attribute_local_name == "Ignorable":
+                    counts["ignorable_prefix"] += _token_count(value)
+                elif attribute_local_name == "MustUnderstand":
+                    counts["must_understand_prefix"] += _token_count(value)
+                elif attribute_local_name == "ProcessContent":
+                    counts["process_content_name"] += _token_count(value)
+                elif attribute_local_name == "PreserveElements":
+                    counts["preserve_element_name"] += _token_count(value)
+                else:
+                    counts["preserve_attribute_name"] += _token_count(value)
+
+        if part_has_markup_compatibility:
+            part_count += 1
+
+    return MarkupCompatibilityInventory(
+        markup_compatibility_part_count=part_count,
+        alternate_content_count=counts["alternate_content"],
+        choice_count=counts["choice"],
+        fallback_count=counts["fallback"],
+        choice_requires_prefix_count=counts["choice_requires_prefix"],
+        ignorable_prefix_count=counts["ignorable_prefix"],
+        must_understand_prefix_count=counts["must_understand_prefix"],
+        process_content_name_count=counts["process_content_name"],
+        preserve_element_name_count=counts["preserve_element_name"],
+        preserve_attribute_name_count=counts["preserve_attribute_name"],
+        signature=_digest_records(records),
+    )
+
+
+def _markup_compatibility_candidate_parts(
+    members: dict[str, zipfile.ZipInfo],
+) -> list[str]:
+    return sorted(
+        part_name
+        for part_name in members
+        if part_name.startswith("word/")
+        and "/_rels/" not in part_name
+        and part_name.casefold().endswith(".xml")
+    )
+
+
+def _token_count(value: str | None) -> int:
+    return len(value.split()) if value is not None else 0
+
+
 def _sensitivity_label_inventory(
     archive: zipfile.ZipFile,
     members: dict[str, zipfile.ZipInfo],
@@ -1731,9 +1869,7 @@ def _sensitivity_label_inventory(
                 match = _LEGACY_MIP_LABEL_PROPERTY_NAME.fullmatch(property_name)
                 if match is None:
                     raise DocumentFormatError("sensitivity label metadata is invalid")
-                legacy_mip_label_ids.add(
-                    match.group("label_id").strip("{}").casefold()
-                )
+                legacy_mip_label_ids.add(match.group("label_id").strip("{}").casefold())
             elif category == "legacy_sensitivity":
                 counts["legacy_sensitivity_property"] += 1
             else:
@@ -1748,12 +1884,8 @@ def _sensitivity_label_inventory(
             label_info_extension_count=counts["label_info_extension"],
             legacy_mip_label_count=len(legacy_mip_label_ids),
             legacy_mip_property_count=counts["legacy_mip_property"],
-            legacy_sensitivity_property_count=counts[
-                "legacy_sensitivity_property"
-            ],
-            word_content_marking_property_count=counts[
-                "word_content_marking_property"
-            ],
+            legacy_sensitivity_property_count=counts["legacy_sensitivity_property"],
+            word_content_marking_property_count=counts["word_content_marking_property"],
             signature=_digest_records(records),
         ),
         frozenset(label_info_parts),
@@ -1789,10 +1921,14 @@ def _validate_sensitivity_label_root(
                 )
             saw_extension_list = True
             for extension in child:
-                if _qualified_name(extension.tag) != (
-                    _SENSITIVITY_LABEL_NAMESPACE,
-                    "ext",
-                ) or extension.attrib.get("uri") is None:
+                if (
+                    _qualified_name(extension.tag)
+                    != (
+                        _SENSITIVITY_LABEL_NAMESPACE,
+                        "ext",
+                    )
+                    or extension.attrib.get("uri") is None
+                ):
                     raise DocumentFormatError(
                         "sensitivity label information part is invalid"
                     )
@@ -2065,9 +2201,7 @@ def _package_digital_signature_inventory(
             )
         )
 
-    signature_parts = frozenset(
-        origin_parts | xml_signature_parts | certificate_parts
-    )
+    signature_parts = frozenset(origin_parts | xml_signature_parts | certificate_parts)
     return (
         PackageDigitalSignatureInventory(
             signature_origin_part_count=len(origin_parts),
@@ -2347,9 +2481,7 @@ def _save_through_xslt_inventory(
             if _is_word_element(element, "useXSLTWhenSaving")
         ]
         transforms = [
-            element
-            for element in root
-            if _is_word_element(element, "saveThroughXslt")
+            element for element in root if _is_word_element(element, "saveThroughXslt")
         ]
         if len(enabled_settings) > 1 or len(transforms) > 1:
             raise DocumentFormatError("save-through-XSLT state is invalid")
@@ -3538,9 +3670,7 @@ def _taskpane_web_extension_inventory(
             )
 
     web_extension_part_names = sorted(
-        part_name
-        for part_name, kind in part_kinds.items()
-        if kind == "web_extension"
+        part_name for part_name, kind in part_kinds.items() if kind == "web_extension"
     )
     for part_name in web_extension_part_names:
         root = _read_xml(archive, members[part_name], limits)
@@ -3929,16 +4059,12 @@ def _story_snapshots(
         vml_hyperlink_references.extend(story_vml_hyperlink_references)
         vml_external_image_references.extend(story_vml_external_image_references)
         vml_image_hyperlink_references.extend(story_vml_image_hyperlink_references)
-        vml_linked_ole_object_references.extend(
-            story_vml_linked_ole_object_references
-        )
+        vml_linked_ole_object_references.extend(story_vml_linked_ole_object_references)
         vml_embedded_ole_object_references.extend(
             story_vml_embedded_ole_object_references
         )
         word_object_link_references.extend(story_word_object_link_references)
-        word_embedded_control_references.extend(
-            story_word_embedded_control_references
-        )
+        word_embedded_control_references.extend(story_word_embedded_control_references)
         web_extension_control_references.extend(
             _web_extension_control_references(
                 root, part_key, relationship_maps.get(part_key, {})
@@ -4683,9 +4809,7 @@ def _relationship_id_value(element: ET.Element) -> str | None:
     return _relationship_attribute_value(element, "id")
 
 
-def _relationship_attribute_value(
-    element: ET.Element, local_name: str
-) -> str | None:
+def _relationship_attribute_value(element: ET.Element, local_name: str) -> str | None:
     """Return one direct relationship-namespace attribute, including empty."""
 
     for attribute, value in element.attrib.items():
@@ -4728,9 +4852,7 @@ def _settings_inventory(
 ) -> tuple[bool, str, frozenset[str], dict[str, frozenset[str]]]:
     """Fingerprint every discovered document Settings part."""
 
-    settings_part_scopes = _document_settings_part_scopes(
-        members, relationship_maps
-    )
+    settings_part_scopes = _document_settings_part_scopes(members, relationship_maps)
     settings_part_names = tuple(sorted(settings_part_scopes))
     if not settings_part_names:
         return False, _digest_bytes(b"settings-absent"), frozenset(), {}
@@ -4830,10 +4952,7 @@ def _word_protection_inventory(
                 document_protection_tracked_changes_count += 1
             elif edit_mode == "forms":
                 document_protection_forms_count += 1
-            if (
-                _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES
-                & attributes.keys()
-            ):
+            if _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES & attributes.keys():
                 document_protection_password_material_count += 1
             records.append(
                 (
@@ -4852,10 +4971,7 @@ def _word_protection_inventory(
             write_protection_count += 1
             if _word_protection_attribute_enabled(attributes, "recommended"):
                 write_protection_recommended_count += 1
-            if (
-                _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES
-                & attributes.keys()
-            ):
+            if _WORD_PROTECTION_PASSWORD_MATERIAL_ATTRIBUTE_NAMES & attributes.keys():
                 write_protection_password_material_count += 1
             records.append(
                 (
@@ -4916,10 +5032,7 @@ def _validate_word_protection_element(
 
     if expected_local_name == "documentProtection":
         edit_mode = attributes.get("edit")
-        if (
-            edit_mode is not None
-            and edit_mode not in _DOCUMENT_PROTECTION_EDIT_VALUES
-        ):
+        if edit_mode is not None and edit_mode not in _DOCUMENT_PROTECTION_EDIT_VALUES:
             raise DocumentFormatError("Word protection state is invalid")
         boolean_attributes = ("formatting", "enforcement")
     else:
@@ -4938,8 +5051,7 @@ def _word_protection_attribute_enabled(
 ) -> bool:
     value = attributes.get(attribute_name)
     return (
-        value is not None
-        and value.strip().casefold() in _WORD_PROTECTION_TRUE_VALUES
+        value is not None and value.strip().casefold() in _WORD_PROTECTION_TRUE_VALUES
     )
 
 
@@ -5108,9 +5220,7 @@ def _word_hyperlink_field_inventory(
         literal_internal_location_only_hyperlink_field_count=counts[
             "literal_internal_location_only"
         ],
-        dynamic_or_unparseable_hyperlink_field_count=counts[
-            "dynamic_or_unparseable"
-        ],
+        dynamic_or_unparseable_hyperlink_field_count=counts["dynamic_or_unparseable"],
         signature=_digest_records(records),
     )
 
@@ -5561,9 +5671,7 @@ def _vml_external_image_references(
         if relationship_id is None:
             continue
         relationship = relationships.get(relationship_id)
-        classification = _vml_external_image_relationship_classification(
-            relationship
-        )
+        classification = _vml_external_image_relationship_classification(relationship)
         if classification is None or relationship is None:
             continue
         references.append(
@@ -5651,9 +5759,7 @@ def _vml_image_hyperlink_references(
         references.append(
             _VmlImageHyperlinkReference(
                 story_part=story_part,
-                marker_signature=_vml_image_hyperlink_marker_signature(
-                    relationship
-                ),
+                marker_signature=_vml_image_hyperlink_marker_signature(relationship),
                 classification=_hyperlink_markup_relationship_classification(
                     relationship
                 ),
@@ -5755,10 +5861,8 @@ def _vml_linked_ole_object_references(
         if relationship_id is None:
             relationship_classification = "without_relationship_id"
         else:
-            relationship_classification = (
-                _ole_object_relationship_classification(
-                    relationships.get(relationship_id)
-                )
+            relationship_classification = _ole_object_relationship_classification(
+                relationships.get(relationship_id)
             )
         update_mode = _unqualified_attribute_value(element, "UpdateMode")
         update_mode_classification = (
@@ -6223,8 +6327,10 @@ def _validate_word_document_variable_element(element: ET.Element) -> dict[str, s
 
     if set(attributes) != _WORD_DOCUMENT_VARIABLE_ATTRIBUTE_NAMES:
         raise DocumentFormatError("Word document variables are invalid")
-    if not 1 <= _utf16_code_unit_length(attributes["name"]) <= (
-        _WORD_DOCUMENT_VARIABLE_NAME_MAX_UTF16_CODE_UNITS
+    if (
+        not 1
+        <= _utf16_code_unit_length(attributes["name"])
+        <= (_WORD_DOCUMENT_VARIABLE_NAME_MAX_UTF16_CODE_UNITS)
     ):
         raise DocumentFormatError("Word document variables are invalid")
     if _utf16_code_unit_length(attributes["val"]) > (
@@ -6303,9 +6409,7 @@ def _word_permission_range_inventory(
                 if "colFirst" in attributes or "colLast" in attributes:
                     table_column_permission_range_start_count += 1
             elif _is_word_element(element, "permEnd"):
-                attributes = _validate_word_permission_range_element(
-                    element, "permEnd"
-                )
+                attributes = _validate_word_permission_range_element(element, "permEnd")
                 identifier = attributes["id"]
                 if identifier in ends:
                     raise DocumentFormatError("Word permission range is invalid")

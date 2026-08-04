@@ -22,6 +22,8 @@ configuration and recipient-data state, custom XSLT-on-single-XML-save
 configuration, attached custom XML schema declarations, automatic
 field-recalculation-on-open settings, OPC package
 digital-signature material, relationship-bound OPC package thumbnail images,
+OOXML Markup Compatibility `mc:AlternateContent` branches and compatibility
+rule attributes,
 Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
 password-verifier material,
@@ -47,6 +49,8 @@ Package signer/certificate material, signing times and comments, signature
 values, signed-reference targets, and signature-part paths are private too.
 OPC package thumbnail image bytes, relationship sources and targets, content
 types, and part paths are private too.
+OOXML Markup Compatibility branch bodies, feature-prefix and qualified-name
+values, compatibility-rule values, and part paths are private too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are private too.
 Word document-variable names, values, and Settings-part paths are private too.
@@ -107,7 +111,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.34 focuses on Office Open XML Word documents and templates and
+Version 0.35 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -132,7 +136,8 @@ deliberately keeps a small, inspectable contract:
   content-control, external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, relationship-bound OPC package
-  thumbnail image, sensitivity-label metadata, OPC package digital-signature
+  thumbnail image, OOXML Markup Compatibility branch and compatibility-rule,
+  sensitivity-label metadata, OPC package digital-signature
   material, Word editing/write-protection,
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
@@ -220,6 +225,22 @@ bytes, relationship sources and targets, content types, and part paths remain
 inside a private digest, so a same-count image mutation remains review-visible.
 DocFence does not decode, render, classify, or otherwise interpret an image,
 and it does not predict whether Word, Explorer, or another client will show it.
+
+OOXML Markup Compatibility (MCE) has its own inventory because a generic
+payload change cannot distinguish a stored runtime branch boundary from other
+XML changes. Across stored `word/*.xml` members that use the standard MCE
+namespace, DocFence reports only aggregate parts, `AlternateContent`, `Choice`,
+and `Fallback` counts plus the token counts in `Requires`, `Ignorable`,
+`MustUnderstand`, `ProcessContent`, `PreserveElements`, and
+`PreserveAttributes`. A private signature retains the recognized MCE elements
+and attributes, so an equal-count branch or compatibility-rule rewrite remains
+review-visible without exposing branch material, prefix values, qualified names,
+or part paths.
+
+This is stored markup evidence only. DocFence does not validate MCE
+conformance, select an `AlternateContent` branch, resolve a feature prefix,
+apply a target Office version, preprocess or save a package, or predict what
+any document client will load or render.
 
 Sensitivity-label metadata has a separate inventory because a general custom
 property count does not describe the governance state that Office can retain.
@@ -858,6 +879,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_hidden_paragraph_marks: true
   require_no_custom_xml_data: true
   require_no_package_thumbnails: true
+  require_no_markup_compatibility: true
   require_no_embedded_objects: true
   require_no_alternative_format_imports: true
   require_no_custom_document_properties: true
@@ -896,6 +918,7 @@ later mutation:
   no_alternative_format_import_changes: true
   no_document_property_changes: true
   no_package_thumbnail_changes: true
+  no_markup_compatibility_changes: true
   no_mail_merge_changes: true
   no_save_through_xslt_changes: true
   no_attached_custom_xml_schema_changes: true
@@ -938,6 +961,8 @@ XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
 relationship-bound OPC thumbnail image bytes, relationship sources and targets,
 content types, and part paths,
+OOXML Markup Compatibility branch bodies, feature-prefix and qualified-name
+values, compatibility-rule values, and part paths,
 external template/subdocument/frame-source targets, and all fingerprints.
 Attached custom XML schema namespace identifiers and Settings-part paths remain
 private too.

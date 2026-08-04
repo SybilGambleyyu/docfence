@@ -53,6 +53,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_document_property_section(document.get("document_properties", {})))
     lines.extend(_package_thumbnail_section(document.get("package_thumbnails", {})))
+    lines.extend(
+        _markup_compatibility_section(document.get("markup_compatibility", {}))
+    )
     lines.extend(_sensitivity_label_section(document.get("sensitivity_labels", {})))
     lines.extend(
         _package_digital_signature_section(
@@ -84,14 +87,10 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_word_vml_hyperlink_section(document.get("word_vml_hyperlinks", {})))
     lines.extend(
-        _word_vml_external_image_section(
-            document.get("word_vml_external_images", {})
-        )
+        _word_vml_external_image_section(document.get("word_vml_external_images", {}))
     )
     lines.extend(
-        _word_vml_image_hyperlink_section(
-            document.get("word_vml_image_hyperlinks", {})
-        )
+        _word_vml_image_hyperlink_section(document.get("word_vml_image_hyperlinks", {}))
     )
     lines.extend(
         _word_vml_linked_ole_object_section(
@@ -137,9 +136,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
     )
     lines.extend(_document_task_section(document.get("document_tasks", {})))
     lines.extend(
-        _taskpane_web_extension_section(
-            document.get("taskpane_web_extensions", {})
-        )
+        _taskpane_web_extension_section(document.get("taskpane_web_extensions", {}))
     )
     lines.extend(
         _external_document_dependency_section(
@@ -161,6 +158,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_alternative_format_import_comparison(before, after))
     lines.extend(_document_property_comparison(before, after))
     lines.extend(_package_thumbnail_comparison(before, after))
+    lines.extend(_markup_compatibility_comparison(before, after))
     lines.extend(_sensitivity_label_comparison(before, after))
     lines.extend(_package_digital_signature_comparison(before, after))
     lines.extend(_word_protection_comparison(before, after))
@@ -358,6 +356,10 @@ def _package_thumbnail_section(value: object) -> list[str]:
     return _inventory_section("OPC package thumbnail inventory", value)
 
 
+def _markup_compatibility_section(value: object) -> list[str]:
+    return _inventory_section("OOXML markup-compatibility inventory", value)
+
+
 def _sensitivity_label_section(value: object) -> list[str]:
     return _inventory_section("Office sensitivity-label metadata inventory", value)
 
@@ -524,6 +526,16 @@ def _package_thumbnail_comparison(
         "OPC package thumbnail inventory",
         before.get("package_thumbnails", {}),
         after.get("package_thumbnails", {}),
+    )
+
+
+def _markup_compatibility_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "OOXML markup-compatibility inventory",
+        before.get("markup_compatibility", {}),
+        after.get("markup_compatibility", {}),
     )
 
 

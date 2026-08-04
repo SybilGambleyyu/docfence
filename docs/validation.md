@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.34 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.35 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -9,7 +9,8 @@ following properties:
 - revision markup, comments, modern comment contact/thread/identifier/reaction
   metadata, document tasks, task-pane Office web-extension configuration,
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
-  relationship-bound OPC package thumbnail and digital-signature
+  relationship-bound OPC package thumbnail, OOXML Markup Compatibility branch/
+  compatibility-rule, and digital-signature
   origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
@@ -141,6 +142,20 @@ following properties:
   unreferenced filename lookalikes, JSON/Markdown/SARIF redaction, candidate
   and baseline policy findings, and rejection of external, duplicate, missing,
   non-image, source-unavailable, or relationship-owning thumbnail topology;
+
+- OOXML Markup Compatibility is separately inventoried across stored Word XML
+  parts. Tests cover aggregate `AlternateContent`/`Choice`/`Fallback` and
+  compatibility-rule token counts, a same-count `Choice/@Requires` rewrite,
+  a non-MCE text rewrite that does not churn the MCE inventory,
+  JSON/Markdown/SARIF redaction, and candidate and baseline policy findings;
+
+- the validation pass profiles the public Open XML SDK Strict Word chart
+  [`2D Column-O12-Word-Charts.docx`](https://github.com/dotnet/Open-XML-SDK/blob/main/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D%20Column-O12-Word-Charts.docx).
+  It reports nine MCE-bearing Word XML parts, three `AlternateContent` nodes,
+  three `Choice` nodes, three `Fallback` nodes, three `Requires` prefixes, and
+  eight `Ignorable` prefixes. This is a stored-package compatibility smoke test
+  only; it does not select a branch or assert how any document client will
+  process it;
 
 - the release check also profiles the public Open XML SDK
   [`AcademicLetter` Word template](https://github.com/dotnet/Open-XML-SDK/blob/main/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12%20templates/AcademicLetter_TP10067035.dotx).

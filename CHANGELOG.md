@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.35.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for stored OOXML Markup
+  Compatibility and Extensibility (MCE) markup in non-relationship Word XML
+  members that use the standard MCE namespace. Public reports contain only
+  aggregate part, branch, and compatibility-rule token counts; branch bodies,
+  feature-prefix and qualified-name values, member paths, and digests remain
+  private. Equal-count branch or rule rewrites stay review-visible.
+- Added `DFP082` to require a candidate with no recognized stored MCE markup
+  and `DFP083` to protect an approved MCE baseline.
+- Added regression coverage for `AlternateContent`/`Choice`/`Fallback` and MCE
+  rule attributes, same-count `Choice/@Requires` rewrites, redacted JSON,
+  Markdown, and SARIF output, policy findings, and a Strict Word package smoke
+  profile. DocFence does not validate MCE conformance, resolve feature
+  prefixes, choose a branch, preprocess or save a package, or predict client
+  behavior.
+
 ## 0.34.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for relationship-bound OPC

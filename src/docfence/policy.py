@@ -47,6 +47,8 @@ _RULES: Final = {
     "require_no_custom_xml_data": "DFP079",
     "require_no_package_thumbnails": "DFP080",
     "no_package_thumbnail_changes": "DFP081",
+    "require_no_markup_compatibility": "DFP082",
+    "no_markup_compatibility_changes": "DFP083",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -294,6 +296,21 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if (
+        policy.enabled("no_markup_compatibility_changes")
+        and before.markup_compatibility.signature
+        != after.markup_compatibility.signature
+    ):
+        findings.append(
+            _finding(
+                "no_markup_compatibility_changes",
+                "OOXML markup-compatibility inventory changed.",
+                {
+                    "before": before.markup_compatibility.public_dict(),
+                    "after": after.markup_compatibility.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_sensitivity_label_metadata_changes") and (
         before.sensitivity_labels.signature != after.sensitivity_labels.signature
     ):
@@ -375,10 +392,9 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                     "after": after.word_document_variable_fields.public_dict(),
                 },
             )
-    )
+        )
     if policy.enabled("no_word_hyperlink_field_changes") and (
-        before.word_hyperlink_fields.signature
-        != after.word_hyperlink_fields.signature
+        before.word_hyperlink_fields.signature != after.word_hyperlink_fields.signature
     ):
         findings.append(
             _finding(
@@ -391,8 +407,7 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
             )
         )
     if policy.enabled("no_word_hyperlink_markup_changes") and (
-        before.word_hyperlink_markup.signature
-        != after.word_hyperlink_markup.signature
+        before.word_hyperlink_markup.signature != after.word_hyperlink_markup.signature
     ):
         findings.append(
             _finding(
@@ -725,6 +740,17 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_package_thumbnails",
                 "Candidate contains relationship-bound OPC package thumbnail images.",
                 after.package_thumbnails.public_dict(),
+            )
+        )
+    if (
+        policy.enabled("require_no_markup_compatibility")
+        and after.markup_compatibility.markup_compatibility_part_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_markup_compatibility",
+                "Candidate contains stored OOXML markup-compatibility markup.",
+                after.markup_compatibility.public_dict(),
             )
         )
     if policy.enabled("require_no_hidden_text") and after.hidden_text_run_count:

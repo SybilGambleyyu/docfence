@@ -36,6 +36,9 @@ identifiers, reference URIs, signing times, comments, provider data,
 relationship IDs, and signature-part paths are sensitive package material too.
 OPC package thumbnail image bytes, relationship IDs, sources and targets,
 content types, and part paths are sensitive package material too.
+OOXML Markup Compatibility branch bodies, feature-prefix and qualified-name
+values, compatibility-rule values, and member paths are sensitive package
+material too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are sensitive package material too.
 Word document-variable names, values, Settings-part paths, and `DOCVARIABLE`
@@ -132,6 +135,17 @@ counts; bytes, sources, targets, content types, paths, and fingerprints remain
 private. A same-count image rewrite stays review-visible without emitting image
 data. A conventional filename alone is not enough to make a member a thumbnail.
 DocFence never decodes, renders, classifies, or otherwise interprets the image.
+
+OOXML Markup Compatibility (MCE) receives a dedicated private-digest
+treatment. DocFence scans stored non-relationship `word/*.xml` members that
+use the standard MCE namespace and reports only aggregate part, branch, and
+compatibility-rule token counts. Recognized MCE elements and attributes are
+fingerprinted privately, so an equal-count branch body or rule-value rewrite
+stays review-visible without placing branch text, prefix values, qualified
+names, attribute values, or member paths in a report. This boundary does not
+validate MCE conformance or infer whether a stored branch can be selected.
+DocFence never resolves a feature prefix, applies a target version, preprocesses
+or saves a package, chooses a branch, or renders an MCE result.
 
 The general custom-XML inventory also privately fingerprints each
 non-relationship package member under the conventional `customXml/` folder.
@@ -523,7 +537,10 @@ payloads review-visible; they do not prove the payload is valid, safe, or used
 by Word. Relationship-bound package thumbnail counts are stored-topology
 evidence, not proof that any client will display a thumbnail or that its image
 reflects the current document. DocFence does not decode it or infer a thumbnail
-from an unreferenced filename. Core and extended document-property counts include automatic data such
+from an unreferenced filename. Markup Compatibility counts are stored XML
+evidence, not MCE validation or proof that a client will select, preserve,
+render, or save any branch; DocFence does not resolve prefixes, target versions,
+or preprocessing rules. Core and extended document-property counts include automatic data such
 as timestamps, statistics, and application information. Their changes can be
 expected on a normal save; DocFence records them without interpreting their
 provenance or sensitivity. The custom-property candidate gate is limited to

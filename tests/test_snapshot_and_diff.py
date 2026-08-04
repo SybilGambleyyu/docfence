@@ -42,6 +42,9 @@ _PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE = (
 _STRICT_PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/metadata/thumbnail"
 )
+_MARKUP_COMPATIBILITY_NAMESPACE = (
+    "http://schemas.openxmlformats.org/markup-compatibility/2006"
+)
 _DOCUMENT_SETTINGS_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
 )
@@ -340,9 +343,7 @@ def test_custom_xml_candidate_gate_is_private_and_needs_no_baseline(tmp_path) ->
     write_document(
         custom_xml,
         text="VISIBLE_DO_NOT_LEAK",
-        custom_xml=(
-            b"<private-data>CUSTOM_XML_DATA_DO_NOT_LEAK</private-data>"
-        ),
+        custom_xml=(b"<private-data>CUSTOM_XML_DATA_DO_NOT_LEAK</private-data>"),
     )
 
     policy_path.write_text(
@@ -449,8 +450,7 @@ def test_package_thumbnail_inventory_is_private_and_requires_valid_topology(
     before_snapshot = load_snapshot(before)
     assert before_snapshot.public_dict()["package_thumbnails"] == expected_inventory
     assert (
-        load_snapshot(strict).public_dict()["package_thumbnails"]
-        == expected_inventory
+        load_snapshot(strict).public_dict()["package_thumbnails"] == expected_inventory
     )
     assert (
         load_snapshot(part_relationship).public_dict()["package_thumbnails"]
@@ -468,9 +468,7 @@ def test_package_thumbnail_inventory_is_private_and_requires_valid_topology(
     assert {change.kind for change in report.changes} == {
         "package_thumbnail_inventory_changed"
     }
-    assert {
-        change.kind for change in diff_documents(before, before).changes
-    } == set()
+    assert {change.kind for change in diff_documents(before, before).changes} == set()
     content_type_report = diff_documents(before, content_type_after)
     assert "package_thumbnail_inventory_changed" in {
         change.kind for change in content_type_report.changes
@@ -534,6 +532,104 @@ rules:
     ):
         with pytest.raises(DocumentFormatError):
             load_snapshot(document)
+
+
+def test_markup_compatibility_inventory_is_private_and_aggregate_only(
+    tmp_path,
+) -> None:
+    clean = tmp_path / "clean.docx"
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    outside_changed = tmp_path / "outside-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+    write_document(clean, text="VISIBLE_DO_NOT_LEAK")
+    _write_markup_compatibility_document(
+        before,
+        required_prefix="SECRET_CHOICE_BEFORE_DO_NOT_LEAK",
+    )
+    _write_markup_compatibility_document(
+        after,
+        required_prefix="SECRET_CHOICE_AFTER_DO_NOT_LEAK",
+    )
+    _write_markup_compatibility_document(
+        outside_changed,
+        required_prefix="SECRET_CHOICE_BEFORE_DO_NOT_LEAK",
+        visible_text="OUTSIDE_MARKUP_DO_NOT_LEAK",
+    )
+
+    expected_inventory = {
+        "markup_compatibility_part_count": 1,
+        "alternate_content_count": 1,
+        "choice_count": 1,
+        "fallback_count": 1,
+        "choice_requires_prefix_count": 1,
+        "ignorable_prefix_count": 2,
+        "must_understand_prefix_count": 1,
+        "process_content_name_count": 2,
+        "preserve_element_name_count": 1,
+        "preserve_attribute_name_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    assert before_snapshot.public_dict()["markup_compatibility"] == expected_inventory
+    assert load_snapshot(clean).public_dict()["markup_compatibility"] == {
+        key: 0 for key in expected_inventory
+    }
+
+    report = diff_documents(before, after)
+    assert (
+        before_snapshot.public_dict()["markup_compatibility"]
+        == (load_snapshot(after).public_dict()["markup_compatibility"])
+    )
+    assert "markup_compatibility_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "markup_compatibility_inventory_changed" not in {
+        change.kind for change in diff_documents(before, outside_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_markup_compatibility: true
+  no_markup_compatibility_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    gated = apply_policy(report, policy)
+    assert {finding.rule_id for finding in gated.findings} == {"DFP082", "DFP083"}
+    assert not apply_policy(diff_documents(clean, clean), policy).findings
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, before), policy).findings
+    } == {"DFP082"}
+
+    rendered = "\n".join(
+        (
+            render_profile(before_snapshot, "json"),
+            render_profile(before_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_MARKUP_COMPATIBILITY_INVENTORY_CHANGED",
+        "DFP082",
+        "DFP083",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VISIBLE_MARKUP_DO_NOT_LEAK",
+        "BRANCH_MARKUP_DO_NOT_LEAK",
+        "FALLBACK_MARKUP_DO_NOT_LEAK",
+        "SECRET_CHOICE_BEFORE_DO_NOT_LEAK",
+        "SECRET_CHOICE_AFTER_DO_NOT_LEAK",
+        "SECRET_IGNORABLE_ONE_DO_NOT_LEAK",
+        "SECRET_IGNORABLE_TWO_DO_NOT_LEAK",
+        "word/document.xml",
+    ):
+        assert marker not in rendered
 
 
 def test_hidden_markup_and_style_declarations_are_separate_and_private(
@@ -1351,8 +1447,7 @@ def test_field_update_on_open_inventory_is_aggregate_and_strict(tmp_path) -> Non
     snapshot = load_snapshot(enabled)
     assert snapshot.public_dict()["field_updates_on_open"] == expected_enabled
     assert (
-        load_snapshot(strict).public_dict()["field_updates_on_open"]
-        == expected_enabled
+        load_snapshot(strict).public_dict()["field_updates_on_open"] == expected_enabled
     )
     assert (
         load_snapshot(disabled).public_dict()["field_updates_on_open"]
@@ -6871,8 +6966,8 @@ def _write_package_thumbnail_document(
         return posixpath.relpath(target_part, start=source_part.rpartition("/")[0])
 
     def relationship_markup(relationship_id: str) -> str:
-        target_mode_attribute = "" if target_mode == "Internal" else (
-            f' TargetMode="{target_mode}"'
+        target_mode_attribute = (
+            "" if target_mode == "Internal" else (f' TargetMode="{target_mode}"')
         )
         target = relationship_target(
             relationship_source, thumbnail_part_name, target_mode
@@ -6934,12 +7029,51 @@ def _write_package_thumbnail_document(
     for source_part, relationships in relationships_by_source.items():
         entries[relationship_part_name(source_part)] = (
             f'<Relationships xmlns="{relationship_namespace}">'
-            f'{"".join(relationships)}</Relationships>'
+            f"{''.join(relationships)}</Relationships>"
         ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)
+
+
+def _write_markup_compatibility_document(
+    path,
+    *,
+    required_prefix: str,
+    visible_text: str = "VISIBLE_MARKUP_DO_NOT_LEAK",
+) -> None:
+    """Write a small package with MCE attributes and one AlternateContent node.
+
+    All values are deliberately private test sentinels: DocFence may count the
+    stored markup, but must neither resolve a required feature nor reveal the
+    branch material or compatibility-rule values.
+    """
+
+    _write_raw_package(
+        path,
+        f'''<w:document xmlns:w="{W}" xmlns:mc="{_MARKUP_COMPATIBILITY_NAMESPACE}"
+ xmlns:SECRET_CHOICE_BEFORE_DO_NOT_LEAK="urn:docfence:choice-before"
+ xmlns:SECRET_CHOICE_AFTER_DO_NOT_LEAK="urn:docfence:choice-after"
+ xmlns:SECRET_IGNORABLE_ONE_DO_NOT_LEAK="urn:docfence:ignorable-one"
+ xmlns:SECRET_IGNORABLE_TWO_DO_NOT_LEAK="urn:docfence:ignorable-two"
+ xmlns:SECRET_MUST_UNDERSTAND_DO_NOT_LEAK="urn:docfence:must-understand"
+ xmlns:SECRET_PROCESS_DO_NOT_LEAK="urn:docfence:process"
+ xmlns:SECRET_PRESERVE_DO_NOT_LEAK="urn:docfence:preserve"
+ mc:Ignorable="SECRET_IGNORABLE_ONE_DO_NOT_LEAK SECRET_IGNORABLE_TWO_DO_NOT_LEAK"
+ mc:MustUnderstand="SECRET_MUST_UNDERSTAND_DO_NOT_LEAK"
+ mc:ProcessContent="SECRET_PROCESS_DO_NOT_LEAK:one SECRET_PROCESS_DO_NOT_LEAK:two"
+ mc:PreserveElements="SECRET_PRESERVE_DO_NOT_LEAK:element"
+ mc:PreserveAttributes="SECRET_PRESERVE_DO_NOT_LEAK:element@SECRET_PRESERVE_DO_NOT_LEAK:attribute">
+ <w:body><w:p><w:r><w:t>{visible_text}</w:t></w:r>
+ <mc:AlternateContent>
+ <mc:Choice Requires="{required_prefix}">
+ <w:r><w:t>BRANCH_MARKUP_DO_NOT_LEAK</w:t></w:r></mc:Choice>
+ <mc:Fallback><w:r><w:t>FALLBACK_MARKUP_DO_NOT_LEAK</w:t></w:r>
+ </mc:Fallback>
+ </mc:AlternateContent>
+ </w:p><w:sectPr/></w:body></w:document>''',
+    )
 
 
 def _write_package_digital_signature_document(

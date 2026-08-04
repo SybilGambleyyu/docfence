@@ -439,6 +439,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.markup_compatibility.signature != after.markup_compatibility.signature:
+        changes.append(
+            Change(
+                kind="markup_compatibility_inventory_changed",
+                message="Stored OOXML markup-compatibility inventory changed.",
+                details={
+                    "before": before.markup_compatibility.public_dict(),
+                    "after": after.markup_compatibility.public_dict(),
+                },
+            )
+        )
     if before.sensitivity_labels.signature != after.sensitivity_labels.signature:
         changes.append(
             Change(
@@ -503,10 +514,7 @@ def _append_package_changes(
                 },
             )
         )
-    if (
-        before.word_hyperlink_fields.signature
-        != after.word_hyperlink_fields.signature
-    ):
+    if before.word_hyperlink_fields.signature != after.word_hyperlink_fields.signature:
         changes.append(
             Change(
                 kind="word_hyperlink_field_inventory_changed",
@@ -517,10 +525,7 @@ def _append_package_changes(
                 },
             )
         )
-    if (
-        before.word_hyperlink_markup.signature
-        != after.word_hyperlink_markup.signature
-    ):
+    if before.word_hyperlink_markup.signature != after.word_hyperlink_markup.signature:
         changes.append(
             Change(
                 kind="word_hyperlink_markup_inventory_changed",
@@ -647,8 +652,7 @@ def _append_package_changes(
             Change(
                 kind="word_embedded_control_inventory_changed",
                 message=(
-                    "Stored WordprocessingML embedded-control-anchor inventory "
-                    "changed."
+                    "Stored WordprocessingML embedded-control-anchor inventory changed."
                 ),
                 details={
                     "before": before.word_embedded_controls.public_dict(),

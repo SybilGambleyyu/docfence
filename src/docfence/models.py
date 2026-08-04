@@ -133,6 +133,37 @@ class PackageThumbnailInventory:
 
 
 @dataclass(frozen=True)
+class MarkupCompatibilityInventory:
+    """Stored OOXML markup-compatibility evidence, aggregate only."""
+
+    markup_compatibility_part_count: int
+    alternate_content_count: int
+    choice_count: int
+    fallback_count: int
+    choice_requires_prefix_count: int
+    ignorable_prefix_count: int
+    must_understand_prefix_count: int
+    process_content_name_count: int
+    preserve_element_name_count: int
+    preserve_attribute_name_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "markup_compatibility_part_count": self.markup_compatibility_part_count,
+            "alternate_content_count": self.alternate_content_count,
+            "choice_count": self.choice_count,
+            "fallback_count": self.fallback_count,
+            "choice_requires_prefix_count": self.choice_requires_prefix_count,
+            "ignorable_prefix_count": self.ignorable_prefix_count,
+            "must_understand_prefix_count": self.must_understand_prefix_count,
+            "process_content_name_count": self.process_content_name_count,
+            "preserve_element_name_count": self.preserve_element_name_count,
+            "preserve_attribute_name_count": self.preserve_attribute_name_count,
+        }
+
+
+@dataclass(frozen=True)
 class SensitivityLabelInventory:
     """Stored Microsoft Purview sensitivity-label evidence, aggregate only."""
 
@@ -513,9 +544,7 @@ class WordVmlHyperlinkInventory:
                 self.concrete_shape_vml_hyperlink_count
             ),
             "group_vml_hyperlink_count": self.group_vml_hyperlink_count,
-            "shape_type_vml_hyperlink_count": (
-                self.shape_type_vml_hyperlink_count
-            ),
+            "shape_type_vml_hyperlink_count": (self.shape_type_vml_hyperlink_count),
             "target_attribute_vml_hyperlink_count": (
                 self.target_attribute_vml_hyperlink_count
             ),
@@ -579,9 +608,7 @@ class WordVmlImageHyperlinkInventory:
             "vml_image_hyperlink_reference_count": (
                 self.vml_image_hyperlink_reference_count
             ),
-            "vml_image_hyperlink_story_count": (
-                self.vml_image_hyperlink_story_count
-            ),
+            "vml_image_hyperlink_story_count": (self.vml_image_hyperlink_story_count),
             "external_relationship_vml_image_hyperlink_count": (
                 self.external_relationship_vml_image_hyperlink_count
             ),
@@ -885,9 +912,7 @@ class SaveThroughXsltInventory:
             "save_through_xslt_enabled_setting_count": self.enabled_setting_count,
             "save_through_xslt_disabled_setting_count": self.disabled_setting_count,
             "save_through_xslt_anchor_count": self.transform_anchor_count,
-            "save_through_xslt_relationship_count": (
-                self.transform_relationship_count
-            ),
+            "save_through_xslt_relationship_count": (self.transform_relationship_count),
             "save_through_xslt_solution_identifier_count": (
                 self.solution_identifier_count
             ),
@@ -1240,6 +1265,7 @@ class DocumentSnapshot:
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
     package_thumbnails: PackageThumbnailInventory
+    markup_compatibility: MarkupCompatibilityInventory
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
     word_protection: WordProtectionInventory
@@ -1348,14 +1374,13 @@ class DocumentSnapshot:
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
             "package_thumbnails": self.package_thumbnails.public_dict(),
+            "markup_compatibility": self.markup_compatibility.public_dict(),
             "sensitivity_labels": self.sensitivity_labels.public_dict(),
             "package_digital_signatures": (
                 self.package_digital_signatures.public_dict()
             ),
             "word_protection": self.word_protection.public_dict(),
-            "word_document_variables": (
-                self.word_document_variables.public_dict()
-            ),
+            "word_document_variables": (self.word_document_variables.public_dict()),
             "word_document_variable_fields": (
                 self.word_document_variable_fields.public_dict()
             ),
@@ -1366,12 +1391,8 @@ class DocumentSnapshot:
                 self.word_drawing_linked_pictures.public_dict()
             ),
             "word_vml_hyperlinks": self.word_vml_hyperlinks.public_dict(),
-            "word_vml_external_images": (
-                self.word_vml_external_images.public_dict()
-            ),
-            "word_vml_image_hyperlinks": (
-                self.word_vml_image_hyperlinks.public_dict()
-            ),
+            "word_vml_external_images": (self.word_vml_external_images.public_dict()),
+            "word_vml_image_hyperlinks": (self.word_vml_image_hyperlinks.public_dict()),
             "word_vml_linked_ole_objects": (
                 self.word_vml_linked_ole_objects.public_dict()
             ),
