@@ -1076,6 +1076,37 @@ class SavePreviewPictureInventory:
 
 
 @dataclass(frozen=True)
+class ContentControlLockInventory:
+    """Direct Word content-control lock declarations, aggregate only.
+
+    The state names intentionally mirror the four ``w:lock/@w:val`` schema
+    values, while a separate count preserves controls that carry no direct
+    declaration.  The inventory records stored markup only; it does not infer
+    a host's effective editing behavior.
+    """
+
+    no_lock_declaration_count: int
+    unlocked_count: int
+    sdt_locked_count: int
+    content_locked_count: int
+    sdt_content_locked_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "content_control_no_lock_declaration_count": (
+                self.no_lock_declaration_count
+            ),
+            "content_control_lock_unlocked_count": self.unlocked_count,
+            "content_control_lock_sdt_locked_count": self.sdt_locked_count,
+            "content_control_lock_content_locked_count": self.content_locked_count,
+            "content_control_lock_sdt_content_locked_count": (
+                self.sdt_content_locked_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1363,6 +1394,7 @@ class DocumentSnapshot:
     personal_information_removal_on_save: PersonalInformationRemovalOnSaveInventory
     save_forms_data: SaveFormsDataInventory
     save_preview_picture: SavePreviewPictureInventory
+    content_control_locks: ContentControlLockInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1491,6 +1523,7 @@ class DocumentSnapshot:
             ),
             "save_forms_data": self.save_forms_data.public_dict(),
             "save_preview_picture": self.save_preview_picture.public_dict(),
+            "content_control_locks": self.content_control_locks.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

@@ -2017,6 +2017,183 @@ rules:
         assert marker not in rendered
 
 
+def test_content_control_lock_inventory_is_aggregate_and_strict(tmp_path) -> None:
+    no_declaration = tmp_path / "no-declaration.docx"
+    explicit_unlocked = tmp_path / "explicit-unlocked.docx"
+    all_states = tmp_path / "all-states.docx"
+    strict = tmp_path / "strict.docx"
+    fully_locked = tmp_path / "fully-locked.docx"
+    reassigned = tmp_path / "reassigned.docx"
+    before_reassignment = tmp_path / "before-reassignment.docx"
+    out_of_scope = tmp_path / "out-of-scope.docx"
+    missing_value = tmp_path / "missing-value.docx"
+    invalid_value = tmp_path / "invalid-value.docx"
+    unexpected_attribute = tmp_path / "unexpected-attribute.docx"
+    nonblank_text = tmp_path / "nonblank-text.docx"
+    nested_markup = tmp_path / "nested-markup.docx"
+    duplicate_lock = tmp_path / "duplicate-lock.docx"
+    duplicate_properties = tmp_path / "duplicate-properties.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_content_control_lock_document(no_declaration, lock_states=(None,))
+    _write_content_control_lock_document(explicit_unlocked, lock_states=("unlocked",))
+    _write_content_control_lock_document(
+        all_states,
+        lock_states=(None, "unlocked", "sdtLocked", "contentLocked"),
+        header_lock_states=("sdtContentLocked",),
+    )
+    _write_content_control_lock_document(
+        strict,
+        lock_states=(None, "unlocked", "sdtLocked", "contentLocked"),
+        header_lock_states=("sdtContentLocked",),
+        strict_syntax=True,
+    )
+    _write_content_control_lock_document(
+        fully_locked, lock_states=("sdtContentLocked",)
+    )
+    _write_content_control_lock_document(
+        reassigned, lock_states=("contentLocked", "sdtLocked")
+    )
+    _write_content_control_lock_document(
+        before_reassignment, lock_states=("sdtLocked", "contentLocked")
+    )
+    _write_content_control_lock_document(
+        out_of_scope,
+        lock_states=(None,),
+        out_of_scope_lock_markup=(
+            '<w:sdtPr><w:lock w:val="sdtContentLocked"/></w:sdtPr>'
+        ),
+    )
+    _write_content_control_lock_document(missing_value, lock_markup="<w:lock/>")
+    _write_content_control_lock_document(
+        invalid_value, lock_markup='<w:lock w:val="sometimes"/>'
+    )
+    _write_content_control_lock_document(
+        unexpected_attribute,
+        lock_markup=(
+            '<w:lock w:val="sdtLocked" '
+            'w:unexpected="CONTENT_CONTROL_LOCK_ATTRIBUTE_DO_NOT_LEAK"/>'
+        ),
+    )
+    _write_content_control_lock_document(
+        nonblank_text,
+        lock_markup=(
+            '<w:lock w:val="sdtLocked">CONTENT_CONTROL_LOCK_TEXT_DO_NOT_LEAK</w:lock>'
+        ),
+    )
+    _write_content_control_lock_document(
+        nested_markup,
+        lock_markup='<w:lock w:val="sdtLocked"><w:unexpected/></w:lock>',
+    )
+    _write_content_control_lock_document(
+        duplicate_lock,
+        lock_markup=('<w:lock w:val="sdtLocked"/><w:lock w:val="contentLocked"/>'),
+    )
+    _write_content_control_lock_document(
+        duplicate_properties,
+        duplicate_properties=True,
+    )
+
+    expected_inventory = {
+        "content_control_no_lock_declaration_count": 1,
+        "content_control_lock_unlocked_count": 1,
+        "content_control_lock_sdt_locked_count": 1,
+        "content_control_lock_content_locked_count": 1,
+        "content_control_lock_sdt_content_locked_count": 1,
+    }
+    snapshot = load_snapshot(all_states)
+    assert snapshot.public_dict()["content_control_locks"] == expected_inventory
+    assert load_snapshot(strict).public_dict()["content_control_locks"] == (
+        expected_inventory
+    )
+    assert load_snapshot(no_declaration).public_dict()["content_control_locks"] == {
+        "content_control_no_lock_declaration_count": 1,
+        "content_control_lock_unlocked_count": 0,
+        "content_control_lock_sdt_locked_count": 0,
+        "content_control_lock_content_locked_count": 0,
+        "content_control_lock_sdt_content_locked_count": 0,
+    }
+    assert load_snapshot(out_of_scope).public_dict()["content_control_locks"] == {
+        "content_control_no_lock_declaration_count": 1,
+        "content_control_lock_unlocked_count": 0,
+        "content_control_lock_sdt_locked_count": 0,
+        "content_control_lock_content_locked_count": 0,
+        "content_control_lock_sdt_content_locked_count": 0,
+    }
+
+    report = diff_documents(no_declaration, fully_locked)
+    assert "content_control_lock_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    same_count_report = diff_documents(before_reassignment, reassigned)
+    assert "content_control_lock_inventory_changed" in {
+        change.kind for change in same_count_report.changes
+    }
+    for invalid_document in (
+        missing_value,
+        invalid_value,
+        unexpected_attribute,
+        nonblank_text,
+        nested_markup,
+        duplicate_lock,
+        duplicate_properties,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(invalid_document)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_content_control_locks: true
+  no_content_control_lock_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP091"
+    }
+    weak_report = diff_documents(fully_locked, no_declaration)
+    assert {
+        finding.rule_id for finding in apply_policy(weak_report, policy).findings
+    } == {"DFP090", "DFP091"}
+    assert not apply_policy(diff_documents(fully_locked, fully_locked), policy).findings
+    no_change_report = apply_policy(
+        diff_documents(no_declaration, no_declaration), policy
+    )
+    assert {finding.rule_id for finding in no_change_report.findings} == {"DFP090"}
+    explicit_unlocked_report = apply_policy(
+        diff_documents(explicit_unlocked, explicit_unlocked), policy
+    )
+    assert {finding.rule_id for finding in explicit_unlocked_report.findings} == {
+        "DFP090"
+    }
+
+    gated = apply_policy(weak_report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_CONTENT_CONTROL_LOCK_INVENTORY_CHANGED",
+        "DFP090",
+        "DFP091",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "CONTENT_CONTROL_LOCK_ATTRIBUTE_DO_NOT_LEAK",
+        "CONTENT_CONTROL_LOCK_TEXT_DO_NOT_LEAK",
+        "CONTENT_CONTROL_LOCK_TAG_DO_NOT_LEAK",
+        "word/document.xml",
+    ):
+        assert marker not in rendered
+
+
 def test_template_style_update_is_distinct_from_attached_template_dependency(
     tmp_path,
 ) -> None:
@@ -10520,6 +10697,73 @@ def _write_save_preview_picture_document(
             f'<w:settings xmlns:w="{word_namespace}">{setting_markup}</w:settings>'
         ).encode(),
     }
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_content_control_lock_document(
+    path,
+    *,
+    lock_states: tuple[str | None, ...] = ("unlocked",),
+    header_lock_states: tuple[str | None, ...] = (),
+    strict_syntax: bool = False,
+    lock_markup: str | None = None,
+    duplicate_properties: bool = False,
+    out_of_scope_lock_markup: str = "",
+) -> None:
+    """Write controls whose only variable review state is direct ``w:lock``."""
+
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+
+    def controls(states: tuple[str | None, ...], story_kind: str) -> str:
+        markup: list[str] = []
+        for ordinal, state in enumerate(states):
+            direct_lock = (
+                lock_markup
+                if ordinal == 0 and lock_markup is not None
+                else (f'<w:lock w:val="{state}"/>' if state is not None else "")
+            )
+            properties = (
+                "<w:sdtPr>"
+                f'<w:id w:val="{100 + ordinal}"/>'
+                f'<w:tag w:val="CONTENT_CONTROL_LOCK_TAG_DO_NOT_LEAK_'
+                f'{story_kind}_{ordinal}"/>'
+                f"{direct_lock}"
+                "</w:sdtPr>"
+            )
+            if duplicate_properties and ordinal == 0:
+                properties += '<w:sdtPr><w:lock w:val="contentLocked"/></w:sdtPr>'
+            markup.append(
+                "<w:sdt>"
+                f"{properties}"
+                "<w:sdtContent><w:r><w:t>"
+                "CONTENT_CONTROL_LOCK_TEXT_DO_NOT_LEAK"
+                "</w:t></w:r></w:sdtContent>"
+                "</w:sdt>"
+            )
+        return "".join(markup)
+
+    body_controls = controls(lock_states, "BODY")
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body><w:p>'
+            f"{body_controls}{out_of_scope_lock_markup}"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if header_lock_states:
+        entries["word/header1.xml"] = (
+            f'<w:hdr xmlns:w="{word_namespace}"><w:p>'
+            f"{controls(header_lock_states, 'HEADER')}"
+            "</w:p></w:hdr>"
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

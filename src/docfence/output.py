@@ -136,6 +136,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
     lines.extend(
         _save_preview_picture_section(document.get("save_preview_picture", {}))
     )
+    lines.extend(
+        _content_control_lock_section(document.get("content_control_locks", {}))
+    )
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
@@ -192,6 +195,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_personal_information_removal_on_save_comparison(before, after))
     lines.extend(_save_forms_data_comparison(before, after))
     lines.extend(_save_preview_picture_comparison(before, after))
+    lines.extend(_content_control_lock_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
@@ -478,6 +482,10 @@ def _save_forms_data_section(value: object) -> list[str]:
 
 def _save_preview_picture_section(value: object) -> list[str]:
     return _inventory_section("Preview-thumbnail-on-save inventory", value)
+
+
+def _content_control_lock_section(value: object) -> list[str]:
+    return _inventory_section("Content-control lock inventory", value)
 
 
 def _data_binding_section(value: object) -> list[str]:
@@ -818,6 +826,16 @@ def _save_preview_picture_comparison(
         "Preview-thumbnail-on-save inventory",
         before.get("save_preview_picture", {}),
         after.get("save_preview_picture", {}),
+    )
+
+
+def _content_control_lock_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Content-control lock inventory",
+        before.get("content_control_locks", {}),
+        after.get("content_control_locks", {}),
     )
 
 

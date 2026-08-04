@@ -24,6 +24,7 @@ from docfence.errors import DocumentFormatError, DocumentSafetyError
 from docfence.models import (
     AlternativeFormatImportInventory,
     AttachedCustomXmlSchemaInventory,
+    ContentControlLockInventory,
     DataBindingInventory,
     DocumentPropertyInventory,
     DocumentSnapshot,
@@ -648,6 +649,12 @@ _TASKPANE_REFERENCE_TAGS: Final = frozenset(
     }
 )
 _AUTO_SHOW_TASKPANE_PROPERTY_NAME: Final = "Office.AutoShowTaskpaneWithDocument"
+_CONTENT_CONTROL_LOCK_STATE_BY_VALUE: Final = {
+    "unlocked": "unlocked",
+    "sdtLocked": "sdt_locked",
+    "contentLocked": "content_locked",
+    "sdtContentLocked": "sdt_content_locked",
+}
 
 
 @dataclass(frozen=True)
@@ -667,6 +674,15 @@ class _DataBindingReference:
     story_part: str
     store_item_id: str | None
     signature: str
+
+
+@dataclass(frozen=True)
+class _ContentControlLockReference:
+    """One private direct ``w:sdtPr/w:lock`` state in a Word story."""
+
+    story_part: str
+    ordinal: int
+    state: str
 
 
 @dataclass(frozen=True)
@@ -1023,6 +1039,7 @@ def _load_package(
             (
                 stories,
                 comment_count,
+                content_control_lock_references,
                 data_binding_references,
                 external_field_references,
                 document_variable_field_references,
@@ -1041,6 +1058,9 @@ def _load_package(
                 web_extension_control_references,
             ) = _story_snapshots(
                 archive, members, content_types, relationship_maps, limits
+            )
+            content_control_locks = _content_control_lock_inventory(
+                content_control_lock_references
             )
             data_bindings = _data_binding_inventory(
                 archive,
@@ -1197,6 +1217,7 @@ def _load_package(
         personal_information_removal_on_save=personal_information_removal_on_save,
         save_forms_data=save_forms_data,
         save_preview_picture=save_preview_picture,
+        content_control_locks=content_control_locks,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -3262,6 +3283,49 @@ def _validate_external_document_dependency_anchor(
         raise DocumentFormatError("external document dependency markup is invalid")
 
 
+def _content_control_lock_inventory(
+    references: tuple[_ContentControlLockReference, ...],
+) -> ContentControlLockInventory:
+    """Inventory direct content-control lock declarations without labels or text.
+
+    Every discovered ``w:sdt`` contributes exactly one state.  A missing direct
+    ``w:lock`` leaf deliberately remains distinct from an explicit
+    ``w:val=\"unlocked\"`` declaration: document type can affect what a host
+    treats as the implicit behavior, and DocFence does not evaluate that
+    behavior.  Story-local ordinals remain only inside the private digest so a
+    same-count reassignment of locks stays review-visible without exposing a
+    content-control ID, tag, title, placeholder, value, or part path.
+    """
+
+    counts = {
+        "no_lock_declaration": 0,
+        "unlocked": 0,
+        "sdt_locked": 0,
+        "content_locked": 0,
+        "sdt_content_locked": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        counts[reference.state] += 1
+        records.append(
+            (
+                "content_control_lock",
+                reference.story_part,
+                str(reference.ordinal),
+                reference.state,
+            )
+        )
+
+    return ContentControlLockInventory(
+        no_lock_declaration_count=counts["no_lock_declaration"],
+        unlocked_count=counts["unlocked"],
+        sdt_locked_count=counts["sdt_locked"],
+        content_locked_count=counts["content_locked"],
+        sdt_content_locked_count=counts["sdt_content_locked"],
+        signature=_digest_records(records),
+    )
+
+
 def _data_binding_inventory(
     archive: zipfile.ZipFile,
     members: dict[str, zipfile.ZipInfo],
@@ -4169,6 +4233,7 @@ def _story_snapshots(
 ) -> tuple[
     tuple[StorySnapshot, ...],
     int,
+    tuple[_ContentControlLockReference, ...],
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
@@ -4187,6 +4252,7 @@ def _story_snapshots(
     tuple[_WebExtensionControlReference, ...],
 ]:
     stories: list[StorySnapshot] = []
+    content_control_lock_references: list[_ContentControlLockReference] = []
     data_binding_references: list[_DataBindingReference] = []
     external_field_references: list[_ExternalFieldReference] = []
     document_variable_field_references: list[_DocumentVariableFieldReference] = []
@@ -4208,6 +4274,7 @@ def _story_snapshots(
         root = _read_xml(archive, members[part_key], limits)
         (
             story,
+            story_content_control_lock_references,
             story_data_binding_references,
             story_external_field_references,
             story_document_variable_field_references,
@@ -4225,6 +4292,7 @@ def _story_snapshots(
             story_word_embedded_control_references,
         ) = _snapshot_story(root, part_key, kind, relationship_maps.get(part_key, {}))
         stories.append(story)
+        content_control_lock_references.extend(story_content_control_lock_references)
         data_binding_references.extend(story_data_binding_references)
         external_field_references.extend(story_external_field_references)
         document_variable_field_references.extend(
@@ -4258,6 +4326,7 @@ def _story_snapshots(
     return (
         tuple(stories),
         comment_count,
+        tuple(content_control_lock_references),
         tuple(data_binding_references),
         tuple(external_field_references),
         tuple(document_variable_field_references),
@@ -4337,6 +4406,7 @@ def _snapshot_story(
     relationships: dict[str, _Relationship],
 ) -> tuple[
     StorySnapshot,
+    tuple[_ContentControlLockReference, ...],
     tuple[_DataBindingReference, ...],
     tuple[_ExternalFieldReference, ...],
     tuple[_DocumentVariableFieldReference, ...],
@@ -4444,6 +4514,7 @@ def _snapshot_story(
             comment_anchor_count=comment_anchors,
             revisions=revisions,
         ),
+        _content_control_lock_references(root, part_key),
         _data_binding_references(root, part_key, relationships),
         _external_field_references(field_instruction_references),
         _document_variable_field_references(field_instruction_references),
@@ -4528,6 +4599,59 @@ def _first_word_child(element: ET.Element, local_name: str) -> ET.Element | None
         (child for child in element if _is_word_element(child, local_name)),
         None,
     )
+
+
+def _content_control_lock_references(
+    root: ET.Element, story_part: str
+) -> tuple[_ContentControlLockReference, ...]:
+    """Find one direct lock state for every standard Word content control.
+
+    A lock is meaningful here only as a direct ``w:sdtPr/w:lock`` leaf of the
+    particular ``w:sdt`` being counted.  Markup that merely has the same local
+    names in another nesting context is intentionally outside this inventory.
+    """
+
+    references: list[_ContentControlLockReference] = []
+    controls = (element for element in root.iter() if _is_word_element(element, "sdt"))
+    for ordinal, control in enumerate(controls):
+        properties = [child for child in control if _is_word_element(child, "sdtPr")]
+        if len(properties) > 1:
+            raise DocumentFormatError("content-control lock state is invalid")
+        locks = (
+            [child for child in properties[0] if _is_word_element(child, "lock")]
+            if properties
+            else []
+        )
+        if len(locks) > 1:
+            raise DocumentFormatError("content-control lock state is invalid")
+        state = (
+            _content_control_lock_state(locks[0]) if locks else "no_lock_declaration"
+        )
+        references.append(
+            _ContentControlLockReference(
+                story_part=story_part,
+                ordinal=ordinal,
+                state=state,
+            )
+        )
+    return tuple(references)
+
+
+def _content_control_lock_state(element: ET.Element) -> str:
+    """Validate one direct ``w:sdtPr/w:lock`` leaf and normalize its state."""
+
+    if (
+        not _is_word_element(element, "lock")
+        or list(element)
+        or (element.text or "").strip()
+        or len(element.attrib) != 1
+    ):
+        raise DocumentFormatError("content-control lock state is invalid")
+    value = _word_attribute_value(element, "val")
+    state = _CONTENT_CONTROL_LOCK_STATE_BY_VALUE.get(value)
+    if state is None:
+        raise DocumentFormatError("content-control lock state is invalid")
+    return state
 
 
 def _data_binding_references(

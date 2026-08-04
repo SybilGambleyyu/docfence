@@ -48,6 +48,8 @@ _RULES: Final = {
     "no_save_forms_data_changes": "DFP087",
     "require_no_save_preview_picture": "DFP088",
     "no_save_preview_picture_changes": "DFP089",
+    "require_content_control_locks": "DFP090",
+    "no_content_control_lock_changes": "DFP091",
     "require_no_custom_xml_data": "DFP079",
     "require_no_package_thumbnails": "DFP080",
     "no_package_thumbnail_changes": "DFP081",
@@ -670,6 +672,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_content_control_lock_changes") and (
+        before.content_control_locks.signature != after.content_control_locks.signature
+    ):
+        findings.append(
+            _finding(
+                "no_content_control_lock_changes",
+                "Content-control lock inventory changed.",
+                {
+                    "before": before.content_control_locks.public_dict(),
+                    "after": after.content_control_locks.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -1141,6 +1156,18 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_save_preview_picture",
                 "Candidate requests thumbnail generation on save.",
                 after.save_preview_picture.public_dict(),
+            )
+        )
+    if policy.enabled("require_content_control_locks") and (
+        after.content_control_locks.no_lock_declaration_count
+        or after.content_control_locks.unlocked_count
+    ):
+        findings.append(
+            _finding(
+                "require_content_control_locks",
+                "Candidate has content controls without an explicit non-unlocked "
+                "lock declaration.",
+                after.content_control_locks.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.38 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.39 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -35,7 +35,8 @@ following properties:
   declarations, fields, content controls, Track Changes, external
   relationships, custom XML, macros, mail-merge configuration, source/header
   relationships, recipient-data payloads, direct content-control XML mappings,
-  referenced custom XML data/properties payloads, embedded OLE/package/control
+  direct content-control lock declarations, referenced custom XML
+  data/properties payloads, embedded OLE/package/control
   payloads, ActiveX control chains, alternative-format imports, core/extended/
   custom document properties (including Strict OOXML property variants),
   attached templates, master-document subdocuments, frameset sources
@@ -150,6 +151,15 @@ following properties:
   leaves. This validates a stored future-save request only: no test opens Word,
   saves a document, creates, decodes, or renders a thumbnail, or asserts a
   host will generate one;
+- direct content-control lock state is separately inventoried across supported
+  Word stories. Tests cover absent direct declarations, all four exact
+  `w:lock/@w:val` schema values, same-count state reassignment, Strict OOXML,
+  out-of-scope lookalikes, JSON/Markdown/SARIF redaction, candidate and
+  baseline policy findings, and malformed missing/unsupported attributes,
+  nonblank text, nested markup, duplicate direct lock leaves, and duplicate
+  direct properties. This validates direct stored declarations only: no test
+  opens Word, reads a control value, identifies a control, evaluates a data
+  binding, applies a lock, or asserts client enforcement;
 - the conventional custom-XML candidate gate is separately tested from the
   baseline-comparison rule. A document with unbound `customXml/` data triggers
   `DFP079` even against itself, a clean document passes, and JSON, Markdown,
@@ -315,8 +325,8 @@ following properties:
   marks do not create false text-run findings;
 - volatile Word `rsid` updates and relationship-ID renumbering that preserve the
   underlying target, embedded/import payload, document-property state,
-  mail-merge state, data-binding storage association, and external-document
-  dependency semantics remain quiet;
+  mail-merge state, data-binding storage association, content-control lock
+  state, and external-document dependency semantics remain quiet;
 - generated JSON, Markdown, and SARIF do not reproduce unique markers placed
   in visible/hidden text, reviewer metadata, comments, URLs, field instructions,
   custom XML, document-property names or values, mail-merge connection/query/
@@ -326,7 +336,8 @@ following properties:
   thread state, reaction identities,
   document-task IDs, event times, users, titles, schedules, priorities,
   progress, comment anchors, Office web-extension IDs, stores, properties,
-  bindings, content-control markers, and pane values,
+  bindings, content-control IDs, aliases, tags, titles, placeholder text,
+  current values, markers, and pane values,
   sensitivity-label and tenant IDs, names, methods, dates, action IDs,
   extension payloads, legacy MIP custom attributes, and content-marking values,
   package-signature signer/certificate material, values, algorithms, reference

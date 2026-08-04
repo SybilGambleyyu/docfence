@@ -789,6 +789,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.content_control_locks.signature != after.content_control_locks.signature:
+        changes.append(
+            Change(
+                kind="content_control_lock_inventory_changed",
+                message="Stored content-control lock inventory changed.",
+                details={
+                    "before": before.content_control_locks.public_dict(),
+                    "after": after.content_control_locks.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

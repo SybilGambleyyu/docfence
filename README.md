@@ -30,7 +30,8 @@ Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
 password-verifier material,
 data-bound
-content controls and their referenced custom XML state, external document
+content controls, their direct lock declarations, and their referenced custom
+XML state, external document
 dependencies, modern comment contact/thread/identifier/reaction metadata,
 document-task workflow state, task-pane Office web-extension configuration,
 embedded OLE/package/control
@@ -85,6 +86,8 @@ relationship IDs and targets, field codes, locking and update metadata, markup,
 and story-part paths are private too.
 WordprocessingML embedded-control names and shape identifiers, relationship IDs
 and targets, markup, and story-part paths are private too.
+Content-control IDs, aliases, tags, titles, placeholder text, current values,
+and story-part paths are private too.
 Editable-range marker IDs, individual editor identities, and exact table-column
 selectors are private too.
 
@@ -115,7 +118,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.38 focuses on Office Open XML Word documents and templates and
+Version 0.39 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -138,7 +141,8 @@ deliberately keeps a small, inspectable contract:
   direct WordprocessingML `w:object/w:control` and `w:pict/w:control`
   embedded-control-anchor markup,
   external-source field,
-  content-control, external-relationship,
+  content-control and direct content-control-lock declaration,
+  external-relationship,
   custom-XML, macro,
   core/extended/custom document-property, relationship-bound OPC package
   thumbnail image, OOXML Markup Compatibility branch and compatibility-rule,
@@ -716,6 +720,27 @@ reported, but DocFence deliberately does not guess which part Word might choose
 from its XPath. It does not evaluate XPath, update a control, or render the
 result.
 
+Content-control lock declarations are separately inventoried across every
+supported Word story. For each direct standard `w:sdt`, DocFence records only
+which of five aggregate states applies: no direct `w:sdtPr/w:lock` declaration,
+or a single exact `w:lock/@w:val` declaration of `unlocked`, `sdtLocked`,
+`contentLocked`, or `sdtContentLocked`. It validates the direct leaf shape and
+the four schema values, rejects duplicate direct properties or lock leaves, and
+ignores lookalikes outside that direct parent-child path. The private signature
+keeps each state associated with a story-local ordinal, so a same-count state
+reassignment remains review-visible while control IDs, aliases, tags, titles,
+placeholder text, values, and story paths remain absent from reports.
+
+No direct declaration is deliberately not normalized to `unlocked`: the OOXML
+contract gives omitted locks type-specific behavior for group controls. The
+inventory therefore reports stored markup rather than an effective editing
+decision. `require_content_control_locks` is an opt-in template gate that
+requires each discovered content control to carry a direct non-`unlocked`
+declaration. `no_content_control_lock_changes` protects an approved baseline.
+Neither rule opens Word, changes a control, identifies a control owner, reads a
+control's content, evaluates a data binding, applies document protection, or
+claims that any Word-compatible client will enforce a declaration.
+
 The generic custom-XML boundary is useful even when no content control maps to
 it. `require_no_custom_xml_data` is an opt-in candidate gate for a clean
 handoff: it fails when the package contains one or more non-relationship
@@ -961,6 +986,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_personal_information_removal_on_save: true
   require_no_save_forms_data: true
   require_no_save_preview_picture: true
+  require_content_control_locks: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -999,6 +1025,7 @@ later mutation:
   no_personal_information_removal_on_save_changes: true
   no_save_forms_data_changes: true
   no_save_preview_picture_changes: true
+  no_content_control_lock_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -1047,7 +1074,8 @@ Document-task IDs, event IDs and times, user identities, titles, dates,
 progress, priorities, and comment anchors are private too. So are task-pane
 layout details and Office web-extension IDs, stores, reference versions,
 property names and values, binding identifiers and application references,
-content-control markers, and part paths.
+content-control IDs, aliases, tags, titles, placeholder text, current values,
+markers, and part paths.
 Sensitivity-label IDs, tenant site IDs, label names, methods, set dates, action
 IDs, label-extension data, legacy MIP custom attributes, and Word content
 marking values remain private as well.
@@ -1203,6 +1231,14 @@ The preview-thumbnail-on-save boundary follows the Open XML SDK's
 It describes a stored request for a capable host to generate a first-page
 thumbnail when saving. DocFence records only the direct declaration; it does
 not create, decode, render, or infer the presence of a thumbnail image.
+The content-control lock boundary follows the Open XML SDK's
+[`w:lock` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.lock?view=openxml-3.0.1)
+and its
+[`LockingValues` enum](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.lockingvalues?view=openxml-3.0.1).
+Those documents distinguish deletion locking, content locking, both, and an
+explicit unlocked state; the element contract also explains why a missing leaf
+cannot safely be collapsed into a general runtime "unlocked" claim. DocFence
+therefore reduces only direct stored declarations to aggregate evidence.
 The Word document-variable and `DOCVARIABLE`-field boundary follows the Open XML SDK's
 [`w:docVar` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.documentvariable?view=openxml-3.0.1)
 and Word's [Variable object documentation](https://learn.microsoft.com/en-us/office/vba/api/word.variable):

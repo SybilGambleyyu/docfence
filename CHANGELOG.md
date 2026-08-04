@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.39.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for direct Word content-control
+  `w:sdtPr/w:lock` declarations across every supported story. Public reports
+  contain only aggregate counts for no direct declaration and the four exact
+  schema states: `unlocked`, `sdtLocked`, `contentLocked`, and
+  `sdtContentLocked`. Control IDs, aliases, tags, titles, placeholder text,
+  current values, story paths, and private fingerprints remain local.
+- Added DFP090 to require an explicit non-`unlocked` direct lock declaration
+  for every discovered content control, and DFP091 to protect an approved
+  lock-declaration baseline. A missing leaf remains distinct from explicit
+  `unlocked`, because the OOXML contract gives omitted locks type-specific
+  behavior for group controls.
+- Added regression coverage for every schema state, absent declarations,
+  same-count state reassignment, Strict OOXML, out-of-scope lookalikes,
+  malformed leaves/properties, redaction, Markdown/JSON/SARIF output, and both
+  policy modes. DocFence does not open Word, read a control value, mutate a
+  control, apply document protection, evaluate a binding, or predict client
+  enforcement.
+
 ## 0.38.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for direct stored Word Settings

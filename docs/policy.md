@@ -111,6 +111,8 @@ starter policy.
 | `no_save_forms_data_changes` | `DFP087` | Form-data-only-save inventory differs | Comparison |
 | `require_no_save_preview_picture` | `DFP088` | Candidate requests preview-thumbnail generation on save | Candidate |
 | `no_save_preview_picture_changes` | `DFP089` | Preview-thumbnail-on-save inventory differs | Comparison |
+| `require_content_control_locks` | `DFP090` | Candidate has a content control without a direct non-`unlocked` lock declaration | Candidate |
+| `no_content_control_lock_changes` | `DFP091` | Content-control lock inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -152,6 +154,15 @@ leaf: they do not prove a thumbnail is absent, decode or render an image, save
 a document, generate a thumbnail, or predict client behavior. An existing
 package thumbnail remains separately covered by the OPC package-thumbnail
 inventory.
+`no_content_control_lock_changes` protects the direct lock-declaration
+baseline of a controlled template, while `require_content_control_locks`
+requires each discovered direct `w:sdt` to carry one direct
+non-`unlocked` `w:sdtPr/w:lock` declaration. Missing declarations stay
+distinct from explicit `unlocked` values because OOXML gives omitted locks
+type-specific behavior for group controls. These rules inspect stored direct
+markup only: they do not identify a control, read its contents, determine a
+control type, evaluate a data binding, modify a document, apply document
+protection, or predict client behavior.
 `no_package_thumbnail_changes` does so for a controlled template that retains
 an approved relationship-bound OPC thumbnail image.
 `no_markup_compatibility_changes` does so for a controlled template that

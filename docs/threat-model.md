@@ -27,7 +27,8 @@ Document-task IDs, event IDs/times, users, titles, schedules, progress,
 priorities, and comment anchors are sensitive under the same rule. So are
 task-pane layout values and Office web-extension IDs, store/reference data,
 property names and values, binding IDs/application references, content-control
-marker values, and part paths. Sensitivity-label IDs, tenant site IDs, label
+marker values, control IDs, aliases, tags, titles, placeholder text, current
+values, and part paths. Sensitivity-label IDs, tenant site IDs, label
 names, assignment methods, set dates, action IDs, extension payloads, legacy
 MIP custom attributes, Word content-marking text, property names and values,
 and LabelInfo part paths are sensitive package material too.
