@@ -44,6 +44,7 @@ _RULES: Final = {
     "no_template_style_update_on_open_changes": "DFP076",
     "require_personal_information_removal_on_save": "DFP077",
     "no_personal_information_removal_on_save_changes": "DFP078",
+    "require_no_custom_xml_data": "DFP079",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -690,6 +691,14 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_comments",
                 "Candidate contains stored comments.",
                 {"comment_count": after.comment_count},
+            )
+        )
+    if policy.enabled("require_no_custom_xml_data") and after.custom_xml_part_count:
+        findings.append(
+            _finding(
+                "require_no_custom_xml_data",
+                "Candidate contains stored custom XML package parts.",
+                {"custom_xml_part_count": after.custom_xml_part_count},
             )
         )
     if policy.enabled("require_no_hidden_text") and after.hidden_text_run_count:

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.32 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.33 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -129,6 +129,10 @@ following properties:
   positive-request and baseline policy findings; and malformed unsupported
   attributes/boolean values, nonblank text, nested markup, and duplicate direct
   leaves;
+- the conventional custom-XML candidate gate is separately tested from the
+  baseline-comparison rule. A document with unbound `customXml/` data triggers
+  `DFP079` even against itself, a clean document passes, and JSON, Markdown,
+  and SARIF reports omit both visible text and custom-XML payload markers;
 - `DOCVARIABLE` field references are separately inventoried from generic field
   counts and stored-variable state. Tests cover simple and complete complex
   encodings, quoted names, trailing Word formatting switches, nested/dynamic

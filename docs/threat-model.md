@@ -120,6 +120,14 @@ privately. It does not disclose a property name, value, path, relationship
 target, or digest. A count is evidence that stored metadata exists, not a
 classification of the metadata as personal or safe.
 
+The general custom-XML inventory also privately fingerprints each
+non-relationship package member under the conventional `customXml/` folder.
+Only the aggregate count can leave the process. This keeps unbound custom XML
+review-visible without emitting a member name, XML content, namespace, or
+digest. Custom-XML relationship parts remain in the generic relationship
+inventory. The boundary does not infer that the data is visible, sensitive,
+referenced, or used by an Office host.
+
 Sensitivity-label metadata receives a dedicated private-digest treatment rather
 than relying on the broad custom-property inventory. DocFence recognizes the
 Office 2021 LabelInfo root, standard package relationship, SDK content type,
@@ -503,7 +511,10 @@ by Word. Core and extended document-property counts include automatic data such
 as timestamps, statistics, and application information. Their changes can be
 expected on a normal save; DocFence records them without interpreting their
 provenance or sensitivity. The custom-property candidate gate is limited to
-stored custom definitions and is not a general PII detector. Mail-merge counts
+stored custom definitions and is not a general PII detector. The custom-XML
+candidate gate is limited to conventional `customXml/` package members and is
+not a PII detector, an XML parser, or evidence that a host will use the data.
+Mail-merge counts
 are stored-state evidence, not proof that Word will access a source, run a
 query, or merge recipients. DocFence does not identify, classify, or disclose
 the recipient records or connection details a package may retain.

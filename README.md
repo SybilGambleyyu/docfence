@@ -105,7 +105,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.32 focuses on Office Open XML Word documents and templates and
+Version 0.33 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -645,6 +645,15 @@ reported, but DocFence deliberately does not guess which part Word might choose
 from its XPath. It does not evaluate XPath, update a control, or render the
 result.
 
+The generic custom-XML boundary is useful even when no content control maps to
+it. `require_no_custom_xml_data` is an opt-in candidate gate for a clean
+handoff: it fails when the package contains one or more non-relationship
+members below its conventional `customXml/` folder. That includes both stored
+data and associated data-properties XML parts, but not the relationship parts,
+which remain covered by the separate package-relationship inventory. It does
+not expose XML values, classify, remove, or decide whether custom XML is
+sensitive, visible, used by Word, or safe to share.
+
 External-source Word fields are recorded separately from the general field-code
 count. DocFence recognizes `DATABASE`, legacy `DATA`, `DDE`, `DDEAUTO`,
 `INCLUDE`/`INCLUDETEXT`, `INCLUDEPICTURE`/`IMPORT`, `LINK`, and `RD` field
@@ -827,6 +836,7 @@ rather than assuming the run count resolves Word's style hierarchy:
 ```yaml
   require_no_hidden_text_style_declarations: true
   require_no_hidden_paragraph_marks: true
+  require_no_custom_xml_data: true
   require_no_embedded_objects: true
   require_no_alternative_format_imports: true
   require_no_custom_document_properties: true

@@ -100,6 +100,7 @@ starter policy.
 | `no_template_style_update_on_open_changes` | `DFP076` | Automatic template-style-update-on-open inventory differs | Comparison |
 | `require_personal_information_removal_on_save` | `DFP077` | Candidate does not store an enabled personal-information-removal-on-save request | Candidate |
 | `no_personal_information_removal_on_save_changes` | `DFP078` | Personal-information-removal-on-save inventory differs | Comparison |
+| `require_no_custom_xml_data` | `DFP079` | Candidate has stored conventional custom-XML package parts | Candidate |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -237,6 +238,24 @@ change is suspicious.
 candidate contains stored custom-property definitions. It does not classify
 core or extended metadata as personal, confidential, user-authored, or safe.
 Custom property names and values are never emitted.
+
+## Custom XML data scope
+
+DocFence's general custom-XML inventory counts each non-relationship package
+member below the conventional `customXml/` folder and privately fingerprints
+its stored bytes. This includes unbound custom XML: a content control or a
+known `w:dataBinding` is not required for the package part to remain
+review-visible. It also includes associated custom-XML properties parts.
+Relationship parts below `customXml/_rels/` stay in the separate generic
+relationship inventory rather than inflating the data-part count.
+
+`require_no_custom_xml_data` is a candidate-state gate for a clean handoff. It
+fails whenever that aggregate count is nonzero, including when the stored XML
+is not referenced by a visible control. It does not expose XML values, classify
+a part as personal or confidential, decide that a host will use it, or remove
+or rewrite any part. The boundary is deliberately conventional: it does not
+claim to discover arbitrary application-defined XML stored outside
+`customXml/`.
 
 ## Mail-merge scope
 

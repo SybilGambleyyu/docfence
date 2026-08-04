@@ -2,6 +2,17 @@
 
 All notable changes are documented here.
 
+## 0.33.0 — 2026-08-04
+
+- Added `DFP079`, an opt-in candidate-state gate for conventional custom XML
+  package data. It fails a handoff when one or more non-relationship members
+  remain below `customXml/`, including unbound data and associated properties
+  parts.
+- The finding reports only the existing aggregate part count. XML values,
+  namespaces, member names, relationship targets, and fingerprints remain
+  private; the gate does not expose values, classify, remove, or rewrite custom
+  XML.
+
 ## 0.32.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for direct Word Settings

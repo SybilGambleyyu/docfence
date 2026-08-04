@@ -326,6 +326,55 @@ def test_profile_counts_review_surfaces_without_material_leaks(tmp_path) -> None
         assert marker not in rendered
 
 
+def test_custom_xml_candidate_gate_is_private_and_needs_no_baseline(tmp_path) -> None:
+    clean = tmp_path / "clean.docx"
+    custom_xml = tmp_path / "custom-xml.docx"
+    policy_path = tmp_path / "docfence.yml"
+    write_document(clean, text="VISIBLE_DO_NOT_LEAK")
+    write_document(
+        custom_xml,
+        text="VISIBLE_DO_NOT_LEAK",
+        custom_xml=(
+            b"<private-data>CUSTOM_XML_DATA_DO_NOT_LEAK</private-data>"
+        ),
+    )
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_custom_xml_data: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    report = diff_documents(clean, custom_xml)
+    gated = apply_policy(report, policy)
+
+    assert {finding.rule_id for finding in gated.findings} == {"DFP079"}
+    assert gated.findings[0].details == {"custom_xml_part_count": 1}
+    assert not apply_policy(diff_documents(clean, clean), policy).findings
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(custom_xml, custom_xml), policy
+        ).findings
+    } == {"DFP079"}
+
+    rendered = "\n".join(
+        (
+            render_profile(load_snapshot(custom_xml), "json"),
+            render_profile(load_snapshot(custom_xml), "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert "DFP079" in {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in ("VISIBLE_DO_NOT_LEAK", "CUSTOM_XML_DATA_DO_NOT_LEAK"):
+        assert marker not in rendered
+
+
 def test_hidden_markup_and_style_declarations_are_separate_and_private(
     tmp_path,
 ) -> None:
