@@ -706,6 +706,22 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.template_style_updates_on_open.signature
+        != after.template_style_updates_on_open.signature
+    ):
+        changes.append(
+            Change(
+                kind="template_style_update_on_open_inventory_changed",
+                message=(
+                    "Stored automatic template-style-update-on-open inventory changed."
+                ),
+                details={
+                    "before": before.template_style_updates_on_open.public_dict(),
+                    "after": after.template_style_updates_on_open.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

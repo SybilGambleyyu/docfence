@@ -203,6 +203,20 @@ DocFence does not parse, evaluate, or update a field, open Word, access a
 source, follow a link, start an application, or claim a host will recalculate a
 field.
 
+Automatic template-style-update-on-open settings receive a separate private-
+digest treatment. DocFence recognizes at most one direct w:linkStyles CT_OnOff
+leaf per discovered Document Settings part and validates its leaf shape,
+Word-namespace attribute vocabulary, and standard on/off token. Public output
+is limited to enabled and explicitly disabled setting counts; Settings-part
+paths and fingerprints remain private. The private signature retains canonical
+enabled/disabled state so a state transition stays review-visible without
+treating equivalent token spellings as distinct events. The separate
+external-document-dependency inventory remains responsible for stored
+attached-template anchors and relationships. DocFence does not resolve,
+retrieve, load, open, validate, authenticate, or follow a template; perform
+style resolution or propagation; start a document client; or claim a host will
+update document styles.
+
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
 pre-separator instructions across supported stories, retaining current and

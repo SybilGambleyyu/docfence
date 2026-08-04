@@ -2,6 +2,24 @@
 
 All notable changes are documented here.
 
+## 0.31.0 — 2026-08-03
+
+- Added a first-class, privacy-safe inventory for direct Word Settings
+  w:linkStyles CT_OnOff declarations. The inventory records a stored request
+  to automatically update document styles from an attached template on open
+  without resolving a template relationship, opening Word, loading a template,
+  propagating styles, or making a client-behavior claim.
+- Added DFP075 to require that a candidate not enable automatic
+  template-style updates on open and DFP076 to protect an approved stored
+  baseline.
+- Reports expose enabled and explicitly disabled setting counts only.
+  Settings-part paths and fingerprints remain private. Canonical state avoids
+  noise for equivalent enabled spellings while an enabled/disabled transition
+  remains review-visible.
+- Added regression coverage for conventional and Strict leaves, implicit and
+  explicit forms, malformed shape/value rejection, duplicate state, privacy
+  redaction, policy findings, and SARIF output.
+
 ## 0.30.0 — 2026-08-03
 
 - Added a first-class, privacy-safe inventory for direct Word Settings

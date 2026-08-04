@@ -96,6 +96,8 @@ starter policy.
 | `no_attached_custom_xml_schema_changes` | `DFP072` | Attached custom XML schema inventory differs | Comparison |
 | `require_no_field_updates_on_open` | `DFP073` | Candidate requests automatic field recalculation on open | Candidate |
 | `no_field_update_on_open_changes` | `DFP074` | Automatic field-update-on-open inventory differs | Comparison |
+| `require_no_template_style_updates_on_open` | `DFP075` | Candidate enables automatic template-style updates on open | Candidate |
+| `no_template_style_update_on_open_changes` | `DFP076` | Automatic template-style-update-on-open inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -330,6 +332,40 @@ approved stored baseline. Neither rule parses field instructions, recalculates
 or updates a field, opens a document client, accesses a field source, follows a
 link, starts an application, or claims that a particular client will honor the
 stored request.
+
+## Automatic template-style-update-on-open scope
+
+DocFence inventories direct w:linkStyles children of every discovered Document
+Settings part. The standard CT_OnOff leaf may omit w:val, which means enabled
+when the element is present; an explicitly supplied Word-namespace w:val must
+be one of true, false, on, off, 1, or 0. The inventory rejects duplicate direct
+leaves, child markup, nonblank text, unsupported attributes, and unsupported
+boolean values.
+
+Microsoft's [LinkStyles reference](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.linkstyles?view=openxml-3.0.1)
+describes this setting as automatically updating styles from a document
+template. The inventory records the stored leaf only.
+
+Public output contains only
+template_style_update_on_open_enabled_setting_count and
+template_style_update_on_open_disabled_setting_count. Settings-part paths and
+private fingerprints never leave the process. The comparison signature records
+the canonical enabled/disabled state: a state change is review-visible, while
+equivalent enabled spellings do not add noise.
+
+The direct setting records a request to update a document's styles from an
+attached template when a capable host opens it. The external-document-dependency
+inventory separately reports stored attached-template anchor and relationship
+evidence. This setting inventory does not resolve, retrieve, load, open,
+validate, authenticate, or follow an attached-template relationship, and it
+does not perform style resolution or propagation.
+
+require_no_template_style_updates_on_open fails only when the candidate has an
+enabled direct setting. An absent leaf or an explicitly disabled leaf does not
+store that request. no_template_style_update_on_open_changes protects any
+approved stored baseline. Neither rule opens a document client or claims that a
+particular client can locate a template, will update any style, or will honor
+the stored request.
 
 ## Content-control data-binding scope
 

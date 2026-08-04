@@ -916,6 +916,31 @@ class FieldUpdateOnOpenInventory:
 
 
 @dataclass(frozen=True)
+class TemplateStyleUpdateOnOpenInventory:
+    """Stored automatic-template-style-update settings, aggregate only.
+
+    Settings-part paths and private fingerprints remain local. Public output
+    records only whether explicitly stored settings request or decline automatic
+    style updates from an attached template when a capable document host opens
+    the package.
+    """
+
+    enabled_setting_count: int
+    disabled_setting_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "template_style_update_on_open_enabled_setting_count": (
+                self.enabled_setting_count
+            ),
+            "template_style_update_on_open_disabled_setting_count": (
+                self.disabled_setting_count
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1196,6 +1221,7 @@ class DocumentSnapshot:
     save_through_xslt: SaveThroughXsltInventory
     attached_custom_xml_schemas: AttachedCustomXmlSchemaInventory
     field_updates_on_open: FieldUpdateOnOpenInventory
+    template_style_updates_on_open: TemplateStyleUpdateOnOpenInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1319,6 +1345,9 @@ class DocumentSnapshot:
                 self.attached_custom_xml_schemas.public_dict()
             ),
             "field_updates_on_open": self.field_updates_on_open.public_dict(),
+            "template_style_updates_on_open": (
+                self.template_style_updates_on_open.public_dict()
+            ),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

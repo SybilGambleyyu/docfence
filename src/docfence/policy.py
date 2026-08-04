@@ -40,6 +40,8 @@ _RULES: Final = {
     "no_attached_custom_xml_schema_changes": "DFP072",
     "require_no_field_updates_on_open": "DFP073",
     "no_field_update_on_open_changes": "DFP074",
+    "require_no_template_style_updates_on_open": "DFP075",
+    "no_template_style_update_on_open_changes": "DFP076",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -560,6 +562,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_template_style_update_on_open_changes") and (
+        before.template_style_updates_on_open.signature
+        != after.template_style_updates_on_open.signature
+    ):
+        findings.append(
+            _finding(
+                "no_template_style_update_on_open_changes",
+                "Automatic template-style-update-on-open inventory changed.",
+                {
+                    "before": before.template_style_updates_on_open.public_dict(),
+                    "after": after.template_style_updates_on_open.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -948,6 +964,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_field_updates_on_open",
                 "Candidate requests automatic field recalculation on open.",
                 after.field_updates_on_open.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_template_style_updates_on_open") and (
+        after.template_style_updates_on_open.enabled_setting_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_template_style_updates_on_open",
+                "Candidate enables automatic template-style updates on open.",
+                after.template_style_updates_on_open.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

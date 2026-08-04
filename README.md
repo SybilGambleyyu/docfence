@@ -105,7 +105,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.30 focuses on Office Open XML Word documents and templates and
+Version 0.31 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -135,6 +135,7 @@ deliberately keeps a small, inspectable contract:
   editable-range permission markup,
   mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
   XML schema declarations, automatic field-recalculation-on-open configuration,
+  automatic template-style-update-on-open configuration,
   content-control data-binding, modern-comment
   metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -759,6 +760,27 @@ parses or evaluates field instructions, updates field results, opens Word,
 locates a field source, starts an application, follows a link, or claims that a
 client will honor the request.
 
+Automatic template-style updates on open are recorded separately from generic
+Settings and external-document-dependency changes. A direct w:linkStyles
+CT_OnOff leaf requests that a supporting document host update document styles
+from an attached template when the document opens. DocFence accepts one direct
+leaf per discovered Settings part in either Word namespace, validates its
+optional Word-namespace w:val as a standard on/off token, and reports enabled
+and explicitly disabled setting counts only. Settings-part paths and private
+fingerprints remain local. The private signature retains canonical stored
+state, so an enabled-to-disabled transition remains review-visible while
+equivalent enabled spellings such as omitted w:val, on, and true remain quiet.
+
+require_no_template_style_updates_on_open fails only when a candidate
+explicitly requests automatic template-style updates. The separately reported
+attached-template dependency inventory remains the evidence for a template
+anchor and relationship; this setting inventory does not resolve either.
+no_template_style_update_on_open_changes protects a controlled baseline,
+including an explicitly disabled setting. Neither rule resolves, retrieves,
+loads, opens, validates, or authenticates an attached template; performs style
+resolution or propagation; opens a document client; or claims that a particular
+client will honor the stored request.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -790,6 +812,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_save_through_xslt: true
   require_no_attached_custom_xml_schemas: true
   require_no_field_updates_on_open: true
+  require_no_template_style_updates_on_open: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -822,6 +845,7 @@ later mutation:
   no_save_through_xslt_changes: true
   no_attached_custom_xml_schema_changes: true
   no_field_update_on_open_changes: true
+  no_template_style_update_on_open_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true

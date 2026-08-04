@@ -42,6 +42,7 @@ from docfence.models import (
     StorySnapshot,
     StyleInventory,
     TaskpaneWebExtensionInventory,
+    TemplateStyleUpdateOnOpenInventory,
     WordDocumentVariableFieldInventory,
     WordDocumentVariableInventory,
     WordDrawingHyperlinkInventory,
@@ -910,6 +911,12 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            template_style_updates_on_open = _template_style_update_on_open_inventory(
+                archive,
+                members,
+                document_settings_parts,
+                limits,
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1076,6 +1083,7 @@ def _load_package(
         save_through_xslt=save_through_xslt,
         attached_custom_xml_schemas=attached_custom_xml_schemas,
         field_updates_on_open=field_updates_on_open,
+        template_style_updates_on_open=template_style_updates_on_open,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2430,25 +2438,91 @@ def _field_update_on_open_inventory(
 def _field_update_on_open_state(element: ET.Element) -> str:
     """Validate one direct ``w:updateFields`` ``CT_OnOff`` leaf."""
 
+    return _word_on_off_state(
+        element,
+        local_name="updateFields",
+        error_message="field-update-on-open state is invalid",
+    )
+
+
+def _template_style_update_on_open_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> TemplateStyleUpdateOnOpenInventory:
+    """Inventory ``w:linkStyles`` without loading a document template.
+
+    The direct ``CT_OnOff`` Settings leaf requests automatic style updates from
+    an attached document template when a supporting host opens the document.
+    It is configuration evidence, not an instruction to DocFence to resolve an
+    attached template, open Word, or propagate styles. Canonical enabled and
+    disabled state keeps equivalent on/off spellings from creating review noise.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    enabled_setting_count = 0
+    disabled_setting_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        style_update_settings = [
+            element for element in root if _is_word_element(element, "linkStyles")
+        ]
+        if len(style_update_settings) > 1:
+            raise DocumentFormatError("template-style-update-on-open state is invalid")
+
+        for setting in style_update_settings:
+            state = _template_style_update_on_open_state(setting)
+            if state == "enabled":
+                enabled_setting_count += 1
+            else:
+                disabled_setting_count += 1
+            records.append(("template_style_update_on_open", settings_part, state))
+
+    return TemplateStyleUpdateOnOpenInventory(
+        enabled_setting_count=enabled_setting_count,
+        disabled_setting_count=disabled_setting_count,
+        signature=_digest_records(records),
+    )
+
+
+def _template_style_update_on_open_state(element: ET.Element) -> str:
+    """Validate one direct ``w:linkStyles`` ``CT_OnOff`` leaf."""
+
+    return _word_on_off_state(
+        element,
+        local_name="linkStyles",
+        error_message="template-style-update-on-open state is invalid",
+    )
+
+
+def _word_on_off_state(
+    element: ET.Element, *, local_name: str, error_message: str
+) -> str:
+    """Return canonical state for a direct Word ``CT_OnOff`` leaf."""
+
     if (
-        not _is_word_element(element, "updateFields")
+        not _is_word_element(element, local_name)
         or list(element)
         or (element.text or "").strip()
     ):
-        raise DocumentFormatError("field-update-on-open state is invalid")
+        raise DocumentFormatError(error_message)
 
     value: str | None = None
     for attribute, raw_value in element.attrib.items():
-        namespace, local_name = _qualified_name(attribute)
+        namespace, attribute_local_name = _qualified_name(attribute)
         if (
             namespace not in _WORD_NAMESPACES
-            or local_name != "val"
+            or attribute_local_name != "val"
             or value is not None
         ):
-            raise DocumentFormatError("field-update-on-open state is invalid")
+            raise DocumentFormatError(error_message)
         value = raw_value.strip().casefold()
         if value not in _ON_OFF_VALUES:
-            raise DocumentFormatError("field-update-on-open state is invalid")
+            raise DocumentFormatError(error_message)
 
     if value is None or value in _ON_OFF_TRUE_VALUES:
         return "enabled"
