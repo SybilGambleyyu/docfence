@@ -2765,26 +2765,33 @@ def _relationship_manifest_reference_coverage(
     if not selectors:
         unsupported_reference_count += 1
     for selector in selectors:
-        if (
-            _qualified_name(selector.tag)
-            != (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference")
-            or list(selector)
-            or (selector.text or "").strip()
-            or set(selector.attrib) - {"SourceId", "SourceType"}
+        if list(selector) or (selector.text or "").strip():
+            unsupported_reference_count += 1
+            continue
+
+        qualified_selector = _qualified_name(selector.tag)
+        if qualified_selector == (
+            _OPC_DIGITAL_SIGNATURE_NAMESPACE,
+            "RelationshipReference",
         ):
-            unsupported_reference_count += 1
-            continue
-        source_id = selector.attrib.get("SourceId")
-        source_type = selector.attrib.get("SourceType")
-        if source_id is None and source_type is None:
-            unsupported_reference_count += 1
-            continue
-        if source_id is not None:
+            source_id = selector.attrib.get("SourceId")
+            if set(selector.attrib) != {"SourceId"} or not source_id:
+                unsupported_reference_count += 1
+                continue
             if source_id in relationships:
                 selected_relationship_ids.add((source_part, source_id))
             else:
                 unresolved_reference_count += 1
-        if source_type is not None:
+            continue
+
+        if qualified_selector == (
+            _OPC_DIGITAL_SIGNATURE_NAMESPACE,
+            "RelationshipsGroupReference",
+        ):
+            source_type = selector.attrib.get("SourceType")
+            if set(selector.attrib) != {"SourceType"} or not source_type:
+                unsupported_reference_count += 1
+                continue
             matching_ids = [
                 relationship_id
                 for relationship_id, relationship in relationships.items()
@@ -2795,6 +2802,9 @@ def _relationship_manifest_reference_coverage(
             selected_relationship_ids.update(
                 (source_part, relationship_id) for relationship_id in matching_ids
             )
+            continue
+
+        unsupported_reference_count += 1
 
     return _ManifestReferenceResolution(
         covered_part_name=None,
@@ -2859,10 +2869,10 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
                 _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
                 for child in element
             )
-        elif qualified_name == (
-            _OPC_DIGITAL_SIGNATURE_NAMESPACE,
-            "RelationshipReference",
-        ):
+        elif qualified_name in {
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference"),
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipsGroupReference"),
+        }:
             relationship_reference_count += 1
         elif qualified_name == (_XMLDSIG_NAMESPACE, "X509Certificate"):
             inline_x509_certificate_count += 1

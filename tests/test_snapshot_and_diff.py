@@ -3543,6 +3543,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     selected_styles = tmp_path / "selected-styles.docx"
     selected_duplicate = tmp_path / "selected-duplicate.docx"
     source_type_selector = tmp_path / "source-type-selector.docx"
+    nonstandard_source_type_selector = (
+        tmp_path / "nonstandard-source-type-selector.docx"
+    )
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -3580,6 +3583,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         source_type_selector,
         include_duplicate_style_relationship=True,
         select_word_relationship_by_type=True,
+    )
+    _write_package_signature_coverage_document(
+        nonstandard_source_type_selector,
+        include_duplicate_style_relationship=True,
+        select_word_relationship_by_type=True,
+        use_nonstandard_source_type_selector=True,
     )
 
     expected_fully_declared = {
@@ -3671,6 +3680,18 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         **expected_fully_declared,
         "declared_covered_word_relationship_count": 2,
     }
+    assert (
+        load_snapshot(
+            source_type_selector
+        ).package_digital_signatures.relationship_reference_count
+        == 2
+    )
+    assert (
+        load_snapshot(
+            nonstandard_source_type_selector
+        ).package_signature_coverage.unsupported_package_manifest_reference_count
+        == 1
+    )
 
     policy_path.write_text(
         """version: 1
@@ -8067,6 +8088,7 @@ def _write_package_signature_coverage_document(
     include_duplicate_style_relationship: bool = False,
     selected_word_relationship_id: str = "rIdStyles",
     select_word_relationship_by_type: bool = False,
+    use_nonstandard_source_type_selector: bool = False,
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -8111,13 +8133,19 @@ def _write_package_signature_coverage_document(
         '<opc:RelationshipReference SourceId="rIdDocument"/>'
         f"</ds:Transform></ds:Transforms>{digest_reference}</ds:Reference>"
     )
-    word_relationship_selector = (
-        f'<opc:RelationshipReference SourceType="{styles_relationship_type}"/>'
-        if select_word_relationship_by_type
-        else (
+    if select_word_relationship_by_type:
+        selector_name = (
+            "RelationshipReference"
+            if use_nonstandard_source_type_selector
+            else "RelationshipsGroupReference"
+        )
+        word_relationship_selector = (
+            f'<opc:{selector_name} SourceType="{styles_relationship_type}"/>'
+        )
+    else:
+        word_relationship_selector = (
             f'<opc:RelationshipReference SourceId="{selected_word_relationship_id}"/>'
         )
-    )
     word_relationship_manifest_reference = (
         f'<ds:Reference URI="/word/_rels/document.xml.rels?ContentType='
         f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'

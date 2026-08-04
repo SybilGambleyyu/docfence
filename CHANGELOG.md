@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.41.0 — 2026-08-04
+
+- Corrected static package-signature declaration coverage for the standard OPC
+  relationship-type selector: `RelationshipsGroupReference/@SourceType` now
+  selects matching relationship types, is included in the structural signature
+  inventory, and remains aggregate-only in public output.
+- A malformed `RelationshipReference/@SourceType` lookalike is now treated as
+  unsupported rather than being credited with declaration coverage. This keeps
+  the bounded parser exact and fail-closed without changing policy IDs or
+  making cryptographic claims.
+- Added regression coverage for standard type selectors, duplicate selected
+  relationship types, malformed lookalikes, inventory counts, privacy
+  redaction, and same-count semantic changes. DocFence still does not recompute
+  XMLDSIG transforms or digests, verify signature values or certificates,
+  establish trust, or predict Office client behavior.
+
 ## 0.40.0 — 2026-08-04
 
 - Added a first-class, privacy-safe static declared OPC package-signature

@@ -200,7 +200,8 @@ A separate static declaration audit follows only a direct `SignedInfo` local
 fragment reference to a direct `ds:Object` with exactly one direct package
 `ds:Manifest`. From that bounded link, it resolves exact part URI/content-type
 references with case-sensitive content-type matching and standard
-relationship-transform selectors. Its public surface
+relationship-transform `RelationshipReference/@SourceId` and
+`RelationshipsGroupReference/@SourceType` selectors. Its public surface
 is aggregate-only: signatures with or without a declaration link; covered and
 uncovered Word parts and relationships; and unresolved or unsupported
 references. Object identifiers, raw reference URIs, selectors, relationship

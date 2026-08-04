@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.40 focuses on Office Open XML Word documents and templates and
+Version 0.41 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -298,7 +298,8 @@ looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
 manifests it resolves exact local part URI/content-type references with
 case-sensitive content-type matching, and standard OPC relationship-transform
-`SourceId`/`SourceType` selectors. Public output
+`RelationshipReference/@SourceId` and
+`RelationshipsGroupReference/@SourceType` selectors. Public output
 contains only aggregate counts for signatures with and without that declaration
 chain; covered and uncovered `word/` non-relationship parts; covered and
 uncovered root `officeDocument` relationships; covered and uncovered

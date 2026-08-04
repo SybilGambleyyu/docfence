@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.40 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.41 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -92,7 +92,9 @@ following properties:
   The static declared-coverage boundary has a fully declared synthetic package
   fixture plus uncovered Word parts and relationships, an unbound package
   object, unresolved and unsupported manifest references, a case-mismatched
-  content type, same-count selector reassignment, private-output redaction,
+  content type, standard `RelationshipsGroupReference/@SourceType` selectors,
+  malformed nonstandard `RelationshipReference/@SourceType` lookalikes,
+  same-count selector reassignment, private-output redaction,
   Markdown/JSON/SARIF projection, and both coverage policy modes;
 - Word editing/write-protection state is separately inventoried from generic
   Settings-part changes. Tests cover conventional, Transitional, and Strict
@@ -678,5 +680,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.40 contract; see
+only, not field evaluation. Those limits are explicit in the 0.41 contract; see
 [threat model](threat-model.md).
