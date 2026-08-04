@@ -2,6 +2,20 @@
 
 All notable changes are documented here.
 
+## 0.49.0 — 2026-08-04
+
+- Hardened the bounded OPC package-signature declaration audit to reject a
+  `ds:XPath` element anywhere inside a transform used by its binding or
+  manifest-reference chain. OPC forbids XPath filtering even though XMLDSIG's
+  generic `Transform` schema permits an XPath parameter.
+- A package-object binding with that parameter now leaves declaration coverage
+  unavailable. A manifest part or relationship reference with it is aggregate
+  unsupported and grants neither part nor partial relationship-selector
+  coverage. This check does not parse or execute XPath expressions.
+- Added regressions for XPath-bearing binding, part, and relationship
+  transforms. The public USENIX OOXML Signature Security corpus had no XPath
+  element in its 22 XML signature parts during the compatibility scan.
+
 ## 0.48.0 — 2026-08-04
 
 - Hardened the one `SignedInfo` Reference that binds

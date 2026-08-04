@@ -202,7 +202,9 @@ A separate static declaration audit follows only one direct
 direct `SignedInfo` local-fragment reference to that object. That binding
 must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
 `DigestValue` shape; when present, transforms can use only OPC's two XML
-Canonicalization algorithms. It does not decode or recompute the digest,
+Canonicalization algorithms. Every transform used by this bounded declaration
+chain must be free of XMLDSIG's `ds:XPath` element, which OPC disallows. It
+does not decode or recompute the digest,
 execute transforms, or verify XMLDSIG. It resolves only that package-specific
 manifest using the binding reference's direct URI fragment. Its direct
 `SignatureProperties` must have one `SignatureProperty` with the fixed

@@ -807,8 +807,10 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `Algorithm`, then one direct, attribute-free, child-free, nonempty
 `ds:DigestValue`, without non-whitespace direct text. It may omit transforms
 or carry one direct nonempty list of only OPC's two XML Canonicalization
-algorithms; relationship and unknown transform declarations are unavailable
-coverage. DocFence checks that stored syntax and the binding URI fragment, but
+algorithms. Every transform in the bounded binding/manifest chain must also
+be free of XMLDSIG's `ds:XPath` element, which OPC disallows; relationship and
+unknown transform declarations leave coverage unavailable. DocFence checks that
+stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
 URI plus case-sensitive matching content type. Before a manifest reference is

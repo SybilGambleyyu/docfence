@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.48 focuses on Office Open XML Word documents and templates and
+Version 0.49 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -297,7 +297,10 @@ small, inspectable declaration chain. For each recognized XML signature, it
 looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
 manifests it resolves exact local part URI/content-type references with
-case-sensitive content-type matching. Before a manifest reference can be
+case-sensitive content-type matching. Every transform used by this bounded
+coverage chain must also be free of an XMLDSIG `ds:XPath` element: OPC
+disallows XPath filtering even though XMLDSIG permits it as a transform
+parameter. Before a manifest reference can be
 credited, its direct XMLDSIG children must be the optional `ds:Transforms`, one
 `ds:DigestMethod` with a nonblank `Algorithm`, and one direct, attribute-free,
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
@@ -323,7 +326,8 @@ review-visible.
 For a non-relationship package part, the audit accepts no transform list or one
 direct nonempty list of only OPC-supported XML Canonicalization transforms. An
 empty, duplicate, relationship, or unknown transform list is unsupported and
-does not credit that part with coverage.
+does not credit that part with coverage; neither does a transform carrying
+`ds:XPath`.
 
 This remains deliberately narrower than cryptographic or client-effective
 coverage. DocFence does not parse, decode, or recompute reference digests or

@@ -3553,6 +3553,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         tmp_path / "nonstandard-source-type-selector.docx"
     )
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
+    xpath_relationship_transform = tmp_path / "xpath-relationship-transform.docx"
     missing_relationship_canonicalization = (
         tmp_path / "missing-relationship-canonicalization.docx"
     )
@@ -3583,6 +3584,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     canonicalized_word_part_with_comments = (
         tmp_path / "canonicalized-word-part-with-comments.docx"
     )
+    xpath_word_part_transform = tmp_path / "xpath-word-part-transform.docx"
     unsupported_word_part_transform = tmp_path / "unsupported-word-part-transform.docx"
     relationship_word_part_transform = (
         tmp_path / "relationship-word-part-transform.docx"
@@ -3651,6 +3653,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         word_relationship_transform_mode="canonicalization_with_comments",
     )
     _write_package_signature_coverage_document(
+        xpath_relationship_transform,
+        word_relationship_transform_mode="xpath_parameter",
+    )
+    _write_package_signature_coverage_document(
         missing_relationship_canonicalization,
         word_relationship_transform_mode="missing_canonicalization",
     )
@@ -3697,6 +3703,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         canonicalized_word_part_with_comments,
         word_part_transform_mode="canonicalization_with_comments",
+    )
+    _write_package_signature_coverage_document(
+        xpath_word_part_transform,
+        word_part_transform_mode="canonicalization_with_xpath_parameter",
     )
     _write_package_signature_coverage_document(
         unsupported_word_part_transform,
@@ -3872,6 +3882,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "unsupported_package_manifest_reference_count": 1,
     }
     for document in (
+        xpath_relationship_transform,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -3902,6 +3913,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "unsupported_package_manifest_reference_count": 1,
     }
     for document in (
+        xpath_word_part_transform,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -3965,6 +3977,7 @@ rules:
         ).findings
     } == {"DFP092", "DFP093"}
     for document in (
+        xpath_relationship_transform,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -3997,6 +4010,7 @@ rules:
             ).findings
         } == {"DFP092", "DFP093"}
     for document in (
+        xpath_word_part_transform,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -4205,6 +4219,7 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         ) == (1, 0)
 
     for mode in (
+        "canonicalization_with_xpath_parameter",
         "unsupported_transform",
         "relationship_transform",
         "multiple_transforms_elements",
@@ -8802,6 +8817,10 @@ def _package_signature_relationship_transforms(
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
         f"{selector}</ds:Transform>"
     )
+    relationship_transform_with_xpath = (
+        f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
+        f"{selector}<ds:XPath>true()</ds:XPath></ds:Transform>"
+    )
     canonicalization_transform = (
         f'<ds:Transform Algorithm="{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}"/>'
     )
@@ -8815,6 +8834,8 @@ def _package_signature_relationship_transforms(
         transforms = relationship_transform + canonicalization_transform
     elif mode == "canonicalization_with_comments":
         transforms = relationship_transform + canonicalization_with_comments_transform
+    elif mode == "xpath_parameter":
+        transforms = relationship_transform_with_xpath + canonicalization_transform
     elif mode == "missing_canonicalization":
         transforms = relationship_transform
     elif mode == "canonicalization_before_relationship":
@@ -8844,6 +8865,10 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         '<ds:Transform Algorithm="'
         f'{_XML_CANONICALIZATION_WITH_COMMENTS_TRANSFORM_ALGORITHM}"/>'
     )
+    canonicalization_transform_with_xpath = (
+        f'<ds:Transform Algorithm="{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}">'
+        "<ds:XPath>true()</ds:XPath></ds:Transform>"
+    )
     relationship_transform = (
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}"/>'
     )
@@ -8857,6 +8882,8 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         return (
             f"<ds:Transforms>{canonicalization_with_comments_transform}</ds:Transforms>"
         )
+    if mode == "canonicalization_with_xpath_parameter":
+        return f"<ds:Transforms>{canonicalization_transform_with_xpath}</ds:Transforms>"
     if mode == "unsupported_transform":
         return f"<ds:Transforms>{unsupported_transform}</ds:Transforms>"
     if mode == "relationship_transform":

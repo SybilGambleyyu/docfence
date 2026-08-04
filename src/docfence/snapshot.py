@@ -2987,6 +2987,7 @@ def _relationship_manifest_reference_coverage(
         _qualified_name(transform.tag) != (_XMLDSIG_NAMESPACE, "Transform")
         or transform.attrib.get("Algorithm")
         not in _OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS
+        or not _transform_has_no_opc_disallowed_xpath_element(transform)
         for transform in transforms
     ):
         return _ManifestReferenceResolution(
@@ -3102,7 +3103,17 @@ def _reference_has_supported_canonicalization_transforms(reference: ET.Element) 
         _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
         and transform.attrib.get("Algorithm")
         in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
+        and _transform_has_no_opc_disallowed_xpath_element(transform)
         for transform in transforms
+    )
+
+
+def _transform_has_no_opc_disallowed_xpath_element(transform: ET.Element) -> bool:
+    """Reject XMLDSIG XPath parameters from the bounded OPC coverage chain."""
+
+    return not any(
+        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "XPath")
+        for element in transform.iter()
     )
 
 
