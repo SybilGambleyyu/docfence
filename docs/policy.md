@@ -802,11 +802,17 @@ lexical shape to match its declared precision. Missing, duplicate,
 mis-targeted, or malformed timestamp declarations leave coverage unavailable;
 this recognizes only the claimed timestamp's stored syntax, not its accuracy,
 source, authority, or cryptographic validity.
-The binding check uses its direct URI fragment only: DocFence does not parse
-or validate that reference's digest or transforms. Supported manifest part
-references use an exact local part URI plus case-sensitive matching content
-type. Before a manifest reference is credited, its direct XMLDSIG children must
-be optional
+The binding reference itself must retain XMLDSIG's direct child order:
+optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
+`Algorithm`, then one direct, attribute-free, child-free, nonempty
+`ds:DigestValue`, without non-whitespace direct text. It may omit transforms
+or carry one direct nonempty list of only OPC's two XML Canonicalization
+algorithms; relationship and unknown transform declarations are unavailable
+coverage. DocFence checks that stored syntax and the binding URI fragment, but
+does not decode or recompute its digest, execute transforms, verify a signature,
+or establish trust. Supported manifest part references use an exact local part
+URI plus case-sensitive matching content type. Before a manifest reference is
+credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. Supported

@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.48.0 — 2026-08-04
+
+- Hardened the one `SignedInfo` Reference that binds
+  `idPackageObject` to the static declaration audit. It now requires the
+  XMLDSIG direct child order of optional `ds:Transforms`, one `ds:DigestMethod`
+  with a nonblank `Algorithm`, and one direct, attribute-free, child-free,
+  nonempty `ds:DigestValue`, without non-whitespace direct text.
+- The binding may omit transforms or use a direct nonempty list of OPC's two
+  XML Canonicalization algorithms. Relationship, unknown, empty, or duplicate
+  transform lists—and malformed binding digest shape—leave coverage
+  unavailable rather than lending a malformed Object reference authority.
+- Added regression coverage for both canonicalization forms and all rejected
+  binding transform/digest shapes. This remains a bounded structural parser:
+  DocFence does not decode or recompute a digest, execute a transform, verify
+  XMLDSIG, validate certificates, establish trust, or predict Office client
+  behavior.
+
 ## 0.47.0 — 2026-08-04
 
 - Hardened static package-signature declaration coverage with OPC's required

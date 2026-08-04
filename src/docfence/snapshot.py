@@ -2576,7 +2576,13 @@ def _declared_package_signature_coverage(
         and _signature_fragment_identifier(reference.attrib.get("URI"))
         == _OPC_PACKAGE_SPECIFIC_OBJECT_ID
     ]
-    if manifest is None or len(package_object_references) != 1:
+    if (
+        manifest is None
+        or len(package_object_references) != 1
+        or not _package_object_binding_reference_has_expected_shape(
+            package_object_references[0]
+        )
+    ):
         return _DeclaredPackageSignatureCoverage(
             has_declared_package_coverage=False,
             covered_part_names=frozenset(),
@@ -2719,6 +2725,16 @@ def _package_specific_object_manifest(root: ET.Element) -> ET.Element | None:
     return manifest
 
 
+def _package_object_binding_reference_has_expected_shape(
+    reference: ET.Element,
+) -> bool:
+    """Require one bound package object to use OPC/XMLDSIG reference syntax."""
+
+    return _reference_has_expected_xml_dsig_shape(
+        reference
+    ) and _reference_has_supported_canonicalization_transforms(reference)
+
+
 def _has_valid_opc_signature_time_property(
     signature_properties: ET.Element,
     signature_id: str | None,
@@ -2811,7 +2827,7 @@ def _resolve_package_manifest_reference(
 ) -> _ManifestReferenceResolution:
     """Resolve one bounded package-object manifest reference locally."""
 
-    if not _manifest_reference_has_expected_xml_dsig_shape(reference):
+    if not _reference_has_expected_xml_dsig_shape(reference):
         return _ManifestReferenceResolution(
             covered_part_name=None,
             covered_relationship_ids=frozenset(),
@@ -2837,7 +2853,7 @@ def _resolve_package_manifest_reference(
             unsupported_reference_count=0,
         )
     if not part_name.endswith(".rels"):
-        if not _part_manifest_reference_has_supported_transforms(reference):
+        if not _reference_has_supported_canonicalization_transforms(reference):
             return _ManifestReferenceResolution(
                 covered_part_name=None,
                 covered_relationship_ids=frozenset(),
@@ -2910,7 +2926,7 @@ def _package_manifest_reference_member_name(uri: str | None) -> tuple[str, str] 
     return part_name, value
 
 
-def _manifest_reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
+def _reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
     """Require the XMLDSIG ``Reference`` child order without verifying a digest."""
 
     children = list(reference)
@@ -3062,13 +3078,14 @@ def _relationship_manifest_reference_coverage(
     )
 
 
-def _part_manifest_reference_has_supported_transforms(reference: ET.Element) -> bool:
-    """Accept no transform or a direct C14N-only list for a package part.
+def _reference_has_supported_canonicalization_transforms(reference: ET.Element) -> bool:
+    """Accept no transform or a direct C14N-only list.
 
     A relationships transform has defined input only for a Relationships part.
-    This bounded declaration audit therefore permits ordinary part references to
-    omit transforms or use OPC's two XML canonicalization algorithms, while
-    refusing to credit unknown or relationship-transform sequences.
+    This bounded declaration audit therefore permits a package-object binding
+    or ordinary package-part reference to omit transforms or use OPC's two XML
+    canonicalization algorithms, while refusing to credit unknown or
+    relationship-transform sequences.
     """
 
     transforms_elements = [

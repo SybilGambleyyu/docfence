@@ -4189,6 +4189,59 @@ def test_package_signature_coverage_requires_opc_signature_time_shape(
         ) == (0, 1)
 
 
+def test_package_signature_coverage_requires_bound_object_reference_shape(
+    tmp_path,
+) -> None:
+    for mode in ("none", "canonicalization", "canonicalization_with_comments"):
+        document = tmp_path / f"bound-object-reference-valid-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_object_binding_transform_mode=mode,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (1, 0)
+
+    for mode in (
+        "unsupported_transform",
+        "relationship_transform",
+        "multiple_transforms_elements",
+        "empty_transforms",
+    ):
+        document = tmp_path / f"bound-object-reference-transform-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_object_binding_transform_mode=mode,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (0, 1)
+
+    for mode in (
+        "missing_digest_value",
+        "misordered_digest_children",
+        "missing_digest_algorithm",
+        "extra_digest_child",
+        "digest_value_attribute",
+        "nested_digest_value",
+        "unexpected_reference_text",
+    ):
+        document = tmp_path / f"bound-object-reference-digest-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_object_binding_digest_mode=mode,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (0, 1)
+
+
 def test_word_protection_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -8519,6 +8572,8 @@ def _write_package_signature_coverage_document(
     package_object_id: str = "idPackageObject",
     include_package_signature_properties: bool = True,
     package_signature_properties_markup: str | None = None,
+    package_object_binding_transform_mode: str = "none",
+    package_object_binding_digest_mode: str = "standard",
     include_extra_package_object_child: bool = False,
     include_duplicate_package_object: bool = False,
     include_duplicate_package_object_reference: bool = False,
@@ -8559,6 +8614,13 @@ def _write_package_signature_coverage_document(
     digest_reference = (
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
         "<ds:DigestValue>PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+    )
+    package_object_binding_transforms = _package_signature_part_transforms(
+        mode=package_object_binding_transform_mode,
+    )
+    package_object_binding_digest_markup = _package_signature_part_digest_markup(
+        digest_reference,
+        mode=package_object_binding_digest_mode,
     )
     root_relationship_transforms = _package_signature_relationship_transforms(
         '<opc:RelationshipReference SourceId="rIdDocument"/>',
@@ -8662,7 +8724,8 @@ def _write_package_signature_coverage_document(
         'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
         f'<ds:Reference Type="{_XMLDSIG_NAMESPACE}Object" '
         f'URI="{signed_info_reference}">'
-        f"{digest_reference}</ds:Reference>{duplicate_package_object_reference}"
+        f"{package_object_binding_transforms}{package_object_binding_digest_markup}"
+        f"</ds:Reference>{duplicate_package_object_reference}"
         "</ds:SignedInfo>"
         "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
         f'<ds:Object Id="{package_object_id}"><ds:Manifest>'

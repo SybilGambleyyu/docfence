@@ -199,9 +199,12 @@ copying signature material into a report.
 A separate static declaration audit follows only one direct
 `ds:Object Id="idPackageObject"` with no other attributes and exactly direct
 `ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
-direct `SignedInfo` local-fragment reference to that object. It resolves only
-that package-specific manifest, using the binding reference's direct URI
-fragment without parsing or validating its digest or transforms. Its direct
+direct `SignedInfo` local-fragment reference to that object. That binding
+must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
+`DigestValue` shape; when present, transforms can use only OPC's two XML
+Canonicalization algorithms. It does not decode or recompute the digest,
+execute transforms, or verify XMLDSIG. It resolves only that package-specific
+manifest using the binding reference's direct URI fragment. Its direct
 `SignatureProperties` must have one `SignatureProperty` with the fixed
 `idSignatureTime` ID and an empty or root-`Signature/@Id` fragment target.
 That property must contain only an attribute-free `opc:SignatureTime` with
