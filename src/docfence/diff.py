@@ -551,6 +551,20 @@ def _append_package_changes(
             )
         )
     if (
+        before.word_drawing_visibility.signature
+        != after.word_drawing_visibility.signature
+    ):
+        changes.append(
+            Change(
+                kind="word_drawing_visibility_inventory_changed",
+                message=("Stored DrawingML nonvisual visibility inventory changed."),
+                details={
+                    "before": before.word_drawing_visibility.public_dict(),
+                    "after": after.word_drawing_visibility.public_dict(),
+                },
+            )
+        )
+    if (
         before.word_drawing_linked_pictures.signature
         != after.word_drawing_linked_pictures.signature
     ):

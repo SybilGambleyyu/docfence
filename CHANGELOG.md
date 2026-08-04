@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.36.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for direct stored DrawingML
+  nonvisual hidden declarations in supported Word stories. It recognizes
+  standard DrawingML main, picture, and WordprocessingDrawing forms in
+  Transitional and Strict packages plus Word 2010 w14, wpg, and wps forms.
+  Public reports contain only aggregate declaration/story and
+  hidden/explicitly-shown/invalid-value counts; object names, descriptions,
+  titles, IDs, raw values, story paths, and digests remain private.
+- Added DFP084 to reject candidate packages containing recognized hidden or
+  malformed nonvisual hidden declarations and DFP085 to protect an approved
+  visibility baseline. Equivalent XML Boolean spellings are canonicalized;
+  same-count hidden-to-shown swaps remain review-visible.
+- Added regression coverage for supported namespaces and forms, duplicate
+  markers, MCE-branch scanning, invalid values, semantic same-count changes,
+  privacy redaction, policy findings, Markdown, JSON, and SARIF output.
+  DocFence does not validate full DrawingML conformance, resolve object
+  identity, calculate effective visibility, choose a compatibility branch,
+  lay out or render a drawing, or predict Office client behavior.
+
 ## 0.35.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for stored OOXML Markup

@@ -141,6 +141,10 @@ _WORDPROCESSING_DRAWING_NAMESPACE = (
     "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 )
 _PICTURE_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+_STRICT_WORDPROCESSING_DRAWING_NAMESPACE = (
+    "http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing"
+)
+_STRICT_PICTURE_NAMESPACE = "http://purl.oclc.org/ooxml/drawingml/picture"
 _CORE_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
 _EXTENDED_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
 _CUSTOM_PROPERTIES_RELATIONSHIP_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties"
@@ -4159,6 +4163,139 @@ rules:
         assert marker not in rendered
 
 
+def test_word_drawing_visibility_inventory_is_private_and_semantic(tmp_path) -> None:
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    same_count_changed = tmp_path / "same-count-changed.docx"
+    equivalent = tmp_path / "equivalent.docx"
+    metadata_changed = tmp_path / "metadata-changed.docx"
+    invalid_changed = tmp_path / "invalid-changed.docx"
+    outside_changed = tmp_path / "outside-changed.docx"
+    policy_path = tmp_path / "docfence.yml"
+
+    _write_drawing_visibility_document(before, include_markup=False)
+    _write_drawing_visibility_document(after)
+    _write_drawing_visibility_document(
+        same_count_changed,
+        body_docpr_hidden="false",
+        body_drawing_hidden="true",
+    )
+    _write_drawing_visibility_document(equivalent, body_docpr_hidden="1")
+    _write_drawing_visibility_document(
+        metadata_changed,
+        drawing_name="CHANGED_DRAWING_NAME_DO_NOT_LEAK",
+    )
+    _write_drawing_visibility_document(
+        invalid_changed,
+        invalid_hidden="CHANGED_INVALID_BOOLEAN_DO_NOT_LEAK",
+    )
+    _write_drawing_visibility_document(
+        outside_changed,
+        visible_text="OUTSIDE_DRAWING_VISIBILITY_DO_NOT_LEAK",
+    )
+
+    expected_inventory = {
+        "visibility_declaration_count": 9,
+        "visibility_declaration_story_count": 2,
+        "hidden_drawing_object_count": 4,
+        "explicitly_shown_drawing_object_count": 4,
+        "invalid_hidden_attribute_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    after_snapshot = load_snapshot(after)
+    same_count_snapshot = load_snapshot(same_count_changed)
+    assert after_snapshot.public_dict()["word_drawing_visibility"] == expected_inventory
+    assert before_snapshot.public_dict()["word_drawing_visibility"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert same_count_snapshot.public_dict()["word_drawing_visibility"] == (
+        expected_inventory
+    )
+    assert load_snapshot(equivalent).word_drawing_visibility.signature == (
+        after_snapshot.word_drawing_visibility.signature
+    )
+
+    assert "word_drawing_visibility_inventory_changed" in {
+        change.kind for change in diff_documents(before, after).changes
+    }
+    assert "word_drawing_visibility_inventory_changed" in {
+        change.kind for change in diff_documents(after, same_count_changed).changes
+    }
+    assert "word_drawing_visibility_inventory_changed" in {
+        change.kind for change in diff_documents(after, invalid_changed).changes
+    }
+    assert "word_drawing_visibility_inventory_changed" not in {
+        change.kind for change in diff_documents(after, equivalent).changes
+    }
+    assert "word_drawing_visibility_inventory_changed" not in {
+        change.kind for change in diff_documents(after, metadata_changed).changes
+    }
+    assert "word_drawing_visibility_inventory_changed" not in {
+        change.kind for change in diff_documents(after, outside_changed).changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_hidden_drawing_objects: true
+  no_drawing_object_visibility_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, after), policy).findings
+    } == {
+        "DFP084",
+        "DFP085",
+    }
+    assert {
+        finding.rule_id
+        for finding in apply_policy(
+            diff_documents(after, same_count_changed), policy
+        ).findings
+    } == {"DFP084", "DFP085"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(after, after), policy).findings
+    } == {"DFP084"}
+    assert not apply_policy(diff_documents(before, before), policy).findings
+
+    gated = apply_policy(diff_documents(before, after), policy)
+    rendered = "\n".join(
+        (
+            render_profile(after_snapshot, "json"),
+            render_profile(after_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_report(
+                apply_policy(diff_documents(after, same_count_changed), policy),
+                "sarif",
+            ),
+            render_profile(load_snapshot(invalid_changed), "json"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_WORD_DRAWING_VISIBILITY_INVENTORY_CHANGED",
+        "DFP084",
+        "DFP085",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "DRAWING_OBJECT_NAME_DO_NOT_LEAK",
+        "CHANGED_DRAWING_NAME_DO_NOT_LEAK",
+        "DRAWING_DESCRIPTION_DO_NOT_LEAK",
+        "INVALID_BOOLEAN_DO_NOT_LEAK",
+        "CHANGED_INVALID_BOOLEAN_DO_NOT_LEAK",
+        "UNSUPPORTED_CANVAS_OBJECT_DO_NOT_LEAK",
+        "OUTSIDE_DRAWING_VISIBILITY_DO_NOT_LEAK",
+        "word/document.xml",
+    ):
+        assert marker not in rendered
+
+
 def test_word_drawing_linked_picture_inventory_is_private_and_semantic(
     tmp_path,
 ) -> None:
@@ -7816,6 +7953,73 @@ def _write_drawing_hyperlink_document(
             f"{header_relationship_entries}</Relationships>"
         ).encode()
 
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_drawing_visibility_document(
+    path,
+    *,
+    include_markup: bool = True,
+    body_docpr_hidden: str = "true",
+    body_drawing_hidden: str = "false",
+    invalid_hidden: str = "INVALID_BOOLEAN_DO_NOT_LEAK",
+    drawing_name: str = "DRAWING_OBJECT_NAME_DO_NOT_LEAK",
+    visible_text: str = "VISIBLE_DO_NOT_LEAK",
+) -> None:
+    """Write supported and unsupported direct hidden attributes in Word stories."""
+
+    body_markup = ""
+    header_markup = ""
+    if include_markup:
+        body_markup = f'''<w:drawing>
+<wp:inline><wp:docPr id="1" name="{drawing_name}"
+ descr="DRAWING_DESCRIPTION_DO_NOT_LEAK" hidden="{body_docpr_hidden}"/>
+<pic:pic><pic:nvPicPr><pic:cNvPr id="2"
+ name="DRAWING_PICTURE_DO_NOT_LEAK" hidden="1"/></pic:nvPicPr></pic:pic>
+<a:cNvPr id="3" name="DRAWING_MAIN_DO_NOT_LEAK"
+ hidden="{body_drawing_hidden}"/>
+<w14:cNvPr id="4" name="DRAWING_WORD14_DO_NOT_LEAK" hidden="0"/>
+<wpg:cNvPr id="5" name="DRAWING_GROUP_DO_NOT_LEAK"
+ hidden="{invalid_hidden}"/>
+<wps:cNvPr id="6" name="DRAWING_SHAPE_DO_NOT_LEAK" hidden=" true "/>
+<wpc:cNvPr id="7" name="UNSUPPORTED_CANVAS_OBJECT_DO_NOT_LEAK" hidden="true"/>
+</wp:inline></w:drawing>'''
+        header_markup = """<w:drawing><wp:inline>
+<wp:docPr id="8" name="STRICT_DOC_PROPERTIES_DO_NOT_LEAK" hidden="false"/>
+<pic:cNvPr id="9" name="STRICT_PICTURE_DO_NOT_LEAK" hidden="true"/>
+<a:cNvPr id="10" name="STRICT_DRAWING_DO_NOT_LEAK" hidden="0"/>
+</wp:inline></w:drawing>"""
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}"><Default Extension="xml" '
+            'ContentType="application/xml"/>'
+            f'<Override PartName="/word/document.xml" '
+            f'ContentType="{DOCX_MAIN_TYPE}"/></Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}" xmlns:a="{_DRAWING_NAMESPACE}" '
+            f'xmlns:wp="{_WORDPROCESSING_DRAWING_NAMESPACE}" '
+            f'xmlns:pic="{_PICTURE_NAMESPACE}" '
+            'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" '
+            'xmlns:wpg="http://schemas.microsoft.com/office/word/2010/'
+            'wordprocessingGroup" '
+            'xmlns:wps="http://schemas.microsoft.com/office/word/2010/'
+            'wordprocessingShape" '
+            'xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas">'
+            f"<w:body><w:p>{body_markup}<w:r><w:t>{visible_text}</w:t></w:r>"
+            "</w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/header1.xml": (
+            f'<w:hdr xmlns:w="{_STRICT_WORD_NAMESPACE}" '
+            f'xmlns:a="{_STRICT_DRAWING_NAMESPACE}" '
+            f'xmlns:wp="{_STRICT_WORDPROCESSING_DRAWING_NAMESPACE}" '
+            f'xmlns:pic="{_STRICT_PICTURE_NAMESPACE}"><w:p>{header_markup}'
+            "<w:r><w:t>HEADER_VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p></w:hdr>"
+        ).encode(),
+    }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)

@@ -50,6 +50,7 @@ from docfence.models import (
     WordDocumentVariableInventory,
     WordDrawingHyperlinkInventory,
     WordDrawingLinkedPictureInventory,
+    WordDrawingVisibilityInventory,
     WordEmbeddedControlInventory,
     WordHyperlinkFieldInventory,
     WordHyperlinkMarkupInventory,
@@ -92,6 +93,37 @@ _DRAWING_NAMESPACES: Final = frozenset(
         "http://purl.oclc.org/ooxml/drawingml/main",
     }
 )
+_WORD_DRAWING_VISIBILITY_ELEMENTS: Final = frozenset(
+    {
+        (
+            "http://schemas.openxmlformats.org/drawingml/2006/main",
+            "cNvPr",
+        ),
+        ("http://purl.oclc.org/ooxml/drawingml/main", "cNvPr"),
+        (
+            "http://schemas.openxmlformats.org/drawingml/2006/picture",
+            "cNvPr",
+        ),
+        ("http://purl.oclc.org/ooxml/drawingml/picture", "cNvPr"),
+        (
+            "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "docPr",
+        ),
+        (
+            "http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing",
+            "docPr",
+        ),
+        ("http://schemas.microsoft.com/office/word/2010/wordml", "cNvPr"),
+        (
+            "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+            "cNvPr",
+        ),
+        (
+            "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            "cNvPr",
+        ),
+    }
+)
 _VML_NAMESPACE: Final = "urn:schemas-microsoft-com:vml"
 _OFFICE_VML_NAMESPACE: Final = "urn:schemas-microsoft-com:office:office"
 _REL_ATTRIBUTE_NAMESPACES: Final = frozenset(
@@ -116,6 +148,8 @@ _FALSE_VALUES: Final = frozenset({"0", "false", "no", "off"})
 _ON_OFF_TRUE_VALUES: Final = frozenset({"1", "on", "true"})
 _ON_OFF_FALSE_VALUES: Final = frozenset({"0", "false", "off"})
 _ON_OFF_VALUES: Final = _ON_OFF_TRUE_VALUES | _ON_OFF_FALSE_VALUES
+_XML_BOOLEAN_TRUE_VALUES: Final = frozenset({"1", "true"})
+_XML_BOOLEAN_FALSE_VALUES: Final = frozenset({"0", "false"})
 _STORY_ROOT_NAMES: Final = {
     "body": "document",
     "header": "hdr",
@@ -693,6 +727,16 @@ class _DrawingHyperlinkReference:
 
 
 @dataclass(frozen=True)
+class _DrawingVisibilityReference:
+    """One private direct DrawingML nonvisual visibility declaration."""
+
+    story_part: str
+    namespace: str
+    local_name: str
+    state: str
+
+
+@dataclass(frozen=True)
 class _DrawingLinkedPictureReference:
     """One private direct DrawingML ``a:blip/@r:link`` marker in a Word story."""
 
@@ -971,6 +1015,7 @@ def _load_package(
                 hyperlink_field_references,
                 hyperlink_markup_references,
                 drawing_hyperlink_references,
+                drawing_visibility_references,
                 drawing_linked_picture_references,
                 vml_hyperlink_references,
                 vml_external_image_references,
@@ -1003,6 +1048,9 @@ def _load_package(
             )
             word_drawing_hyperlinks = _word_drawing_hyperlink_inventory(
                 drawing_hyperlink_references
+            )
+            word_drawing_visibility = _word_drawing_visibility_inventory(
+                drawing_visibility_references
             )
             word_drawing_linked_pictures = _word_drawing_linked_picture_inventory(
                 drawing_linked_picture_references
@@ -1117,6 +1165,7 @@ def _load_package(
         word_hyperlink_fields=word_hyperlink_fields,
         word_hyperlink_markup=word_hyperlink_markup,
         word_drawing_hyperlinks=word_drawing_hyperlinks,
+        word_drawing_visibility=word_drawing_visibility,
         word_drawing_linked_pictures=word_drawing_linked_pictures,
         word_vml_hyperlinks=word_vml_hyperlinks,
         word_vml_external_images=word_vml_external_images,
@@ -3998,6 +4047,7 @@ def _story_snapshots(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_DrawingVisibilityReference, ...],
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
@@ -4015,6 +4065,7 @@ def _story_snapshots(
     hyperlink_field_references: list[_HyperlinkFieldReference] = []
     hyperlink_markup_references: list[_HyperlinkMarkupReference] = []
     drawing_hyperlink_references: list[_DrawingHyperlinkReference] = []
+    drawing_visibility_references: list[_DrawingVisibilityReference] = []
     drawing_linked_picture_references: list[_DrawingLinkedPictureReference] = []
     vml_hyperlink_references: list[_VmlHyperlinkReference] = []
     vml_external_image_references: list[_VmlExternalImageReference] = []
@@ -4035,6 +4086,7 @@ def _story_snapshots(
             story_hyperlink_field_references,
             story_hyperlink_markup_references,
             story_drawing_hyperlink_references,
+            story_drawing_visibility_references,
             story_drawing_linked_picture_references,
             story_vml_hyperlink_references,
             story_vml_external_image_references,
@@ -4053,6 +4105,7 @@ def _story_snapshots(
         hyperlink_field_references.extend(story_hyperlink_field_references)
         hyperlink_markup_references.extend(story_hyperlink_markup_references)
         drawing_hyperlink_references.extend(story_drawing_hyperlink_references)
+        drawing_visibility_references.extend(story_drawing_visibility_references)
         drawing_linked_picture_references.extend(
             story_drawing_linked_picture_references
         )
@@ -4083,6 +4136,7 @@ def _story_snapshots(
         tuple(hyperlink_field_references),
         tuple(hyperlink_markup_references),
         tuple(drawing_hyperlink_references),
+        tuple(drawing_visibility_references),
         tuple(drawing_linked_picture_references),
         tuple(vml_hyperlink_references),
         tuple(vml_external_image_references),
@@ -4161,6 +4215,7 @@ def _snapshot_story(
     tuple[_HyperlinkFieldReference, ...],
     tuple[_HyperlinkMarkupReference, ...],
     tuple[_DrawingHyperlinkReference, ...],
+    tuple[_DrawingVisibilityReference, ...],
     tuple[_DrawingLinkedPictureReference, ...],
     tuple[_VmlHyperlinkReference, ...],
     tuple[_VmlExternalImageReference, ...],
@@ -4267,6 +4322,7 @@ def _snapshot_story(
         _hyperlink_field_references(field_instruction_references),
         _hyperlink_markup_references(root, part_key, relationships),
         _drawing_hyperlink_references(root, part_key, relationships),
+        _drawing_visibility_references(root, part_key),
         _drawing_linked_picture_references(root, part_key, relationships),
         _vml_hyperlink_references(root, part_key, relationships),
         _vml_external_image_references(root, part_key, relationships),
@@ -5404,6 +5460,87 @@ def _drawing_hyperlink_references(
             )
         )
     return tuple(references)
+
+
+def _drawing_visibility_references(
+    root: ET.Element,
+    story_part: str,
+) -> tuple[_DrawingVisibilityReference, ...]:
+    """Retain direct supported nonvisual hidden declarations in Word stories.
+
+    This reads every stored supported marker, including duplicates and markers
+    in markup-compatibility branches. It does not infer effective visibility,
+    select a markup-compatibility branch, resolve object identity, inspect a
+    drawing's contents, or predict any application's rendering behavior.
+    """
+
+    references: list[_DrawingVisibilityReference] = []
+    for element in root.iter():
+        namespace, local_name = _qualified_name(element.tag)
+        if (namespace, local_name) not in _WORD_DRAWING_VISIBILITY_ELEMENTS:
+            continue
+        value = _unqualified_attribute_value(element, "hidden")
+        if value is None:
+            continue
+        references.append(
+            _DrawingVisibilityReference(
+                story_part=story_part,
+                namespace=namespace,
+                local_name=local_name,
+                state=_drawing_visibility_state(value),
+            )
+        )
+    return tuple(references)
+
+
+def _drawing_visibility_state(value: str) -> str:
+    """Canonicalize valid XML Boolean spellings without losing invalid values."""
+
+    normalized = value.strip()
+    if normalized in _XML_BOOLEAN_TRUE_VALUES:
+        return "hidden"
+    if normalized in _XML_BOOLEAN_FALSE_VALUES:
+        return "explicitly_shown"
+    return f"invalid:{value}"
+
+
+def _word_drawing_visibility_inventory(
+    references: tuple[_DrawingVisibilityReference, ...],
+) -> WordDrawingVisibilityInventory:
+    """Aggregate direct nonvisual visibility declarations without object data."""
+
+    state_counts = {
+        "hidden": 0,
+        "explicitly_shown": 0,
+        "invalid": 0,
+    }
+    records: list[tuple[str, ...]] = []
+    for reference in references:
+        state = reference.state
+        if state.startswith("invalid:"):
+            state_counts["invalid"] += 1
+        else:
+            state_counts[state] += 1
+        records.append(
+            (
+                "word_drawing_visibility",
+                reference.story_part,
+                reference.namespace,
+                reference.local_name,
+                state,
+            )
+        )
+
+    return WordDrawingVisibilityInventory(
+        visibility_declaration_count=len(references),
+        visibility_declaration_story_count=len(
+            {reference.story_part for reference in references}
+        ),
+        hidden_drawing_object_count=state_counts["hidden"],
+        explicitly_shown_drawing_object_count=state_counts["explicitly_shown"],
+        invalid_hidden_attribute_count=state_counts["invalid"],
+        signature=_digest_records(records),
+    )
 
 
 def _word_drawing_hyperlink_inventory(

@@ -481,6 +481,37 @@ class WordDrawingHyperlinkInventory:
 
 
 @dataclass(frozen=True)
+class WordDrawingVisibilityInventory:
+    """Stored DrawingML nonvisual hidden declarations, aggregate only.
+
+    Drawing object names, descriptions, titles, IDs, exact boolean spellings,
+    story paths, and fingerprints can reveal document context. They remain in
+    the private signature; public output reports only aggregate classifications
+    of direct stored attributes on the supported nonvisual-property elements.
+    """
+
+    visibility_declaration_count: int
+    visibility_declaration_story_count: int
+    hidden_drawing_object_count: int
+    explicitly_shown_drawing_object_count: int
+    invalid_hidden_attribute_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "visibility_declaration_count": self.visibility_declaration_count,
+            "visibility_declaration_story_count": (
+                self.visibility_declaration_story_count
+            ),
+            "hidden_drawing_object_count": self.hidden_drawing_object_count,
+            "explicitly_shown_drawing_object_count": (
+                self.explicitly_shown_drawing_object_count
+            ),
+            "invalid_hidden_attribute_count": self.invalid_hidden_attribute_count,
+        }
+
+
+@dataclass(frozen=True)
 class WordDrawingLinkedPictureInventory:
     """Direct DrawingML linked-picture markup in Word stories, aggregate only.
 
@@ -1274,6 +1305,7 @@ class DocumentSnapshot:
     word_hyperlink_fields: WordHyperlinkFieldInventory
     word_hyperlink_markup: WordHyperlinkMarkupInventory
     word_drawing_hyperlinks: WordDrawingHyperlinkInventory
+    word_drawing_visibility: WordDrawingVisibilityInventory
     word_drawing_linked_pictures: WordDrawingLinkedPictureInventory
     word_vml_hyperlinks: WordVmlHyperlinkInventory
     word_vml_external_images: WordVmlExternalImageInventory
@@ -1387,6 +1419,7 @@ class DocumentSnapshot:
             "word_hyperlink_fields": self.word_hyperlink_fields.public_dict(),
             "word_hyperlink_markup": self.word_hyperlink_markup.public_dict(),
             "word_drawing_hyperlinks": self.word_drawing_hyperlinks.public_dict(),
+            "word_drawing_visibility": self.word_drawing_visibility.public_dict(),
             "word_drawing_linked_pictures": (
                 self.word_drawing_linked_pictures.public_dict()
             ),

@@ -105,6 +105,8 @@ starter policy.
 | `no_package_thumbnail_changes` | `DFP081` | OPC package thumbnail inventory differs | Comparison |
 | `require_no_markup_compatibility` | `DFP082` | Candidate has stored OOXML Markup Compatibility markup | Candidate |
 | `no_markup_compatibility_changes` | `DFP083` | OOXML Markup Compatibility inventory differs | Comparison |
+| `require_no_hidden_drawing_objects` | `DFP084` | Candidate has a stored hidden or invalid supported DrawingML nonvisual declaration | Candidate |
+| `no_drawing_object_visibility_changes` | `DFP085` | DrawingML nonvisual visibility inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -167,6 +169,8 @@ intentionally retains stored `HYPERLINK` field references.
 intentionally retains direct WordprocessingML hyperlink markup.
 `no_word_drawing_hyperlink_changes` provides the equivalent gate when it
 intentionally retains direct DrawingML hyperlink-action markup.
+`no_drawing_object_visibility_changes` provides the equivalent gate when it
+intentionally retains direct DrawingML nonvisual visibility declarations.
 `no_word_drawing_linked_picture_changes` provides the equivalent gate when it
 intentionally retains direct DrawingML linked-picture markup.
 `no_word_vml_hyperlink_changes` provides the equivalent gate when it
@@ -668,6 +672,40 @@ an approved baseline instead. Neither rule validates MCE conformance, selects
 a branch, resolves a feature prefix, applies a target Office version,
 preprocesses or saves a package, or predicts what any document client will
 load or render.
+
+## DrawingML nonvisual visibility scope
+
+The DrawingML hidden attribute is a direct stored nonvisual-property setting:
+an object can be present while its declaration specifies hidden. This is
+separate from Word hidden-text runs, style resolution, MCE branch processing,
+layout, and renderer behavior.
+
+DocFence inventories direct unqualified hidden attributes only on supported
+nonvisual-property elements in supported Word stories: DrawingML main and
+picture cNvPr, WordprocessingDrawing docPr, and Word 2010 w14, wpg, and wps
+cNvPr. It supports Transitional and Strict forms of the standard DrawingML
+namespaces. Every stored supported declaration is retained, including
+duplicates and declarations in MCE branches. Other elements named cNvPr, any
+inferred or inherited visibility, and arbitrary drawing markup are outside
+this boundary.
+
+Public output contains only declaration and story counts plus hidden,
+explicitly-shown, and invalid-value counts. Object names, descriptions, titles,
+IDs, raw invalid values, story paths, and fingerprints never leave the process.
+The private signature canonicalizes valid XML Boolean spellings, so true and 1
+are treated as the same stored hidden state and false and 0 as the same
+explicitly-shown state. A same-count hidden-to-shown swap remains
+review-visible; a rewrite limited to object metadata does not become a
+visibility-inventory change. Invalid raw values remain private but retain a
+separate signature state.
+
+`require_no_hidden_drawing_objects` rejects any recognized hidden declaration
+or invalid Boolean value. It permits an explicit false or 0 declaration.
+`no_drawing_object_visibility_changes` protects an approved baseline of any
+recognized declarations. Neither rule validates full DrawingML conformance,
+selects an MCE branch, resolves a drawing object or its identity, calculates
+effective visibility, lays out or renders an object, or asserts how a client
+will display it.
 
 ## OPC package digital-signature scope
 

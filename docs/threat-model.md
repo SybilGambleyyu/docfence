@@ -51,6 +51,8 @@ frame names, history values, display text, relationship IDs, and story-part
 paths are sensitive package material too.
 Direct DrawingML linked-picture targets, relationship IDs, surrounding drawing
 markup, and story-part paths are sensitive package material too.
+Direct DrawingML nonvisual object names, descriptions, titles, IDs, raw hidden
+attribute spellings, and story-part paths are sensitive package material too.
 Direct legacy VML shape-link URLs, target frames, titles, alternate text, shape
 identifiers, and story-part paths are sensitive package material too.
 Direct legacy VML image targets, relationship IDs, raw source values, other
@@ -146,6 +148,18 @@ names, attribute values, or member paths in a report. This boundary does not
 validate MCE conformance or infer whether a stored branch can be selected.
 DocFence never resolves a feature prefix, applies a target version, preprocesses
 or saves a package, chooses a branch, or renders an MCE result.
+
+DrawingML nonvisual visibility receives a separate private-digest treatment.
+DocFence reads only direct unqualified hidden attributes on its supported
+DrawingML nonvisual-property QNames in supported Word stories. It reports
+aggregate declaration/story and hidden/explicitly-shown/invalid counts, while
+object names, descriptions, titles, IDs, raw invalid Boolean values, paths,
+and fingerprints remain private. Valid XML Boolean spellings are canonicalized
+before signature construction; invalid raw values remain private signature
+material. This bounds the signal to the stored direct marker: DocFence does
+not validate arbitrary DrawingML, choose an MCE branch, identify an object,
+calculate effective visibility, apply layout, render, or claim what an Office
+client will show.
 
 The general custom-XML inventory also privately fingerprints each
 non-relationship package member under the conventional `customXml/` folder.
@@ -634,6 +648,12 @@ updates an image, renders a picture, or honors a stored relationship. DocFence
 does not select Markup Compatibility branches, associate markers with rendered
 objects, deduplicate a visual picture, resolve, retrieve, validate, evaluate,
 render, or update a linked picture.
+Direct DrawingML nonvisual visibility counts are likewise stored-state evidence,
+not proof that a client selects a marker or MCE branch, associates it with a
+rendered object, calculates effective visibility, applies layout, or presents
+the object as hidden or visible. DocFence does not resolve object identity,
+deduplicate visual objects, render DrawingML, or make a client-behavior claim
+from a hidden attribute.
 Direct legacy VML shape-link counts are likewise stored-state evidence, not
 proof that a client inherits a group/template link, renders a shape, honors an
 `href`, reaches or safely follows a target, or opens a frame. DocFence does not

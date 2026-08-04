@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.35 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.36 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -18,7 +18,8 @@ following properties:
   and automatic-field-recalculation-on-open state, Word `HYPERLINK`
   field-reference state, direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
-  hyperlink-action markup state, direct DrawingML `a:blip/@r:link`
+  hyperlink-action markup state, direct DrawingML nonvisual hidden-state
+  declaration state, direct DrawingML `a:blip/@r:link`
   linked-picture markup state, direct legacy VML shape-link `href` markup
   state, direct legacy VML external-image `v:imagedata/@r:id` markup state,
   direct legacy VML image-data hyperlink `v:imagedata/@r:href` markup state,
@@ -148,6 +149,15 @@ following properties:
   compatibility-rule token counts, a same-count `Choice/@Requires` rewrite,
   a non-MCE text rewrite that does not churn the MCE inventory,
   JSON/Markdown/SARIF redaction, and candidate and baseline policy findings;
+
+- DrawingML nonvisual visibility is separately inventoried in supported Word
+  stories. Tests cover standard Transitional and Strict main/picture/docPr
+  forms, Word 2010 w14/wpg/wps forms, direct hidden and explicitly-shown
+  states, invalid Boolean values, same-count state swaps, equivalent Boolean
+  spellings, unrelated object-metadata/text rewrites, JSON/Markdown/SARIF
+  redaction, and candidate and baseline policy findings. This is a direct
+  stored-marker test only; it does not calculate effective visibility, select
+  an MCE branch, render, or assert client behavior;
 
 - the validation pass profiles the public Open XML SDK Strict Word chart
   [`2D Column-O12-Word-Charts.docx`](https://github.com/dotnet/Open-XML-SDK/blob/main/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/O14ISOStrict/Graphics/2D%20Column-O12-Word-Charts.docx).

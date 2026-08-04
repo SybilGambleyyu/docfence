@@ -79,6 +79,8 @@ _RULES: Final = {
     "no_word_hyperlink_markup_changes": "DFP050",
     "require_no_word_drawing_hyperlinks": "DFP051",
     "no_word_drawing_hyperlink_changes": "DFP052",
+    "require_no_hidden_drawing_objects": "DFP084",
+    "no_drawing_object_visibility_changes": "DFP085",
     "require_no_word_vml_hyperlinks": "DFP053",
     "no_word_vml_hyperlink_changes": "DFP054",
     "require_no_word_drawing_linked_pictures": "DFP055",
@@ -430,6 +432,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 {
                     "before": before.word_drawing_hyperlinks.public_dict(),
                     "after": after.word_drawing_hyperlinks.public_dict(),
+                },
+            )
+        )
+    if policy.enabled("no_drawing_object_visibility_changes") and (
+        before.word_drawing_visibility.signature
+        != after.word_drawing_visibility.signature
+    ):
+        findings.append(
+            _finding(
+                "no_drawing_object_visibility_changes",
+                "Stored DrawingML nonvisual visibility inventory changed.",
+                {
+                    "before": before.word_drawing_visibility.public_dict(),
+                    "after": after.word_drawing_visibility.public_dict(),
                 },
             )
         )
@@ -918,6 +934,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_word_drawing_hyperlinks",
                 "Candidate contains stored DrawingML hyperlink-action markup.",
                 after.word_drawing_hyperlinks.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_hidden_drawing_objects") and (
+        after.word_drawing_visibility.hidden_drawing_object_count
+        or after.word_drawing_visibility.invalid_hidden_attribute_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_hidden_drawing_objects",
+                (
+                    "Candidate contains stored hidden or invalid DrawingML "
+                    "nonvisual visibility declarations."
+                ),
+                after.word_drawing_visibility.public_dict(),
             )
         )
     if policy.enabled("require_no_word_drawing_linked_pictures") and any(

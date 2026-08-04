@@ -81,6 +81,9 @@ def _profile_markdown(document: dict[str, object]) -> str:
         _word_drawing_hyperlink_section(document.get("word_drawing_hyperlinks", {}))
     )
     lines.extend(
+        _word_drawing_visibility_section(document.get("word_drawing_visibility", {}))
+    )
+    lines.extend(
         _word_drawing_linked_picture_section(
             document.get("word_drawing_linked_pictures", {})
         )
@@ -167,6 +170,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_word_hyperlink_field_comparison(before, after))
     lines.extend(_word_hyperlink_markup_comparison(before, after))
     lines.extend(_word_drawing_hyperlink_comparison(before, after))
+    lines.extend(_word_drawing_visibility_comparison(before, after))
     lines.extend(_word_drawing_linked_picture_comparison(before, after))
     lines.extend(_word_vml_hyperlink_comparison(before, after))
     lines.extend(_word_vml_external_image_comparison(before, after))
@@ -390,6 +394,10 @@ def _word_hyperlink_markup_section(value: object) -> list[str]:
 
 def _word_drawing_hyperlink_section(value: object) -> list[str]:
     return _inventory_section("DrawingML hyperlink-action inventory", value)
+
+
+def _word_drawing_visibility_section(value: object) -> list[str]:
+    return _inventory_section("DrawingML nonvisual visibility inventory", value)
 
 
 def _word_drawing_linked_picture_section(value: object) -> list[str]:
@@ -626,6 +634,16 @@ def _word_drawing_hyperlink_comparison(
         "DrawingML hyperlink-action inventory",
         before.get("word_drawing_hyperlinks", {}),
         after.get("word_drawing_hyperlinks", {}),
+    )
+
+
+def _word_drawing_visibility_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "DrawingML nonvisual visibility inventory",
+        before.get("word_drawing_visibility", {}),
+        after.get("word_drawing_visibility", {}),
     )
 
 

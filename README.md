@@ -7,8 +7,9 @@ surfaces that often stay hidden:
 tracked revisions, comments, hidden runs and paragraph marks, stored
 style/default declarations, field codes, external-source field instructions,
 `HYPERLINK` field references, direct `w:hyperlink` markup, DrawingML
-click/hover/mouse-over hyperlink-action markup, direct DrawingML linked-picture
-`a:blip/@r:link` markup, legacy VML shape `href` markup, legacy VML external
+click/hover/mouse-over hyperlink-action markup, direct DrawingML nonvisual
+hidden-state declarations, direct DrawingML linked-picture `a:blip/@r:link`
+markup, legacy VML shape `href` markup, legacy VML external
 image-data `v:imagedata/@r:id` markup, legacy VML image-data hyperlink
 `v:imagedata/@r:href` markup, legacy Office VML linked-OLE
 `o:OLEObject Type="Link"` and embedded-OLE `o:OLEObject Type="Embed"` markup,
@@ -66,6 +67,8 @@ private too.
 DrawingML hyperlink-action targets, invalid URLs, actions, tooltips, frame
 names, history settings, relationship IDs, and story-part paths are private
 too.
+DrawingML nonvisual object names, descriptions, titles, IDs, exact hidden
+attribute spellings, story-part paths, and fingerprints are private too.
 DrawingML linked-picture targets, relationship IDs, surrounding drawing markup,
 and story-part paths are private too.
 Legacy VML shape-link URLs, target frames, titles, alternate text, shape
@@ -111,7 +114,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.35 focuses on Office Open XML Word documents and templates and
+Version 0.36 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -122,6 +125,7 @@ deliberately keeps a small, inspectable contract:
   paragraph-mark markup, stored style/default hidden-text declarations,
   field-code, `HYPERLINK` field-reference, direct `w:hyperlink` markup,
   DrawingML click/hover/mouse-over hyperlink-action markup,
+  direct DrawingML nonvisual hidden-state declarations,
   DrawingML `a:blip/@r:link` linked-picture markup,
   legacy VML shape/group/shape-template `href` markup,
   legacy VML `v:imagedata/@r:id` markup backed by an external relationship,
@@ -426,6 +430,29 @@ hyperlink-action marker, while `no_word_drawing_hyperlink_changes` protects an
 approved marker baseline. This inventory never resolves, retrieves, follows,
 validates, evaluates, or renders an action, and no count establishes that a
 target is reachable, safe, or honored by a Word client.
+
+DrawingML nonvisual visibility is a separate stored review surface. A direct
+hidden attribute on a supported nonvisual-property element can keep a DrawingML
+object present while specifying that it is hidden. DocFence scans only direct
+unqualified hidden attributes on supported Word-story forms: DrawingML main
+and picture cNvPr, WordprocessingDrawing docPr, and Word 2010 w14, wpg, and
+wps cNvPr. Transitional and Strict forms are both supported where OOXML
+defines them. It counts each declaration, its story presence, canonical hidden
+or explicitly-shown state, and invalid Boolean spellings. Object names,
+descriptions, titles, IDs, exact invalid spellings, and story paths stay
+private.
+
+The private signature is intentionally limited to the supported element kind
+and canonical hidden state, so equivalent XML Boolean spellings do not churn a
+baseline while a same-count hidden-to-shown swap remains review-visible.
+Malformed values remain private but are separately counted and rejected by the
+candidate gate. The scan includes duplicate markers and stored MCE branches,
+but never selects a branch, resolves object identity, calculates effective
+visibility, applies layout, renders a drawing, or predicts a client view.
+`require_no_hidden_drawing_objects` rejects stored hidden and malformed
+supported declarations; `no_drawing_object_visibility_changes` protects an
+approved declaration baseline. Neither rule says an object is effectively
+visible or invisible in a particular Office client.
 
 DrawingML linked pictures are a separate direct relationship surface again: an
 `a:blip` with `r:link` stores a linked-picture reference, distinct from an
@@ -1000,6 +1027,10 @@ revisions](https://learn.microsoft.com/en-us/office/open-xml/word/how-to-accept-
 and [markup compatibility](https://learn.microsoft.com/en-us/office/open-xml/general/introduction-to-markup-compatibility), plus its
 [hidden-text semantics](https://learn.microsoft.com/en-us/office/open-xml/word/how-to-remove-hidden-text-from-a-word-processing-document)
 and [`specVanish` paragraph-mark semantics](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.specvanish?view=openxml-3.0.1).
+The DrawingML visibility boundary follows the Open XML SDK's
+[nonvisual hidden-property contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.drawing.nonvisualdrawingproperties.hidden?view=openxml-3.0.1),
+which describes a stored object that can remain present while hidden and notes
+that a client may expose it through application settings.
 Microsoft also calls out [embedded files and objects](https://support.microsoft.com/en-us/excel/embedded-files-or-objects-found)
 as an inspectable hidden-data surface. The alternative-import boundary follows
 the Open XML SDK's [`w:altChunk` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.altchunk?view=openxml-3.0.1)
