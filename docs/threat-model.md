@@ -211,6 +211,12 @@ references. Object identifiers, raw reference URIs, selectors, relationship
 IDs/types, part paths, and digest material remain private. A same-count
 coverage reassignment is retained in the private semantic signature.
 
+Within one XML signature, the audit also counts relationship transforms for
+each relationships part across all bound manifests. More than one transform for
+the same part is unsupported and credits none of those selectors. That preserves
+the OPC per-relationships-part constraint without exposing the part, selector,
+or relationship identity.
+
 Word editing/write-protection state receives the same dedicated treatment.
 DocFence discovers document Settings parts through Word's conventional
 `word/settings.xml` path and Transitional or Strict settings relationships from

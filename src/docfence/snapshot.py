@@ -2584,6 +2584,38 @@ def _declared_package_signature_coverage(
     covered_relationship_ids: set[tuple[str, str]] = set()
     unresolved_reference_count = 0
     unsupported_reference_count = 0
+
+    # OPC limits a relationships part to one relationship transform per XML
+    # signature. Bound package manifests can live in several direct objects,
+    # so this has to be counted before resolving their references one at a time.
+    relationship_transform_counts_by_part: dict[str, int] = {}
+    for object_id in sorted(bound_manifest_object_ids):
+        manifest = manifest_objects[object_id]
+        for reference in manifest:
+            if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
+                continue
+            parsed_reference = _package_manifest_reference_member_name(
+                reference.attrib.get("URI")
+            )
+            if parsed_reference is None:
+                continue
+            part_name, _ = parsed_reference
+            if not part_name.endswith(".rels"):
+                continue
+            relationship_transform_count = _relationship_transform_count(reference)
+            if relationship_transform_count:
+                relationship_transform_counts_by_part[part_name] = (
+                    relationship_transform_counts_by_part.get(part_name, 0)
+                    + relationship_transform_count
+                )
+    duplicate_relationship_transform_part_names = frozenset(
+        part_name
+        for part_name, relationship_transform_count in (
+            relationship_transform_counts_by_part.items()
+        )
+        if relationship_transform_count > 1
+    )
+
     for object_id in sorted(bound_manifest_object_ids):
         manifest = manifest_objects[object_id]
         records.append(
@@ -2602,12 +2634,28 @@ def _declared_package_signature_coverage(
                     )
                 )
                 continue
-            resolution = _resolve_package_manifest_reference(
-                reference,
-                members,
-                content_types,
-                relationship_maps,
+            parsed_reference = _package_manifest_reference_member_name(
+                reference.attrib.get("URI")
             )
+            relationship_transform_is_duplicated = (
+                parsed_reference is not None
+                and parsed_reference[0] in duplicate_relationship_transform_part_names
+                and _relationship_transform_count(reference) > 0
+            )
+            if relationship_transform_is_duplicated:
+                resolution = _ManifestReferenceResolution(
+                    covered_part_name=None,
+                    covered_relationship_ids=frozenset(),
+                    unresolved_reference_count=0,
+                    unsupported_reference_count=1,
+                )
+            else:
+                resolution = _resolve_package_manifest_reference(
+                    reference,
+                    members,
+                    content_types,
+                    relationship_maps,
+                )
             covered_part_names.update(
                 part_name
                 for part_name in (resolution.covered_part_name,)
@@ -2864,6 +2912,18 @@ def _relationship_manifest_reference_coverage(
         covered_relationship_ids=frozenset(selected_relationship_ids),
         unresolved_reference_count=unresolved_reference_count,
         unsupported_reference_count=unsupported_reference_count,
+    )
+
+
+def _relationship_transform_count(reference: ET.Element) -> int:
+    """Count direct OPC relationship transforms for one manifest reference."""
+
+    return sum(
+        _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
+        and transform.attrib.get("Algorithm") == _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+        for transforms in reference
+        if _qualified_name(transforms.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
+        for transform in transforms
     )
 
 

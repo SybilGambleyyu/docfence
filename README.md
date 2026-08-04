@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.42 focuses on Office Open XML Word documents and templates and
+Version 0.43 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -302,7 +302,10 @@ declarations: one direct `ds:Transforms` list containing only the supported
 OPC relationship and XML Canonicalization algorithms, with exactly one
 relationship transform immediately followed by XML Canonicalization (with or
 without comments), then exact `RelationshipReference/@SourceId` and
-`RelationshipsGroupReference/@SourceType` selectors. Public output
+`RelationshipsGroupReference/@SourceType` selectors. Within one XML signature,
+it also rejects every transform-bearing declaration for a relationships part
+when more than one relationship transform targets that same part across bound
+manifests. Public output
 contains only aggregate counts for signatures with and without that declaration
 chain; covered and uncovered `word/` non-relationship parts; covered and
 uncovered root `officeDocument` relationships; covered and uncovered

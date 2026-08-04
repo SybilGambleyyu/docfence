@@ -3561,6 +3561,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     unsupported_trailing_transform = tmp_path / "unsupported-trailing-transform.docx"
     multiple_transforms_elements = tmp_path / "multiple-transforms-elements.docx"
+    duplicate_relationship_transform = (
+        tmp_path / "duplicate-relationship-transform.docx"
+    )
+    duplicate_relationship_transform_across_manifests = (
+        tmp_path / "duplicate-relationship-transform-across-manifests.docx"
+    )
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -3624,6 +3630,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         multiple_transforms_elements,
         word_relationship_transform_mode="multiple_transforms_elements",
+    )
+    _write_package_signature_coverage_document(
+        duplicate_relationship_transform,
+        include_duplicate_word_relationship_manifest_reference=True,
+    )
+    _write_package_signature_coverage_document(
+        duplicate_relationship_transform_across_manifests,
+        include_second_bound_manifest_with_duplicate_word_relationship=True,
     )
 
     expected_fully_declared = {
@@ -3749,6 +3763,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_unsupported_relationship_transform
         )
+    for document in (
+        duplicate_relationship_transform,
+        duplicate_relationship_transform_across_manifests,
+    ):
+        assert load_snapshot(document).public_dict()["package_signature_coverage"] == {
+            **expected_unsupported_relationship_transform,
+            "unsupported_package_manifest_reference_count": 2,
+        }
 
     policy_path.write_text(
         """version: 1
@@ -3800,6 +3822,16 @@ rules:
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
         multiple_transforms_elements,
+    ):
+        assert {
+            finding.rule_id
+            for finding in apply_policy(
+                diff_documents(fully_declared, document), policy
+            ).findings
+        } == {"DFP092", "DFP093"}
+    for document in (
+        duplicate_relationship_transform,
+        duplicate_relationship_transform_across_manifests,
     ):
         assert {
             finding.rule_id
@@ -8159,6 +8191,8 @@ def _write_package_signature_coverage_document(
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
     word_relationship_transform_mode: str = "standard",
+    include_duplicate_word_relationship_manifest_reference: bool = False,
+    include_second_bound_manifest_with_duplicate_word_relationship: bool = False,
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -8228,6 +8262,23 @@ def _write_package_signature_coverage_document(
         f"{word_relationship_transforms}"
         f"{digest_reference}</ds:Reference>"
     )
+    duplicate_word_relationship_manifest_reference = (
+        word_relationship_manifest_reference
+        if include_duplicate_word_relationship_manifest_reference
+        else ""
+    )
+    additional_signed_info_reference = (
+        f'<ds:Reference URI="#idSecondPackageObject">{digest_reference}</ds:Reference>'
+        if include_second_bound_manifest_with_duplicate_word_relationship
+        else ""
+    )
+    additional_package_object = (
+        '<ds:Object Id="idSecondPackageObject"><ds:Manifest>'
+        f"{word_relationship_manifest_reference}"
+        "</ds:Manifest></ds:Object>"
+        if include_second_bound_manifest_with_duplicate_word_relationship
+        else ""
+    )
     unresolved_manifest_reference = (
         '<ds:Reference URI="/word/missing.xml?ContentType=application/xml">'
         f"{digest_reference}</ds:Reference>"
@@ -8252,11 +8303,13 @@ def _write_package_signature_coverage_document(
         "<ds:SignatureMethod "
         'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
         f'<ds:Reference URI="{signed_info_reference}">'
-        f"{digest_reference}</ds:Reference></ds:SignedInfo>"
+        f"{digest_reference}</ds:Reference>{additional_signed_info_reference}"
+        "</ds:SignedInfo>"
         "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
         '<ds:Object Id="idPackageObject"><ds:Manifest>'
         f"{root_relationship_manifest_reference}"
         f"{word_relationship_manifest_reference}"
+        f"{duplicate_word_relationship_manifest_reference}"
         f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}">'
         f"{digest_reference}</ds:Reference>"
         f'<ds:Reference URI="/word/styles.xml?ContentType='
@@ -8264,7 +8317,7 @@ def _write_package_signature_coverage_document(
         f"{digest_reference}</ds:Reference>"
         f"{unresolved_manifest_reference}"
         f"{unsupported_manifest_reference}"
-        "</ds:Manifest></ds:Object></ds:Signature>"
+        f"</ds:Manifest></ds:Object>{additional_package_object}</ds:Signature>"
     ).encode()
 
     entries: dict[str, bytes] = {

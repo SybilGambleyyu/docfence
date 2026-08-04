@@ -799,6 +799,13 @@ unsupported reference; a missing member, content-type mismatch, missing
 relationship item, or selector that selects no stored relationship is reported
 as an aggregate unresolved reference.
 
+OPC permits no more than one relationship transform for a particular
+relationships part in one XML signature. DocFence counts transform-bearing
+references to each relationship part across every bound manifest in that
+signature. If a part has more than one, every such declaration remains an
+aggregate unsupported reference and none of its selectors are credited with
+coverage.
+
 The bounded Word scope comprises every non-relationship member under `word/`,
 root-package relationships whose type is `officeDocument`, and every stored
 relationship sourced by a Word part. `DFP092` fails if no recognized XML

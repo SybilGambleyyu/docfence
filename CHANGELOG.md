@@ -2,6 +2,19 @@
 
 All notable changes are documented here.
 
+## 0.43.0 — 2026-08-04
+
+- Hardened static package-signature declaration coverage for OPC's
+  one-relationship-transform-per-relationships-part constraint. DocFence now
+  counts relationship transforms across all bound manifests in one XML
+  signature. If more than one targets the same relationships part, none of
+  those selectors is credited; each remains an aggregate unsupported reference.
+- Added regression coverage for duplicate relationship-transform declarations,
+  coverage removal, aggregate-only unsupported evidence, policy failures, and
+  private-report redaction. This remains a bounded static audit, not XMLDSIG
+  transform or digest evaluation, certificate validation, trust establishment,
+  or Office client prediction.
+
 ## 0.42.0 — 2026-08-04
 
 - Hardened the static package-signature declaration audit to require the OPC
