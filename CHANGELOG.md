@@ -2,6 +2,27 @@
 
 All notable changes are documented here.
 
+## 0.47.0 — 2026-08-04
+
+- Hardened static package-signature declaration coverage with OPC's required
+  timestamp-property shape. A qualifying package object now requires one direct
+  `ds:SignatureProperty Id="idSignatureTime"` with no attributes other than
+  its required `Id` and `Target`, an empty or root-signature-fragment
+  target, and exactly one attribute-free `opc:SignatureTime` child. That
+  timestamp must contain
+  only attribute-free `opc:Format` then `opc:Value` children; its declared
+  precision and value must match one of OPC's six schema forms.
+- Missing, duplicate, misidentified, mis-targeted, attribute-bearing,
+  malformed, or format/value-mismatched timestamp declarations now leave
+  coverage unavailable rather than lending a malformed package object
+  authority. The check remains a bounded structural parser: DocFence does not
+  verify timestamp accuracy or authority, XMLDSIG digests, signature values,
+  certificates, trust, or Office client behavior.
+- Added regression coverage for every accepted precision and empty target, and
+  for each rejected timestamp topology and value shape. The current official
+  ECMA-376 Part 2 schema bundle and the public USENIX OOXML Signature Security
+  corpus were used for compatibility checks.
+
 ## 0.46.0 — 2026-08-04
 
 - Hardened the static package-signature declaration boundary to OPC's exact

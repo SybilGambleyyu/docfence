@@ -355,6 +355,27 @@ _OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
     "http://schemas.openxmlformats.org/package/2006/digital-signature"
 )
 _OPC_PACKAGE_SPECIFIC_OBJECT_ID: Final = "idPackageObject"
+_OPC_SIGNATURE_TIME_PROPERTY_ID: Final = "idSignatureTime"
+_OPC_SIGNATURE_TIME_VALUE_PATTERNS: Final = {
+    "YYYY": re.compile(r"[0-9]{4}"),
+    "YYYY-MM": re.compile(r"[0-9]{4}-(?:0[1-9]|1[0-2])"),
+    "YYYY-MM-DD": re.compile(r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"),
+    "YYYY-MM-DDThh:mmTZD": re.compile(
+        r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+        r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+        r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
+    ),
+    "YYYY-MM-DDThh:mm:ssTZD": re.compile(
+        r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+        r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"
+        r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
+    ),
+    "YYYY-MM-DDThh:mm:ss.sTZD": re.compile(
+        r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+        r"T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\.[0-9]"
+        r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])"
+    ),
+}
 _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM: Final = (
     "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
 )
@@ -2689,7 +2710,84 @@ def _package_specific_object_manifest(root: ET.Element) -> ET.Element | None:
         (_XMLDSIG_NAMESPACE, "SignatureProperties"),
     ]:
         return None
-    return children[0]
+    manifest, signature_properties = children
+    if not _has_valid_opc_signature_time_property(
+        signature_properties,
+        root.attrib.get("Id"),
+    ):
+        return None
+    return manifest
+
+
+def _has_valid_opc_signature_time_property(
+    signature_properties: ET.Element,
+    signature_id: str | None,
+) -> bool:
+    """Require OPC's fixed package-object signature-time declaration."""
+
+    properties = list(signature_properties)
+    if (
+        not _has_only_whitespace_interstitial_text(signature_properties)
+        or len(properties) != 1
+        or _qualified_name(properties[0].tag)
+        != (_XMLDSIG_NAMESPACE, "SignatureProperty")
+    ):
+        return False
+
+    signature_property = properties[0]
+    signature_time_children = list(signature_property)
+    if (
+        signature_property.attrib.get("Id") != _OPC_SIGNATURE_TIME_PROPERTY_ID
+        or set(signature_property.attrib) != {"Id", "Target"}
+        or not _has_only_whitespace_interstitial_text(signature_property)
+        or len(signature_time_children) != 1
+        or _qualified_name(signature_time_children[0].tag)
+        != (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "SignatureTime")
+    ):
+        return False
+
+    signature_target = signature_property.attrib["Target"]
+    if signature_target and (
+        not signature_id or signature_target != f"#{signature_id}"
+    ):
+        return False
+
+    signature_time = signature_time_children[0]
+    children = list(signature_time)
+    if (
+        signature_time.attrib
+        or not _has_only_whitespace_interstitial_text(signature_time)
+        or [_qualified_name(child.tag) for child in children]
+        != [
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "Format"),
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "Value"),
+        ]
+    ):
+        return False
+
+    time_format, time_value = children
+    format_value = time_format.text
+    if (
+        time_format.attrib
+        or list(time_format)
+        or format_value not in _OPC_SIGNATURE_TIME_VALUE_PATTERNS
+        or time_value.attrib
+        or list(time_value)
+        or time_value.text is None
+    ):
+        return False
+    return (
+        _OPC_SIGNATURE_TIME_VALUE_PATTERNS[format_value].fullmatch(time_value.text)
+        is not None
+    )
+
+
+def _has_only_whitespace_interstitial_text(element: ET.Element) -> bool:
+    """Return whether an element's own text and child tails are whitespace."""
+
+    return not (element.text or "").strip() and not any(
+        (child.tail or "").strip() for child in element
+    )
 
 
 def _signature_fragment_identifier(uri: str | None) -> str | None:

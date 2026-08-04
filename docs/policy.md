@@ -791,6 +791,17 @@ children are exactly one `ds:Manifest` followed by one
 package-specific manifest is resolved; a missing or nonstandard object,
 missing or extra direct child, duplicate object, or duplicate binding is not
 combined with another manifest and leaves declaration coverage unavailable.
+Its direct `ds:SignatureProperties` must in turn contain exactly one direct
+`ds:SignatureProperty` whose only attributes are
+`Id="idSignatureTime"` and `Target`. The target is either empty or the
+direct local fragment for the root `ds:Signature/@Id`. That property must
+contain exactly one attribute-free `opc:SignatureTime`, which in turn has
+only attribute-free `opc:Format` then `opc:Value` children. DocFence
+recognizes the six OPC schema time precisions and requires the stored value's
+lexical shape to match its declared precision. Missing, duplicate,
+mis-targeted, or malformed timestamp declarations leave coverage unavailable;
+this recognizes only the claimed timestamp's stored syntax, not its accuracy,
+source, authority, or cryptographic validity.
 The binding check uses its direct URI fragment only: DocFence does not parse
 or validate that reference's digest or transforms. Supported manifest part
 references use an exact local part URI plus case-sensitive matching content

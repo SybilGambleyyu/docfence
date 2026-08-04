@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.46 focuses on Office Open XML Word documents and templates and
+Version 0.47 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -1095,8 +1095,12 @@ avoids making the CLI's safety contract depend on a broad YAML loader.
 handoff that is expected to retain package signatures: it requires every
 recognized XML signature to provide OPC's one `idPackageObject`
 package-specific object, exactly one binding `SignedInfo` reference, and the
-single manifest they define. Those declarations must cover the bounded Word
-scope described above. It is intentionally incompatible in purpose with
+single manifest they define. Its package object must also carry OPC's required
+`idSignatureTime` property with an empty or root-signature target and a
+well-formed `SignatureTime` format/value pair. Those declarations must cover
+the bounded Word scope described above. This is only a structural check of a
+claimed timestamp, never an assertion of its accuracy, authority, or signature
+validity. It is intentionally incompatible in purpose with
 `require_no_package_digital_signatures`, which instead rejects all stored
 package-signature material. `no_package_signature_coverage_changes` protects
 an approved declaration-coverage baseline without claiming signature validity.
@@ -1256,8 +1260,10 @@ keeps them private while comparing their stored state.
 The package-signature boundary follows the OPC
 [digital-signature model](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/opc/open-packaging-conventions-overview)
 and the [ECMA-376 Open Packaging Conventions standard](https://ecma-international.org/publications-and-standards/standards/ecma-376/),
-including its [package-specific object](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_Package_Specific_topic_ID0EWFEK.html)
+including its [package-specific object](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_Package_Specific_topic_ID0EWFEK.html),
 [SignedInfo binding](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_SignedInfo_topic_ID0ECHBK.html),
+its [signature-property constraints](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_Modifications_topic_ID0E3RAK.html),
+the [current ECMA-376 Part 2 schema bundle](https://ecma-international.org/wp-content/uploads/ECMA-376-2_5th_edition_december_2021.zip),
 and [relationship transform](https://c-rex.net/samples/ooxml/e1/Part2/OOXML_P2_Open_Packaging_Conventions_Digital_topic_ID0EHROM.html).
 Microsoft explicitly leaves signer identity and trust decisions to the package
 consumer; DocFence therefore inventories structure without claiming signature

@@ -201,10 +201,16 @@ A separate static declaration audit follows only one direct
 `ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
 direct `SignedInfo` local-fragment reference to that object. It resolves only
 that package-specific manifest, using the binding reference's direct URI
-fragment without parsing or validating its digest or transforms. From that
-bounded link, it resolves exact part URI/content-type references with
-case-sensitive content-type matching. Before a manifest reference is credited,
-its direct XMLDSIG children must be optional
+fragment without parsing or validating its digest or transforms. Its direct
+`SignatureProperties` must have one `SignatureProperty` with the fixed
+`idSignatureTime` ID and an empty or root-`Signature/@Id` fragment target.
+That property must contain only an attribute-free `opc:SignatureTime` with
+attribute-free `opc:Format` then `opc:Value` children; the value must match
+one of OPC's six declared time-precision forms. This is a bounded syntax check
+for a claimed timestamp, not an assertion about timestamp accuracy, authority,
+or signature validity. From that bounded link, it resolves exact part
+URI/content-type references with case-sensitive content-type matching. Before a
+manifest reference is credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. It then

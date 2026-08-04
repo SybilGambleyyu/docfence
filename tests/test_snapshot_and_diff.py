@@ -4041,6 +4041,154 @@ rules:
         assert marker not in rendered
 
 
+def test_package_signature_coverage_requires_opc_signature_time_shape(
+    tmp_path,
+) -> None:
+    def signature_time(
+        time_format: str = "YYYY-MM-DDThh:mm:ssTZD",
+        time_value: str = "1980-01-01T00:00:00Z",
+        *,
+        attributes: str = "",
+        children: str | None = None,
+    ) -> str:
+        if children is None:
+            children = (
+                f"<opc:Format>{time_format}</opc:Format>"
+                f"<opc:Value>{time_value}</opc:Value>"
+            )
+        return f"<opc:SignatureTime{attributes}>{children}</opc:SignatureTime>"
+
+    def signature_property(
+        *,
+        property_id: str = "idSignatureTime",
+        target: str | None = "#idPackageSignature",
+        signature_time_markup: str | None = None,
+    ) -> str:
+        target_attribute = "" if target is None else f' Target="{target}"'
+        if signature_time_markup is None:
+            signature_time_markup = signature_time()
+        return (
+            f'<ds:SignatureProperty Id="{property_id}"{target_attribute}>'
+            f"{signature_time_markup}"
+            "</ds:SignatureProperty>"
+        )
+
+    def signature_properties(*properties: str) -> str:
+        return f"<ds:SignatureProperties>{''.join(properties)}</ds:SignatureProperties>"
+
+    valid_time_values = {
+        "YYYY": "1980",
+        "YYYY-MM": "1980-01",
+        "YYYY-MM-DD": "1980-01-01",
+        "YYYY-MM-DDThh:mmTZD": "1980-01-01T00:00Z",
+        "YYYY-MM-DDThh:mm:ssTZD": "1980-01-01T00:00:00Z",
+        "YYYY-MM-DDThh:mm:ss.sTZD": "1980-01-01T00:00:00.0Z",
+    }
+    valid_cases = [
+        (
+            "empty-target",
+            signature_properties(signature_property(target="")),
+        ),
+        *[
+            (
+                time_format,
+                signature_properties(
+                    signature_property(
+                        signature_time_markup=signature_time(time_format, time_value)
+                    )
+                ),
+            )
+            for time_format, time_value in valid_time_values.items()
+        ],
+    ]
+    for case, markup in valid_cases:
+        document = tmp_path / f"signature-time-valid-{case}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_signature_properties_markup=markup,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (1, 0)
+
+    invalid_cases = {
+        "missing-property": signature_properties(),
+        "nonstandard-id": signature_properties(
+            signature_property(property_id="idSignatureDetails")
+        ),
+        "missing-target": signature_properties(signature_property(target=None)),
+        "wrong-target": signature_properties(signature_property(target="#idOther")),
+        "missing-time": signature_properties(
+            signature_property(signature_time_markup="")
+        ),
+        "extra-property": signature_properties(
+            signature_property(),
+            signature_property(property_id="idOtherProperty"),
+        ),
+        "time-attribute": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time(attributes=' Unexpected="1"')
+            )
+        ),
+        "missing-value": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time(
+                    children="<opc:Format>YYYY</opc:Format>"
+                )
+            )
+        ),
+        "extra-time-child": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time(
+                    children=(
+                        "<opc:Format>YYYY</opc:Format><opc:Value>1980</opc:Value>"
+                        "<opc:Unexpected/>"
+                    )
+                )
+            )
+        ),
+        "format-attribute": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time(
+                    children=(
+                        '<opc:Format Unexpected="1">YYYY</opc:Format>'
+                        "<opc:Value>1980</opc:Value>"
+                    )
+                )
+            )
+        ),
+        "nonstandard-format": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time(
+                    "YYYY-MM-DDThh:mm:ss.SSSTZD",
+                    "1980-01-01T00:00:00.000Z",
+                )
+            )
+        ),
+        "mismatched-value": signature_properties(
+            signature_property(signature_time_markup=signature_time("YYYY", "1980-01"))
+        ),
+        "invalid-value": signature_properties(
+            signature_property(
+                signature_time_markup=signature_time("YYYY-MM", "1980-13")
+            )
+        ),
+    }
+    for case, markup in invalid_cases.items():
+        document = tmp_path / f"signature-time-invalid-{case}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_signature_properties_markup=markup,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (0, 1)
+
+
 def test_word_protection_inventory_is_private_and_semantic(tmp_path) -> None:
     before = tmp_path / "before.docx"
     after = tmp_path / "after.docx"
@@ -8370,6 +8518,7 @@ def _write_package_signature_coverage_document(
     include_duplicate_word_relationship_manifest_reference: bool = False,
     package_object_id: str = "idPackageObject",
     include_package_signature_properties: bool = True,
+    package_signature_properties_markup: str | None = None,
     include_extra_package_object_child: bool = False,
     include_duplicate_package_object: bool = False,
     include_duplicate_package_object_reference: bool = False,
@@ -8455,7 +8604,7 @@ def _write_package_signature_coverage_document(
         if include_duplicate_package_object_reference
         else ""
     )
-    package_signature_properties = (
+    default_package_signature_properties = (
         "<ds:SignatureProperties><ds:SignatureProperty "
         'Id="idSignatureTime" Target="#idPackageSignature">'
         "<opc:SignatureTime><opc:Format>YYYY-MM-DDThh:mm:ssTZD</opc:Format>"
@@ -8463,6 +8612,11 @@ def _write_package_signature_coverage_document(
         "</opc:SignatureTime></ds:SignatureProperty></ds:SignatureProperties>"
         if include_package_signature_properties
         else ""
+    )
+    package_signature_properties = (
+        default_package_signature_properties
+        if package_signature_properties_markup is None
+        else package_signature_properties_markup
     )
     extra_package_object_child = (
         "<opc:UnexpectedPackageObjectChild/>"
