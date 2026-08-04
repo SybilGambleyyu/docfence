@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.42.0 — 2026-08-04
+
+- Hardened the static package-signature declaration audit to require the OPC
+  relationship-transform sequence: one direct `ds:Transforms` list containing
+  only the supported relationship and XML Canonicalization algorithms, exactly
+  one relationship transform, and a canonicalization transform immediately
+  after it. Both OPC XML Canonicalization forms are recognized.
+- Missing, misordered, or unsupported relationship-transform sequences now
+  remain aggregate-only unsupported references rather than being credited with
+  declaration coverage. This is still a bounded static parser: DocFence does
+  not recompute transforms or digests, validate XMLDSIG values or certificates,
+  establish trust, or predict Office client behavior.
+- Added regression coverage for ordinary and comment-preserving XML
+  canonicalization, missing and misordered canonicalization, unsupported
+  trailing transforms, policy failures, and private-report redaction.
+
 ## 0.41.0 — 2026-08-04
 
 - Corrected static package-signature declaration coverage for the standard OPC

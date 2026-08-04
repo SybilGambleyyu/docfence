@@ -357,6 +357,16 @@ _OPC_DIGITAL_SIGNATURE_NAMESPACE: Final = (
 _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM: Final = (
     "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
 )
+_XML_CANONICALIZATION_TRANSFORM_ALGORITHMS: Final = frozenset(
+    {
+        "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+        "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments",
+    }
+)
+_OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS: Final = (
+    _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
+    | frozenset({_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM})
+)
 _PACKAGE_RELATIONSHIP_CONTENT_TYPE: Final = (
     "application/vnd.openxmlformats-package.relationships+xml"
 )
@@ -2740,17 +2750,60 @@ def _relationship_manifest_reference_coverage(
     source_part: str,
     relationships: dict[str, _Relationship],
 ) -> _ManifestReferenceResolution:
-    """Resolve declared relationship-transform selectors without hashing XML."""
+    """Resolve a bounded, standard OPC relationship-transform declaration.
 
-    relationship_transforms = [
-        transform
-        for transforms in reference
-        if _qualified_name(transforms.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
-        for transform in transforms
-        if _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
-        and transform.attrib.get("Algorithm") == _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+    This remains a static selector audit rather than XMLDSIG verification.  It
+    nevertheless requires the OPC transform sequence that gives those
+    selectors their defined input: one direct relationship transform, followed
+    immediately by one of OPC's two supported XML canonicalization transforms.
+    """
+
+    transforms_elements = [
+        child
+        for child in reference
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
     ]
-    if len(relationship_transforms) != 1:
+    if len(transforms_elements) != 1:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+
+    transforms = list(transforms_elements[0])
+    if not transforms or any(
+        _qualified_name(transform.tag) != (_XMLDSIG_NAMESPACE, "Transform")
+        or transform.attrib.get("Algorithm")
+        not in _OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS
+        for transform in transforms
+    ):
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+
+    relationship_transform_indexes = [
+        index
+        for index, transform in enumerate(transforms)
+        if transform.attrib.get("Algorithm") == _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+    ]
+    if len(relationship_transform_indexes) != 1:
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
+
+    relationship_transform_index = relationship_transform_indexes[0]
+    if (
+        relationship_transform_index + 1 >= len(transforms)
+        or transforms[relationship_transform_index + 1].attrib.get("Algorithm")
+        not in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
+    ):
         return _ManifestReferenceResolution(
             covered_part_name=None,
             covered_relationship_ids=frozenset(),
@@ -2761,7 +2814,7 @@ def _relationship_manifest_reference_coverage(
     selected_relationship_ids: set[tuple[str, str]] = set()
     unresolved_reference_count = 0
     unsupported_reference_count = 0
-    selectors = list(relationship_transforms[0])
+    selectors = list(transforms[relationship_transform_index])
     if not selectors:
         unsupported_reference_count += 1
     for selector in selectors:

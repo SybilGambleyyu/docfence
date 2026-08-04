@@ -788,9 +788,12 @@ For every recognized XML signature part, DocFence requires at least one direct
 `ds:Object` with exactly one direct `ds:Manifest`. It resolves the references
 from each such bound manifest only. Supported part references use an exact
 local part URI plus case-sensitive matching content type. Supported relationship
-references use the standard OPC relationship transform and exact
-`RelationshipReference/@SourceId` or `RelationshipsGroupReference/@SourceType`
-selectors. An unsupported URI or relationship-transform/selector
+references use one direct `ds:Transforms` list containing only the supported
+OPC relationship and XML Canonicalization algorithms, with exactly one
+relationship transform immediately followed by XML Canonicalization (with or
+without comments), and exact `RelationshipReference/@SourceId` or
+`RelationshipsGroupReference/@SourceType` selectors. An unsupported URI or
+relationship-transform/selector
 syntax is not assumed to be coverage: it is reported only as an aggregate
 unsupported reference; a missing member, content-type mismatch, missing
 relationship item, or selector that selects no stored relationship is reported

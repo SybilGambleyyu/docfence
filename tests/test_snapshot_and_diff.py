@@ -265,6 +265,12 @@ _OPC_DIGITAL_SIGNATURE_NAMESPACE = (
 _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM = (
     "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
 )
+_XML_CANONICALIZATION_TRANSFORM_ALGORITHM = (
+    "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+)
+_XML_CANONICALIZATION_WITH_COMMENTS_TRANSFORM_ALGORITHM = (
+    "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"
+)
 _PACKAGE_RELATIONSHIP_CONTENT_TYPE = (
     "application/vnd.openxmlformats-package.relationships+xml"
 )
@@ -3546,6 +3552,15 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     nonstandard_source_type_selector = (
         tmp_path / "nonstandard-source-type-selector.docx"
     )
+    canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
+    missing_relationship_canonicalization = (
+        tmp_path / "missing-relationship-canonicalization.docx"
+    )
+    misordered_relationship_canonicalization = (
+        tmp_path / "misordered-relationship-canonicalization.docx"
+    )
+    unsupported_trailing_transform = tmp_path / "unsupported-trailing-transform.docx"
+    multiple_transforms_elements = tmp_path / "multiple-transforms-elements.docx"
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -3589,6 +3604,26 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         include_duplicate_style_relationship=True,
         select_word_relationship_by_type=True,
         use_nonstandard_source_type_selector=True,
+    )
+    _write_package_signature_coverage_document(
+        canonicalization_with_comments,
+        word_relationship_transform_mode="canonicalization_with_comments",
+    )
+    _write_package_signature_coverage_document(
+        missing_relationship_canonicalization,
+        word_relationship_transform_mode="missing_canonicalization",
+    )
+    _write_package_signature_coverage_document(
+        misordered_relationship_canonicalization,
+        word_relationship_transform_mode="canonicalization_before_relationship",
+    )
+    _write_package_signature_coverage_document(
+        unsupported_trailing_transform,
+        word_relationship_transform_mode="unsupported_trailing_transform",
+    )
+    _write_package_signature_coverage_document(
+        multiple_transforms_elements,
+        word_relationship_transform_mode="multiple_transforms_elements",
     )
 
     expected_fully_declared = {
@@ -3692,6 +3727,28 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         ).package_signature_coverage.unsupported_package_manifest_reference_count
         == 1
     )
+    assert (
+        load_snapshot(canonicalization_with_comments).public_dict()[
+            "package_signature_coverage"
+        ]
+        == expected_fully_declared
+    )
+    expected_unsupported_relationship_transform = {
+        **expected_fully_declared,
+        "declared_covered_word_relationship_count": 0,
+        "declared_uncovered_word_relationship_count": 1,
+        "unsupported_package_manifest_reference_count": 1,
+    }
+    for document in (
+        missing_relationship_canonicalization,
+        misordered_relationship_canonicalization,
+        unsupported_trailing_transform,
+        multiple_transforms_elements,
+    ):
+        assert (
+            load_snapshot(document).public_dict()["package_signature_coverage"]
+            == expected_unsupported_relationship_transform
+        )
 
     policy_path.write_text(
         """version: 1
@@ -3738,6 +3795,18 @@ rules:
             diff_documents(fully_declared, unsupported_manifest_reference), policy
         ).findings
     } == {"DFP092", "DFP093"}
+    for document in (
+        missing_relationship_canonicalization,
+        misordered_relationship_canonicalization,
+        unsupported_trailing_transform,
+        multiple_transforms_elements,
+    ):
+        assert {
+            finding.rule_id
+            for finding in apply_policy(
+                diff_documents(fully_declared, document), policy
+            ).findings
+        } == {"DFP092", "DFP093"}
 
     rendered = "\n".join(
         (
@@ -8089,6 +8158,7 @@ def _write_package_signature_coverage_document(
     selected_word_relationship_id: str = "rIdStyles",
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
+    word_relationship_transform_mode: str = "standard",
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -8125,13 +8195,15 @@ def _write_package_signature_coverage_document(
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
         "<ds:DigestValue>PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
     )
+    root_relationship_transforms = _package_signature_relationship_transforms(
+        '<opc:RelationshipReference SourceId="rIdDocument"/>',
+        mode="standard",
+    )
     root_relationship_manifest_reference = (
         f'<ds:Reference URI="/_rels/.rels?ContentType='
         f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
-        f'<ds:Transforms><ds:Transform Algorithm="'
-        f'{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
-        '<opc:RelationshipReference SourceId="rIdDocument"/>'
-        f"</ds:Transform></ds:Transforms>{digest_reference}</ds:Reference>"
+        f"{root_relationship_transforms}"
+        f"{digest_reference}</ds:Reference>"
     )
     if select_word_relationship_by_type:
         selector_name = (
@@ -8146,13 +8218,15 @@ def _write_package_signature_coverage_document(
         word_relationship_selector = (
             f'<opc:RelationshipReference SourceId="{selected_word_relationship_id}"/>'
         )
+    word_relationship_transforms = _package_signature_relationship_transforms(
+        word_relationship_selector,
+        mode=word_relationship_transform_mode,
+    )
     word_relationship_manifest_reference = (
         f'<ds:Reference URI="/word/_rels/document.xml.rels?ContentType='
         f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
-        f'<ds:Transforms><ds:Transform Algorithm="'
-        f'{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
-        f"{word_relationship_selector}"
-        f"</ds:Transform></ds:Transforms>{digest_reference}</ds:Reference>"
+        f"{word_relationship_transforms}"
+        f"{digest_reference}</ds:Reference>"
     )
     unresolved_manifest_reference = (
         '<ds:Reference URI="/word/missing.xml?ContentType=application/xml">'
@@ -8239,6 +8313,49 @@ def _write_package_signature_coverage_document(
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():
             archive.writestr(name, payload)
+
+
+def _package_signature_relationship_transforms(
+    selector: str,
+    *,
+    mode: str,
+) -> str:
+    """Build standard and intentionally malformed OPC transform sequences."""
+
+    relationship_transform = (
+        f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
+        f"{selector}</ds:Transform>"
+    )
+    canonicalization_transform = (
+        f'<ds:Transform Algorithm="{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}"/>'
+    )
+    canonicalization_with_comments_transform = (
+        '<ds:Transform Algorithm="'
+        f'{_XML_CANONICALIZATION_WITH_COMMENTS_TRANSFORM_ALGORITHM}"/>'
+    )
+    unsupported_transform = '<ds:Transform Algorithm="urn:docfence:test:unsupported"/>'
+
+    if mode == "standard":
+        transforms = relationship_transform + canonicalization_transform
+    elif mode == "canonicalization_with_comments":
+        transforms = relationship_transform + canonicalization_with_comments_transform
+    elif mode == "missing_canonicalization":
+        transforms = relationship_transform
+    elif mode == "canonicalization_before_relationship":
+        transforms = canonicalization_transform + relationship_transform
+    elif mode == "unsupported_trailing_transform":
+        transforms = (
+            relationship_transform + canonicalization_transform + unsupported_transform
+        )
+    elif mode == "multiple_transforms_elements":
+        return (
+            f"<ds:Transforms>{relationship_transform}{canonicalization_transform}"
+            f"</ds:Transforms><ds:Transforms>{canonicalization_transform}"
+            "</ds:Transforms>"
+        )
+    else:
+        raise ValueError(f"unsupported relationship transform fixture mode: {mode}")
+    return f"<ds:Transforms>{transforms}</ds:Transforms>"
 
 
 def _write_word_protection_document(
