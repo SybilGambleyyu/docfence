@@ -21,7 +21,7 @@ properties, Microsoft Purview sensitivity-label metadata, mail-merge
 configuration and recipient-data state, custom XSLT-on-single-XML-save
 configuration, attached custom XML schema declarations, automatic
 field-recalculation-on-open settings, OPC package
-digital-signature material,
+digital-signature material, relationship-bound OPC package thumbnail images,
 Word editing/write-protection state, document-variable state, editable-range
 permission markup, document-variable field references, and
 password-verifier material,
@@ -45,6 +45,8 @@ action IDs, extension data, custom MIP attributes, and content-marking strings
 are private too.
 Package signer/certificate material, signing times and comments, signature
 values, signed-reference targets, and signature-part paths are private too.
+OPC package thumbnail image bytes, relationship sources and targets, content
+types, and part paths are private too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are private too.
 Word document-variable names, values, and Settings-part paths are private too.
@@ -105,7 +107,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.33 focuses on Office Open XML Word documents and templates and
+Version 0.34 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -129,8 +131,9 @@ deliberately keeps a small, inspectable contract:
   external-source field,
   content-control, external-relationship,
   custom-XML, macro,
-  core/extended/custom document-property, sensitivity-label metadata, OPC
-  package digital-signature material, Word editing/write-protection,
+  core/extended/custom document-property, relationship-bound OPC package
+  thumbnail image, sensitivity-label metadata, OPC package digital-signature
+  material, Word editing/write-protection,
   document-variable state and `DOCVARIABLE` field references,
   editable-range permission markup,
   mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
@@ -147,7 +150,7 @@ deliberately keeps a small, inspectable contract:
 - `w:altChunk` anchors paired with an internal OOXML alternative-format-import
   relationship and its stored payload;
 - a generic alert for changed package payload outside those specialized
-  inventories (for example, media, thumbnails, or other opaque parts);
+  inventories (for example, media or other opaque parts);
 - JSON, Markdown, and SARIF output with content redaction by design.
 
 The reader rejects symlinks, encrypted ZIP entries, duplicate or colliding
@@ -200,6 +203,23 @@ property elements containing stored text, including automatic dates, statistics,
 and application metadata. The custom count reports stored custom-property
 definitions even when a value is empty. It does not decide whether any value is
 personal, confidential, user-authored, or safe to share.
+
+OPC package thumbnails have their own inventory because a generic opaque-payload
+change cannot distinguish a relationship-bound thumbnail image from unrelated
+package residue. DocFence recognizes only the exact standard thumbnail
+relationship type, in Transitional or Strict OOXML, from either the package or
+a stored part. Each recognized relationship must be internal, resolve to a
+stored target with an `image/` content type, and be the sole thumbnail
+relationship for its source; a thumbnail target cannot have a relationship part
+of its own. Malformed recognized topology fails closed. A filename such as
+`docProps/thumbnail.png` without the standard relationship stays a generic
+unclassified payload rather than becoming a guessed thumbnail.
+
+Reports expose only thumbnail relationship and distinct-part counts. Image
+bytes, relationship sources and targets, content types, and part paths remain
+inside a private digest, so a same-count image mutation remains review-visible.
+DocFence does not decode, render, classify, or otherwise interpret an image,
+and it does not predict whether Word, Explorer, or another client will show it.
 
 Sensitivity-label metadata has a separate inventory because a general custom
 property count does not describe the governance state that Office can retain.
@@ -837,6 +857,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_hidden_text_style_declarations: true
   require_no_hidden_paragraph_marks: true
   require_no_custom_xml_data: true
+  require_no_package_thumbnails: true
   require_no_embedded_objects: true
   require_no_alternative_format_imports: true
   require_no_custom_document_properties: true
@@ -874,6 +895,7 @@ later mutation:
   no_embedded_object_payload_changes: true
   no_alternative_format_import_changes: true
   no_document_property_changes: true
+  no_package_thumbnail_changes: true
   no_mail_merge_changes: true
   no_save_through_xslt_changes: true
   no_attached_custom_xml_schema_changes: true
@@ -914,6 +936,8 @@ XML values, document-property names and values, mail-merge configuration and
 recipient data, XSLT transform targets and solution identifiers, data-binding
 XPath expressions, prefix mappings, storage IDs,
 referenced custom XML values, macro bytes, embedded and imported payload bytes,
+relationship-bound OPC thumbnail image bytes, relationship sources and targets,
+content types, and part paths,
 external template/subdocument/frame-source targets, and all fingerprints.
 Attached custom XML schema namespace identifiers and Settings-part paths remain
 private too.
@@ -957,6 +981,12 @@ the Open XML SDK's [`w:altChunk` contract](https://learn.microsoft.com/en-us/dot
 and its package-part model for [embedded and import parts](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.packaging.maindocumentpart?view=openxml-3.0.1).
 Microsoft's [document-property guidance](https://support.microsoft.com/en-us/office/view-or-change-the-properties-for-an-office-file-21d604c2-481e-4379-8e54-1dd4622c6b75)
 and Document Inspector coverage inform the metadata boundary.
+The OPC thumbnail boundary follows the Open XML SDK's
+[`AddThumbnailPart` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.packaging.wordprocessingdocument.addthumbnailpart?view=openxml-2.20.0)
+and the OOXML [Thumbnail Part contract](https://ooxml.info/docs/15/15.2/15.2.16/),
+which defines relationship-bound, internal image parts and the per-source
+thumbnail relationship limit. DocFence records that stored topology without
+decoding an image or asserting how a document client will display it.
 The mail-merge boundary follows the Open XML SDK's
 [`w:odso` model](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.datasourceobject?view=openxml-3.0.1)
 and Microsoft's documentation that accepting a linked mail-merge source can

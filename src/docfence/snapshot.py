@@ -35,6 +35,7 @@ from docfence.models import (
     MailMergeInventory,
     ModernCommentMetadataInventory,
     PackageDigitalSignatureInventory,
+    PackageThumbnailInventory,
     PersonalInformationRemovalOnSaveInventory,
     RelationshipInventory,
     RevisionInventory,
@@ -249,6 +250,18 @@ _DOCUMENT_PROPERTY_ROOTS: Final = {
         "Properties",
     ),
 }
+_PACKAGE_THUMBNAIL_RELATIONSHIP_TYPES: Final = frozenset(
+    {
+        (
+            "http://schemas.openxmlformats.org/package/2006/relationships/"
+            "metadata/thumbnail"
+        ),
+        (
+            "http://purl.oclc.org/ooxml/officedocument/relationships/"
+            "metadata/thumbnail"
+        ),
+    }
+)
 _SENSITIVITY_LABEL_NAMESPACE: Final = (
     "http://schemas.microsoft.com/office/2020/mipLabelMetadata"
 )
@@ -849,6 +862,13 @@ def _load_package(
             document_properties, document_property_parts = _document_property_inventory(
                 archive, members, relationship_maps, limits
             )
+            package_thumbnails, package_thumbnail_parts = _package_thumbnail_inventory(
+                archive,
+                members,
+                content_types,
+                relationship_maps,
+                limits,
+            )
             sensitivity_labels, sensitivity_label_parts = _sensitivity_label_inventory(
                 archive, members, content_types, relationship_maps, limits
             )
@@ -1038,6 +1058,7 @@ def _load_package(
                     embedded_object_parts
                     | alternative_format_import_parts
                     | document_property_parts
+                    | package_thumbnail_parts
                     | sensitivity_label_parts
                     | package_digital_signature_parts
                     | document_settings_parts
@@ -1071,6 +1092,7 @@ def _load_package(
         embedded_objects=embedded_objects,
         alternative_format_imports=alternative_format_imports,
         document_properties=document_properties,
+        package_thumbnails=package_thumbnails,
         sensitivity_labels=sensitivity_labels,
         package_digital_signatures=package_digital_signatures,
         word_protection=word_protection,
@@ -1531,6 +1553,68 @@ def _custom_property_count(root: ET.Element) -> int:
 
 def _element_has_text_value(element: ET.Element) -> bool:
     return any((value or "").strip() for value in element.itertext())
+
+
+def _package_thumbnail_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    content_types: dict[str, str],
+    relationship_maps: dict[str, dict[str, _Relationship]],
+    limits: PackageLimits,
+) -> tuple[PackageThumbnailInventory, frozenset[str]]:
+    """Inventory only standard relationship-bound OPC thumbnail image parts.
+
+    Thumbnail image bytes remain opaque.  A conventional filename alone is not
+    enough: the package must declare one exact thumbnail relationship per
+    source, the relationship must be internal, and the target must have an
+    image content type and no relationship part of its own.
+    """
+
+    records: list[tuple[str, ...]] = []
+    part_names: set[str] = set()
+    relationship_counts: dict[str, int] = {}
+    for source_part, relationships in sorted(relationship_maps.items()):
+        for relationship in relationships.values():
+            if (
+                relationship.relationship_type.casefold()
+                not in _PACKAGE_THUMBNAIL_RELATIONSHIP_TYPES
+            ):
+                continue
+            if source_part != "/" and source_part not in members:
+                raise DocumentFormatError("package thumbnail relationship is invalid")
+            relationship_counts[source_part] = (
+                relationship_counts.get(source_part, 0) + 1
+            )
+            if relationship_counts[source_part] > 1:
+                raise DocumentFormatError("package thumbnail relationship is invalid")
+            if relationship.target_mode.casefold() != "internal":
+                raise DocumentFormatError("package thumbnail relationship is invalid")
+            target = _internal_relationship_target(source_part, relationship, members)
+            if target is None:
+                raise DocumentFormatError("package thumbnail relationship is invalid")
+            content_type = content_types.get(target, "").casefold()
+            if not content_type.startswith("image/") or target in relationship_maps:
+                raise DocumentFormatError("package thumbnail part is invalid")
+            records.append(
+                (
+                    "package_thumbnail",
+                    source_part,
+                    content_type,
+                    *relationship.canonical_value(),
+                )
+            )
+            part_names.add(target)
+
+    return (
+        PackageThumbnailInventory(
+            thumbnail_relationship_count=len(records),
+            thumbnail_part_count=len(part_names),
+            signature=_payload_inventory_signature(
+                records, frozenset(part_names), archive, members, limits
+            ),
+        ),
+        frozenset(part_names),
+    )
 
 
 def _sensitivity_label_inventory(

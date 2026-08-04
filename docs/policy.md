@@ -101,6 +101,8 @@ starter policy.
 | `require_personal_information_removal_on_save` | `DFP077` | Candidate does not store an enabled personal-information-removal-on-save request | Candidate |
 | `no_personal_information_removal_on_save_changes` | `DFP078` | Personal-information-removal-on-save inventory differs | Comparison |
 | `require_no_custom_xml_data` | `DFP079` | Candidate has stored conventional custom-XML package parts | Candidate |
+| `require_no_package_thumbnails` | `DFP080` | Candidate has relationship-bound OPC package thumbnail images | Candidate |
+| `no_package_thumbnail_changes` | `DFP081` | OPC package thumbnail inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -130,6 +132,8 @@ does so for an approved custom XSLT-on-single-XML-save configuration.
 custom XML schema declarations.
 `no_field_update_on_open_changes` does so for an approved automatic-field-
 recalculation-on-open setting.
+`no_package_thumbnail_changes` does so for a controlled template that retains
+an approved relationship-bound OPC thumbnail image.
 `no_data_binding_changes` does
 the same for a controlled template whose content controls intentionally map to
 custom XML. `no_external_document_dependency_changes` does the same for a
@@ -604,6 +608,36 @@ for a handoff that must not retain label/tenant/governance metadata.
 Neither rule decrypts IRM-protected content, reads a LabelInfo stream from an
 encrypted storage, resolves a label policy, determines permissions, applies or
 removes labels, or predicts whether an Office client will display a marking.
+
+## OPC package thumbnail scope
+
+An OPC thumbnail is an image part identified by the standard thumbnail
+relationship from either the package or another package part. It is a separate
+handoff and privacy surface from an ordinary embedded document image or a
+filename that merely looks like a thumbnail.
+
+DocFence recognizes only the exact Transitional or Strict standard thumbnail
+relationship types. A recognized relationship can originate in the package
+relationship item or a relationship part for a stored package member. It must
+be internal, resolve to a stored member with an `image/` content type, and be
+the only thumbnail relationship from that source. A recognized thumbnail target
+must not own a Relationships part. Malformed recognized topology fails closed.
+An unreferenced member such as `docProps/thumbnail.png` remains in the generic
+unclassified-payload inventory; DocFence does not infer thumbnail status from a
+path or inspect arbitrary image files.
+
+Public output contains only `thumbnail_relationship_count` and
+`thumbnail_part_count`. Image bytes, relationship IDs, sources and targets,
+content types, part paths, and private fingerprints never leave the process.
+The comparison signature retains the normalized relationship semantics and raw
+image bytes, so a same-count image rewrite remains review-visible while a
+relationship-ID renumbering alone remains quiet.
+
+`require_no_package_thumbnails` fails whenever the candidate has a recognized
+thumbnail part. `no_package_thumbnail_changes` protects an approved stored
+baseline instead. Neither rule decodes, renders, classifies, or otherwise
+interprets an image; searches arbitrary filenames for lookalikes; or predicts
+whether Word, Explorer, or another client will display a thumbnail.
 
 ## OPC package digital-signature scope
 

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.33 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.34 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -9,7 +9,8 @@ following properties:
 - revision markup, comments, modern comment contact/thread/identifier/reaction
   metadata, document tasks, task-pane Office web-extension configuration,
   Office sensitivity-label LabelInfo and legacy custom-property metadata, and
-  OPC package digital-signature origin/XML-signature/certificate material,
+  relationship-bound OPC package thumbnail and digital-signature
+  origin/XML-signature/certificate material,
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
   state, Word Settings XSLT-on-single-XML-save, attached-custom-XML-schema,
@@ -133,6 +134,20 @@ following properties:
   baseline-comparison rule. A document with unbound `customXml/` data triggers
   `DFP079` even against itself, a clean document passes, and JSON, Markdown,
   and SARIF reports omit both visible text and custom-XML payload markers;
+- relationship-bound OPC package thumbnails are separately inventoried from
+  generic opaque payloads. Tests cover package and part relationships,
+  Transitional and Strict relationship forms, same-count image payload and
+  content-type changes,
+  unreferenced filename lookalikes, JSON/Markdown/SARIF redaction, candidate
+  and baseline policy findings, and rejection of external, duplicate, missing,
+  non-image, source-unavailable, or relationship-owning thumbnail topology;
+
+- the release check also profiles the public Open XML SDK
+  [`AcademicLetter` Word template](https://github.com/dotnet/Open-XML-SDK/blob/main/test/DocumentFormat.OpenXml.Tests.Assets/assets/TestDataStorage/v2FxTestFiles/wordprocessing/O12%20templates/AcademicLetter_TP10067035.dotx).
+  It reports one thumbnail relationship and one thumbnail part. This is a
+  package-compatibility smoke test only; it does not inspect the image or
+  assert how any document client will display it;
+
 - `DOCVARIABLE` field references are separately inventoried from generic field
   counts and stored-variable state. Tests cover simple and complete complex
   encodings, quoted names, trailing Word formatting switches, nested/dynamic
@@ -549,6 +564,8 @@ style-inherited effective hiddenness, macro safety, embedded-payload safety,
 malware detection, alternative-format rendering/import behavior, or
 compatibility with every vendor extension. It also does not decide whether a
 document-property value is personal, confidential, intended, or safe to share,
+whether an OPC package thumbnail reflects the document or will be displayed by
+any client,
 or whether stored mail-merge state will run, retrieve data, or select a
 recipient. It does not assert that a recognized external-source field will
 update, reach a target, use a particular argument as a source, or be accepted

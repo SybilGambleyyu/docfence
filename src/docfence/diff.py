@@ -428,6 +428,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.package_thumbnails.signature != after.package_thumbnails.signature:
+        changes.append(
+            Change(
+                kind="package_thumbnail_inventory_changed",
+                message="Stored OPC package thumbnail inventory changed.",
+                details={
+                    "before": before.package_thumbnails.public_dict(),
+                    "after": after.package_thumbnails.public_dict(),
+                },
+            )
+        )
     if before.sensitivity_labels.signature != after.sensitivity_labels.signature:
         changes.append(
             Change(

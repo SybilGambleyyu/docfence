@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.34.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for relationship-bound OPC
+  package thumbnail images. It recognizes only the exact standard Transitional
+  or Strict thumbnail relationship from the package or a stored package part,
+  validates internal image-target topology, and does not infer thumbnails from
+  a filename alone.
+- Added `DFP080` to require a candidate with no recognized package thumbnail
+  images and `DFP081` to protect an approved thumbnail baseline. Image bytes,
+  relationship sources and targets, content types, paths, and digests remain
+  private; same-count image changes stay review-visible.
+- Added regression coverage for package and part relationship sources, Strict
+  relationship forms, unreferenced lookalikes, malformed topology, private
+  output, policy findings, and SARIF output. DocFence does not decode, render,
+  classify, or predict client display of an image.
+
 ## 0.33.0 — 2026-08-04
 
 - Added `DFP079`, an opt-in candidate-state gate for conventional custom XML

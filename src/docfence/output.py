@@ -52,6 +52,7 @@ def _profile_markdown(document: dict[str, object]) -> str:
         )
     )
     lines.extend(_document_property_section(document.get("document_properties", {})))
+    lines.extend(_package_thumbnail_section(document.get("package_thumbnails", {})))
     lines.extend(_sensitivity_label_section(document.get("sensitivity_labels", {})))
     lines.extend(
         _package_digital_signature_section(
@@ -159,6 +160,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_embedded_object_comparison(before, after))
     lines.extend(_alternative_format_import_comparison(before, after))
     lines.extend(_document_property_comparison(before, after))
+    lines.extend(_package_thumbnail_comparison(before, after))
     lines.extend(_sensitivity_label_comparison(before, after))
     lines.extend(_package_digital_signature_comparison(before, after))
     lines.extend(_word_protection_comparison(before, after))
@@ -352,6 +354,10 @@ def _document_property_section(value: object) -> list[str]:
     return _inventory_section("Document property inventory", value)
 
 
+def _package_thumbnail_section(value: object) -> list[str]:
+    return _inventory_section("OPC package thumbnail inventory", value)
+
+
 def _sensitivity_label_section(value: object) -> list[str]:
     return _inventory_section("Office sensitivity-label metadata inventory", value)
 
@@ -508,6 +514,16 @@ def _document_property_comparison(
         "Document property inventory",
         before.get("document_properties", {}),
         after.get("document_properties", {}),
+    )
+
+
+def _package_thumbnail_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "OPC package thumbnail inventory",
+        before.get("package_thumbnails", {}),
+        after.get("package_thumbnails", {}),
     )
 
 

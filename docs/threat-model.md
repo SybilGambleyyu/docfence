@@ -34,6 +34,8 @@ and LabelInfo part paths are sensitive package material too.
 Package-signature signer and certificate material, signature values, algorithm
 identifiers, reference URIs, signing times, comments, provider data,
 relationship IDs, and signature-part paths are sensitive package material too.
+OPC package thumbnail image bytes, relationship IDs, sources and targets,
+content types, and part paths are sensitive package material too.
 Word protection hashes, salts, verifier values, cryptographic provider and
 algorithm fields, and Settings-part paths are sensitive package material too.
 Word document-variable names, values, Settings-part paths, and `DOCVARIABLE`
@@ -119,6 +121,17 @@ validates recognized property roots and fingerprints the full stored structure
 privately. It does not disclose a property name, value, path, relationship
 target, or digest. A count is evidence that stored metadata exists, not a
 classification of the metadata as personal or safe.
+
+Relationship-bound OPC package thumbnails receive a dedicated private-digest
+treatment. DocFence recognizes only the standard Transitional or Strict
+thumbnail relationship type from the package or a stored source part, requires
+an internal stored target with an `image/` content type, limits each source to
+one thumbnail relationship, and rejects a thumbnail target that owns a
+Relationships part. Public output contains only relationship and distinct-part
+counts; bytes, sources, targets, content types, paths, and fingerprints remain
+private. A same-count image rewrite stays review-visible without emitting image
+data. A conventional filename alone is not enough to make a member a thumbnail.
+DocFence never decodes, renders, classifies, or otherwise interprets the image.
 
 The general custom-XML inventory also privately fingerprints each
 non-relationship package member under the conventional `customXml/` folder.
@@ -507,7 +520,10 @@ or business effect. Embedded OLE/package/control evidence and alternative-format
 imports are separate inventories, but they are not decoded, rendered, imported,
 or scanned for malware. Recognized conventional folders make otherwise opaque
 payloads review-visible; they do not prove the payload is valid, safe, or used
-by Word. Core and extended document-property counts include automatic data such
+by Word. Relationship-bound package thumbnail counts are stored-topology
+evidence, not proof that any client will display a thumbnail or that its image
+reflects the current document. DocFence does not decode it or infer a thumbnail
+from an unreferenced filename. Core and extended document-property counts include automatic data such
 as timestamps, statistics, and application information. Their changes can be
 expected on a normal save; DocFence records them without interpreting their
 provenance or sensitivity. The custom-property candidate gate is limited to

@@ -36,6 +36,12 @@ _STRICT_CONTROL_RELATIONSHIP_TYPE = (
 _PACKAGE_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package"
 )
+_PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail"
+)
+_STRICT_PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE = (
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/metadata/thumbnail"
+)
 _DOCUMENT_SETTINGS_RELATIONSHIP_TYPE = (
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings"
 )
@@ -373,6 +379,161 @@ rules:
     assert "DFP079" in {result["ruleId"] for result in sarif["runs"][0]["results"]}
     for marker in ("VISIBLE_DO_NOT_LEAK", "CUSTOM_XML_DATA_DO_NOT_LEAK"):
         assert marker not in rendered
+
+
+def test_package_thumbnail_inventory_is_private_and_requires_valid_topology(
+    tmp_path,
+) -> None:
+    clean = tmp_path / "clean.docx"
+    before = tmp_path / "before.docx"
+    after = tmp_path / "after.docx"
+    content_type_after = tmp_path / "content-type-after.docx"
+    strict = tmp_path / "strict.docx"
+    part_relationship = tmp_path / "part-relationship.docx"
+    unreferenced = tmp_path / "unreferenced.docx"
+    external = tmp_path / "external.docx"
+    duplicate = tmp_path / "duplicate.docx"
+    missing_target = tmp_path / "missing-target.docx"
+    missing_content_type = tmp_path / "missing-content-type.docx"
+    thumbnail_relationships = tmp_path / "thumbnail-relationships.docx"
+    missing_source = tmp_path / "missing-source.docx"
+    policy_path = tmp_path / "docfence.yml"
+    write_document(clean, text="VISIBLE_DO_NOT_LEAK")
+    _write_package_thumbnail_document(
+        before,
+        thumbnail_payload=b"THUMBNAIL_APPROVED_DO_NOT_LEAK",
+    )
+    _write_package_thumbnail_document(
+        after,
+        thumbnail_payload=b"THUMBNAIL_CANDIDATE_DO_NOT_LEAK",
+    )
+    _write_package_thumbnail_document(
+        content_type_after,
+        thumbnail_payload=b"THUMBNAIL_APPROVED_DO_NOT_LEAK",
+        thumbnail_content_type="image/jpeg",
+    )
+    _write_package_thumbnail_document(
+        strict,
+        relationship_type=_STRICT_PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE,
+        relationship_namespace=_STRICT_PACKAGE_RELATIONSHIP_NAMESPACE,
+    )
+    _write_package_thumbnail_document(
+        part_relationship,
+        relationship_source="word/document.xml",
+    )
+    _write_package_thumbnail_document(
+        unreferenced,
+        thumbnail_part_name="docProps/thumbnail.png",
+        include_thumbnail_relationship=False,
+    )
+    _write_package_thumbnail_document(external, target_mode="External")
+    _write_package_thumbnail_document(duplicate, duplicate_thumbnail_relationship=True)
+    _write_package_thumbnail_document(missing_target, include_thumbnail_part=False)
+    _write_package_thumbnail_document(
+        missing_content_type,
+        include_thumbnail_content_type=False,
+    )
+    _write_package_thumbnail_document(
+        thumbnail_relationships,
+        thumbnail_part_has_relationships=True,
+    )
+    _write_package_thumbnail_document(
+        missing_source,
+        relationship_source="word/private/missing.xml",
+    )
+
+    expected_inventory = {
+        "thumbnail_relationship_count": 1,
+        "thumbnail_part_count": 1,
+    }
+    before_snapshot = load_snapshot(before)
+    assert before_snapshot.public_dict()["package_thumbnails"] == expected_inventory
+    assert (
+        load_snapshot(strict).public_dict()["package_thumbnails"]
+        == expected_inventory
+    )
+    assert (
+        load_snapshot(part_relationship).public_dict()["package_thumbnails"]
+        == expected_inventory
+    )
+    assert load_snapshot(unreferenced).public_dict()["package_thumbnails"] == {
+        key: 0 for key in expected_inventory
+    }
+    assert (
+        before_snapshot.unclassified_part_count
+        < load_snapshot(unreferenced).unclassified_part_count
+    )
+
+    report = diff_documents(before, after)
+    assert {change.kind for change in report.changes} == {
+        "package_thumbnail_inventory_changed"
+    }
+    assert {
+        change.kind for change in diff_documents(before, before).changes
+    } == set()
+    content_type_report = diff_documents(before, content_type_after)
+    assert "package_thumbnail_inventory_changed" in {
+        change.kind for change in content_type_report.changes
+    }
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_no_package_thumbnails: true
+  no_package_thumbnail_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    gated = apply_policy(report, policy)
+    assert {finding.rule_id for finding in gated.findings} == {"DFP080", "DFP081"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(content_type_report, policy).findings
+    } == {"DFP080", "DFP081"}
+    assert not apply_policy(diff_documents(clean, clean), policy).findings
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, before), policy).findings
+    } == {"DFP080"}
+
+    rendered = "\n".join(
+        (
+            render_profile(before_snapshot, "json"),
+            render_profile(before_snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_report(content_type_report, "json"),
+            render_report(content_type_report, "markdown"),
+            render_report(content_type_report, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(gated, "sarif"))
+    assert {
+        "DFC_PACKAGE_THUMBNAIL_INVENTORY_CHANGED",
+        "DFP080",
+        "DFP081",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "VISIBLE_DO_NOT_LEAK",
+        "THUMBNAIL_APPROVED_DO_NOT_LEAK",
+        "THUMBNAIL_CANDIDATE_DO_NOT_LEAK",
+        "private/thumbnail.bin",
+        "image/jpeg",
+    ):
+        assert marker not in rendered
+
+    for document in (
+        external,
+        duplicate,
+        missing_target,
+        missing_content_type,
+        thumbnail_relationships,
+        missing_source,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
 
 
 def test_hidden_markup_and_style_declarations_are_separate_and_private(
@@ -6671,6 +6832,110 @@ def _write_sensitivity_label_document(
         entries[additional_label_info_part_name] = label_info_xml
     if include_legacy_properties:
         entries[custom_property_part_name] = legacy_properties_xml
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_package_thumbnail_document(
+    path,
+    *,
+    thumbnail_payload: bytes = b"THUMBNAIL_DO_NOT_LEAK",
+    thumbnail_part_name: str = "private/thumbnail.bin",
+    thumbnail_content_type: str = "image/png",
+    relationship_source: str = "/",
+    relationship_type: str = _PACKAGE_THUMBNAIL_RELATIONSHIP_TYPE,
+    relationship_namespace: str = PR,
+    target_mode: str = "Internal",
+    include_thumbnail_relationship: bool = True,
+    include_thumbnail_part: bool = True,
+    include_thumbnail_content_type: bool = True,
+    duplicate_thumbnail_relationship: bool = False,
+    thumbnail_part_has_relationships: bool = False,
+) -> None:
+    """Write a minimal relationship-bound OPC thumbnail fixture.
+
+    The thumbnail payload is deliberately opaque to the test subject.  The
+    fixture exercises only relationship and content-type topology; DocFence
+    must never render or expose the image bytes or its part name.
+    """
+
+    def relationship_target(
+        source_part: str, target_part: str, relationship_target_mode: str
+    ) -> str:
+        if relationship_target_mode != "Internal":
+            return "https://example.invalid/THUMBNAIL_TARGET_DO_NOT_LEAK"
+        if source_part == "/":
+            return target_part
+        return posixpath.relpath(target_part, start=source_part.rpartition("/")[0])
+
+    def relationship_markup(relationship_id: str) -> str:
+        target_mode_attribute = "" if target_mode == "Internal" else (
+            f' TargetMode="{target_mode}"'
+        )
+        target = relationship_target(
+            relationship_source, thumbnail_part_name, target_mode
+        )
+        return (
+            f'<Relationship Id="{relationship_id}" Type="{relationship_type}" '
+            f'Target="{target}"'
+            f"{target_mode_attribute}/>"
+        )
+
+    def relationship_part_name(source_part: str) -> str:
+        if source_part == "/":
+            return "_rels/.rels"
+        directory, _, basename = source_part.rpartition("/")
+        return f"{directory + '/' if directory else ''}_rels/{basename}.rels"
+
+    relationships_by_source: dict[str, list[str]] = {
+        "/": [
+            '<Relationship Id="rIdOfficeDocument" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+            'relationships/officeDocument" '
+            'Target="word/document.xml"/>'
+        ]
+    }
+    if include_thumbnail_relationship:
+        relationships_by_source.setdefault(relationship_source, []).append(
+            relationship_markup("rIdThumbnail")
+        )
+        if duplicate_thumbnail_relationship:
+            relationships_by_source[relationship_source].append(
+                relationship_markup("rIdThumbnailDuplicate")
+            )
+
+    content_types = [
+        f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+    ]
+    if include_thumbnail_content_type:
+        content_types.append(
+            f'<Override PartName="/{thumbnail_part_name}" '
+            f'ContentType="{thumbnail_content_type}"/>'
+        )
+
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">{"".join(content_types)}</Types>'
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{W}"><w:body><w:p><w:r><w:t>'
+            "VISIBLE_DO_NOT_LEAK"
+            "</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"
+        ).encode(),
+    }
+    if include_thumbnail_part:
+        entries[thumbnail_part_name] = thumbnail_payload
+    if thumbnail_part_has_relationships:
+        entries[relationship_part_name(thumbnail_part_name)] = (
+            f'<Relationships xmlns="{relationship_namespace}"/>'
+        ).encode()
+    for source_part, relationships in relationships_by_source.items():
+        entries[relationship_part_name(source_part)] = (
+            f'<Relationships xmlns="{relationship_namespace}">'
+            f'{"".join(relationships)}</Relationships>'
+        ).encode()
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name, payload in entries.items():

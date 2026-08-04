@@ -118,6 +118,21 @@ class DocumentPropertyInventory:
 
 
 @dataclass(frozen=True)
+class PackageThumbnailInventory:
+    """Relationship-bound OPC thumbnail image evidence, aggregate only."""
+
+    thumbnail_relationship_count: int
+    thumbnail_part_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "thumbnail_relationship_count": self.thumbnail_relationship_count,
+            "thumbnail_part_count": self.thumbnail_part_count,
+        }
+
+
+@dataclass(frozen=True)
 class SensitivityLabelInventory:
     """Stored Microsoft Purview sensitivity-label evidence, aggregate only."""
 
@@ -1224,6 +1239,7 @@ class DocumentSnapshot:
     embedded_objects: EmbeddedObjectInventory
     alternative_format_imports: AlternativeFormatImportInventory
     document_properties: DocumentPropertyInventory
+    package_thumbnails: PackageThumbnailInventory
     sensitivity_labels: SensitivityLabelInventory
     package_digital_signatures: PackageDigitalSignatureInventory
     word_protection: WordProtectionInventory
@@ -1331,6 +1347,7 @@ class DocumentSnapshot:
             "embedded_objects": self.embedded_objects.public_dict(),
             "alternative_format_imports": self.alternative_format_imports.public_dict(),
             "document_properties": self.document_properties.public_dict(),
+            "package_thumbnails": self.package_thumbnails.public_dict(),
             "sensitivity_labels": self.sensitivity_labels.public_dict(),
             "package_digital_signatures": (
                 self.package_digital_signatures.public_dict()
