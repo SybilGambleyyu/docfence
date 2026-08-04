@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.32.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for direct Word Settings
+  `w:removePersonalInformation` `CT_OnOff` declarations. The inventory records
+  only a stored request for a capable host to remove personal information on a
+  later save; it does not inspect, identify, redact, or rewrite document
+  properties, comments, revisions, or other package material.
+- Added DFP077 to require that a candidate store an enabled
+  personal-information-removal-on-save request and DFP078 to protect an
+  approved stored baseline. The positive request does not prove that the
+  package is currently free of personal information or that a client will act
+  on a future save.
+- Reports expose enabled and explicitly disabled setting counts only.
+  Settings-part paths and fingerprints remain private. Canonical state avoids
+  noise for equivalent enabled spellings while an enabled/disabled transition
+  remains review-visible.
+- Added regression coverage for conventional and Strict leaves, implicit and
+  explicit forms, malformed shape/value rejection, duplicate state, privacy
+  redaction, policy findings, and SARIF output.
+
 ## 0.31.0 — 2026-08-03
 
 - Added a first-class, privacy-safe inventory for direct Word Settings

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "docfence"
-version = "0.31.0"
+version = "0.32.0"
 description = "Local-first Word OOXML change assurance for CI and review workflows"
 readme = "README.md"
 requires-python = ">=3.11"

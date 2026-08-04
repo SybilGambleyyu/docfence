@@ -1340,6 +1340,140 @@ rules:
         assert marker not in rendered
 
 
+def test_personal_information_removal_on_save_inventory_is_aggregate_and_strict(
+    tmp_path,
+) -> None:
+    before = tmp_path / "before.docx"
+    enabled = tmp_path / "enabled.docx"
+    disabled = tmp_path / "disabled.docx"
+    lexical_equivalent = tmp_path / "lexical-equivalent.docx"
+    strict = tmp_path / "strict.docx"
+    invalid_value = tmp_path / "invalid-value.docx"
+    unexpected_attribute = tmp_path / "unexpected-attribute.docx"
+    nonblank_text = tmp_path / "nonblank-text.docx"
+    nested_markup = tmp_path / "nested-markup.docx"
+    duplicate_setting = tmp_path / "duplicate-setting.docx"
+    policy_path = tmp_path / "docfence.yml"
+    _write_personal_information_removal_on_save_document(before, include_setting=False)
+    _write_personal_information_removal_on_save_document(enabled)
+    _write_personal_information_removal_on_save_document(disabled, value="off")
+    _write_personal_information_removal_on_save_document(
+        lexical_equivalent, value="true"
+    )
+    _write_personal_information_removal_on_save_document(
+        strict, strict_syntax=True, value="on"
+    )
+    _write_personal_information_removal_on_save_document(
+        invalid_value, value="sometimes"
+    )
+    _write_personal_information_removal_on_save_document(
+        unexpected_attribute,
+        extra_attribute=(
+            ' w:unexpected="PERSONAL_INFORMATION_REMOVAL_ON_SAVE_ATTRIBUTE_DO_NOT_LEAK"'
+        ),
+    )
+    _write_personal_information_removal_on_save_document(
+        nonblank_text,
+        text="PERSONAL_INFORMATION_REMOVAL_ON_SAVE_TEXT_DO_NOT_LEAK",
+    )
+    _write_personal_information_removal_on_save_document(
+        nested_markup,
+        child_markup="<w:unexpected/>",
+    )
+    _write_personal_information_removal_on_save_document(
+        duplicate_setting, duplicate=True
+    )
+
+    expected_enabled = {
+        "personal_information_removal_on_save_enabled_setting_count": 1,
+        "personal_information_removal_on_save_disabled_setting_count": 0,
+    }
+    expected_disabled = {
+        "personal_information_removal_on_save_enabled_setting_count": 0,
+        "personal_information_removal_on_save_disabled_setting_count": 1,
+    }
+    snapshot = load_snapshot(enabled)
+    assert (
+        snapshot.public_dict()["personal_information_removal_on_save"]
+        == expected_enabled
+    )
+    assert (
+        load_snapshot(strict).public_dict()["personal_information_removal_on_save"]
+        == expected_enabled
+    )
+    assert (
+        load_snapshot(disabled).public_dict()["personal_information_removal_on_save"]
+        == expected_disabled
+    )
+
+    report = diff_documents(before, enabled)
+    assert "personal_information_removal_on_save_inventory_changed" in {
+        change.kind for change in report.changes
+    }
+    assert "personal_information_removal_on_save_inventory_changed" in {
+        change.kind for change in diff_documents(enabled, disabled).changes
+    }
+    assert "personal_information_removal_on_save_inventory_changed" not in {
+        change.kind for change in diff_documents(enabled, lexical_equivalent).changes
+    }
+    for invalid_document in (
+        invalid_value,
+        unexpected_attribute,
+        nonblank_text,
+        nested_markup,
+        duplicate_setting,
+    ):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(invalid_document)
+
+    policy_path.write_text(
+        """version: 1
+rules:
+  require_personal_information_removal_on_save: true
+  no_personal_information_removal_on_save_changes: true
+""",
+        encoding="utf-8",
+    )
+    policy = load_policy(policy_path)
+    assert {finding.rule_id for finding in apply_policy(report, policy).findings} == {
+        "DFP078"
+    }
+    disabled_report = diff_documents(enabled, disabled)
+    assert {
+        finding.rule_id for finding in apply_policy(disabled_report, policy).findings
+    } == {"DFP077", "DFP078"}
+    assert {
+        finding.rule_id
+        for finding in apply_policy(diff_documents(before, before), policy).findings
+    } == {"DFP077"}
+    assert not apply_policy(diff_documents(enabled, enabled), policy).findings
+
+    gated = apply_policy(report, policy)
+    disabled_gated = apply_policy(disabled_report, policy)
+    rendered = "\n".join(
+        (
+            render_profile(snapshot, "json"),
+            render_profile(snapshot, "markdown"),
+            render_report(gated, "json"),
+            render_report(gated, "markdown"),
+            render_report(gated, "sarif"),
+            render_report(disabled_gated, "sarif"),
+        )
+    )
+    sarif = json.loads(render_report(disabled_gated, "sarif"))
+    assert {
+        "DFC_PERSONAL_INFORMATION_REMOVAL_ON_SAVE_INVENTORY_CHANGED",
+        "DFP077",
+        "DFP078",
+    } <= {result["ruleId"] for result in sarif["runs"][0]["results"]}
+    for marker in (
+        "PERSONAL_INFORMATION_REMOVAL_ON_SAVE_ATTRIBUTE_DO_NOT_LEAK",
+        "PERSONAL_INFORMATION_REMOVAL_ON_SAVE_TEXT_DO_NOT_LEAK",
+        "word/settings.xml",
+    ):
+        assert marker not in rendered
+
+
 def test_template_style_update_is_distinct_from_attached_template_dependency(
     tmp_path,
 ) -> None:
@@ -9354,6 +9488,48 @@ def _write_template_style_update_on_open_document(
     setting_markup = (
         f"<w:linkStyles{value_markup}{extra_attribute}>{text}{child_markup}"
         "</w:linkStyles>"
+        if include_setting
+        else ""
+    )
+    if duplicate:
+        setting_markup *= 2
+    entries: dict[str, bytes] = {
+        "[Content_Types].xml": (
+            f'<Types xmlns="{CT}">'
+            f'<Override PartName="/word/document.xml" ContentType="{DOCX_MAIN_TYPE}"/>'
+            "</Types>"
+        ).encode(),
+        "word/document.xml": (
+            f'<w:document xmlns:w="{word_namespace}"><w:body>'
+            "<w:p><w:r><w:t>VISIBLE_DO_NOT_LEAK</w:t></w:r></w:p>"
+            "<w:sectPr/></w:body></w:document>"
+        ).encode(),
+        "word/settings.xml": (
+            f'<w:settings xmlns:w="{word_namespace}">{setting_markup}</w:settings>'
+        ).encode(),
+    }
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, payload in entries.items():
+            archive.writestr(name, payload)
+
+
+def _write_personal_information_removal_on_save_document(
+    path,
+    *,
+    include_setting: bool = True,
+    value: str | None = None,
+    strict_syntax: bool = False,
+    extra_attribute: str = "",
+    text: str = "",
+    child_markup: str = "",
+    duplicate: bool = False,
+) -> None:
+    word_namespace = _STRICT_WORD_NAMESPACE if strict_syntax else W
+    value_markup = f' w:val="{value}"' if value is not None else ""
+    setting_markup = (
+        f"<w:removePersonalInformation{value_markup}{extra_attribute}>"
+        f"{text}{child_markup}</w:removePersonalInformation>"
         if include_setting
         else ""
     )

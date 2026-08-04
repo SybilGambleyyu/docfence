@@ -42,6 +42,8 @@ _RULES: Final = {
     "no_field_update_on_open_changes": "DFP074",
     "require_no_template_style_updates_on_open": "DFP075",
     "no_template_style_update_on_open_changes": "DFP076",
+    "require_personal_information_removal_on_save": "DFP077",
+    "no_personal_information_removal_on_save_changes": "DFP078",
     "require_no_data_bindings": "DFP023",
     "no_data_binding_changes": "DFP024",
     "require_no_external_document_dependencies": "DFP025",
@@ -576,6 +578,20 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_personal_information_removal_on_save_changes") and (
+        before.personal_information_removal_on_save.signature
+        != after.personal_information_removal_on_save.signature
+    ):
+        findings.append(
+            _finding(
+                "no_personal_information_removal_on_save_changes",
+                "Personal-information-removal-on-save inventory changed.",
+                {
+                    "before": before.personal_information_removal_on_save.public_dict(),
+                    "after": after.personal_information_removal_on_save.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -974,6 +990,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_template_style_updates_on_open",
                 "Candidate enables automatic template-style updates on open.",
                 after.template_style_updates_on_open.public_dict(),
+            )
+        )
+    if policy.enabled("require_personal_information_removal_on_save") and not (
+        after.personal_information_removal_on_save.enabled_setting_count
+    ):
+        findings.append(
+            _finding(
+                "require_personal_information_removal_on_save",
+                "Candidate does not request personal-information removal on save.",
+                after.personal_information_removal_on_save.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

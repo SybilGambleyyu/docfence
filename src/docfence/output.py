@@ -124,6 +124,11 @@ def _profile_markdown(document: dict[str, object]) -> str:
             document.get("template_style_updates_on_open", {})
         )
     )
+    lines.extend(
+        _personal_information_removal_on_save_section(
+            document.get("personal_information_removal_on_save", {})
+        )
+    )
     lines.extend(_data_binding_section(document.get("data_bindings", {})))
     lines.extend(_external_field_section(document.get("external_fields", {})))
     lines.extend(
@@ -176,6 +181,7 @@ def _report_markdown(report: DiffReport) -> str:
     lines.extend(_attached_custom_xml_schema_comparison(before, after))
     lines.extend(_field_update_on_open_comparison(before, after))
     lines.extend(_template_style_update_on_open_comparison(before, after))
+    lines.extend(_personal_information_removal_on_save_comparison(before, after))
     lines.extend(_data_binding_comparison(before, after))
     lines.extend(_external_field_comparison(before, after))
     lines.extend(_modern_comment_metadata_comparison(before, after))
@@ -438,6 +444,10 @@ def _template_style_update_on_open_section(value: object) -> list[str]:
     return _inventory_section(
         "Automatic template-style-update-on-open inventory", value
     )
+
+
+def _personal_information_removal_on_save_section(value: object) -> list[str]:
+    return _inventory_section("Personal-information-removal-on-save inventory", value)
 
 
 def _data_binding_section(value: object) -> list[str]:
@@ -718,6 +728,16 @@ def _template_style_update_on_open_comparison(
         "Automatic template-style-update-on-open inventory",
         before.get("template_style_updates_on_open", {}),
         after.get("template_style_updates_on_open", {}),
+    )
+
+
+def _personal_information_removal_on_save_comparison(
+    before: dict[str, object], after: dict[str, object]
+) -> list[str]:
+    return _inventory_comparison(
+        "Personal-information-removal-on-save inventory",
+        before.get("personal_information_removal_on_save", {}),
+        after.get("personal_information_removal_on_save", {}),
     )
 
 

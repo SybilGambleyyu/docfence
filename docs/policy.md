@@ -98,6 +98,8 @@ starter policy.
 | `no_field_update_on_open_changes` | `DFP074` | Automatic field-update-on-open inventory differs | Comparison |
 | `require_no_template_style_updates_on_open` | `DFP075` | Candidate enables automatic template-style updates on open | Candidate |
 | `no_template_style_update_on_open_changes` | `DFP076` | Automatic template-style-update-on-open inventory differs | Comparison |
+| `require_personal_information_removal_on_save` | `DFP077` | Candidate does not store an enabled personal-information-removal-on-save request | Candidate |
+| `no_personal_information_removal_on_save_changes` | `DFP078` | Personal-information-removal-on-save inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -366,6 +368,36 @@ store that request. no_template_style_update_on_open_changes protects any
 approved stored baseline. Neither rule opens a document client or claims that a
 particular client can locate a template, will update any style, or will honor
 the stored request.
+
+## Personal-information-removal-on-save scope
+
+DocFence inventories direct `w:removePersonalInformation` children of every
+discovered Document Settings part. The standard `CT_OnOff` leaf may omit
+`w:val`, which means enabled when the element is present; an explicitly
+supplied Word-namespace `w:val` must be one of `true`, `false`, `on`, `off`,
+`1`, or `0`. The inventory rejects duplicate direct leaves, child markup,
+nonblank text, unsupported attributes, and unsupported boolean values.
+
+Microsoft's [RemovePersonalInformation reference](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.removepersonalinformation?view=openxml-3.0.1)
+describes the stored setting as a request for a hosting application to remove
+personal information of document authors when it saves the document, while the
+definition and extent of personal information remain undefined. DocFence
+records the direct stored leaf only.
+
+Public output contains only
+`personal_information_removal_on_save_enabled_setting_count` and
+`personal_information_removal_on_save_disabled_setting_count`. Settings-part
+paths and private fingerprints never leave the process. The comparison
+signature records canonical enabled/disabled state: a state change is
+review-visible, while equivalent enabled spellings do not add noise.
+
+`require_personal_information_removal_on_save` fails only when the candidate
+has no enabled direct setting. It gates a stored future-save request, not a
+claim that the current package lacks personal information or that a client will
+remove it. `no_personal_information_removal_on_save_changes` protects any
+approved stored baseline. Neither rule opens or saves a document, identifies
+authors, inspects or rewrites document properties, removes comments or
+revisions, or claims that a particular client will honor the request.
 
 ## Content-control data-binding scope
 

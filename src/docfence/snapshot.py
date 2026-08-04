@@ -35,6 +35,7 @@ from docfence.models import (
     MailMergeInventory,
     ModernCommentMetadataInventory,
     PackageDigitalSignatureInventory,
+    PersonalInformationRemovalOnSaveInventory,
     RelationshipInventory,
     RevisionInventory,
     SaveThroughXsltInventory,
@@ -917,6 +918,14 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            personal_information_removal_on_save = (
+                _personal_information_removal_on_save_inventory(
+                    archive,
+                    members,
+                    document_settings_parts,
+                    limits,
+                )
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1084,6 +1093,7 @@ def _load_package(
         attached_custom_xml_schemas=attached_custom_xml_schemas,
         field_updates_on_open=field_updates_on_open,
         template_style_updates_on_open=template_style_updates_on_open,
+        personal_information_removal_on_save=personal_information_removal_on_save,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2496,6 +2506,67 @@ def _template_style_update_on_open_state(element: ET.Element) -> str:
         element,
         local_name="linkStyles",
         error_message="template-style-update-on-open state is invalid",
+    )
+
+
+def _personal_information_removal_on_save_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> PersonalInformationRemovalOnSaveInventory:
+    """Inventory ``w:removePersonalInformation`` without removing data.
+
+    The direct ``CT_OnOff`` Settings leaf records a request for a capable host
+    to remove personal information when saving a document. Its value is stored
+    configuration evidence, not an instruction to DocFence to identify,
+    redact, rewrite, or otherwise interpret current document properties.
+    Canonical enabled/disabled state keeps equivalent on/off spellings from
+    creating review noise.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    enabled_setting_count = 0
+    disabled_setting_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        removal_settings = [
+            element
+            for element in root
+            if _is_word_element(element, "removePersonalInformation")
+        ]
+        if len(removal_settings) > 1:
+            raise DocumentFormatError(
+                "personal-information-removal-on-save state is invalid"
+            )
+
+        for setting in removal_settings:
+            state = _personal_information_removal_on_save_state(setting)
+            if state == "enabled":
+                enabled_setting_count += 1
+            else:
+                disabled_setting_count += 1
+            records.append(
+                ("personal_information_removal_on_save", settings_part, state)
+            )
+
+    return PersonalInformationRemovalOnSaveInventory(
+        enabled_setting_count=enabled_setting_count,
+        disabled_setting_count=disabled_setting_count,
+        signature=_digest_records(records),
+    )
+
+
+def _personal_information_removal_on_save_state(element: ET.Element) -> str:
+    """Validate one direct ``w:removePersonalInformation`` ``CT_OnOff`` leaf."""
+
+    return _word_on_off_state(
+        element,
+        local_name="removePersonalInformation",
+        error_message="personal-information-removal-on-save state is invalid",
     )
 
 

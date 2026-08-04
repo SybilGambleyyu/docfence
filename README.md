@@ -105,7 +105,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.31 focuses on Office Open XML Word documents and templates and
+Version 0.32 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -136,6 +136,7 @@ deliberately keeps a small, inspectable contract:
   mail-merge, XSLT-on-single-XML-save transform configuration, attached custom
   XML schema declarations, automatic field-recalculation-on-open configuration,
   automatic template-style-update-on-open configuration,
+  personal-information-removal-on-save configuration,
   content-control data-binding, modern-comment
   metadata,
   document-task workflow state, task-pane Office web-extension configuration
@@ -781,6 +782,27 @@ loads, opens, validates, or authenticates an attached template; performs style
 resolution or propagation; opens a document client; or claims that a particular
 client will honor the stored request.
 
+Personal-information removal on save is recorded separately from generic
+Settings and document-property changes. A direct
+`w:removePersonalInformation` `CT_OnOff` leaf asks a capable document host to
+remove personal information when it saves the document. DocFence accepts one
+direct leaf per discovered Settings part in either Word namespace, validates
+its optional Word-namespace `w:val` as a standard on/off token, and reports
+enabled and explicitly disabled setting counts only. Settings-part paths and
+private fingerprints remain local. The private signature retains canonical
+stored state, so an enabled-to-disabled transition remains review-visible while
+equivalent enabled spellings such as omitted `w:val`, `on`, and `true` remain
+quiet.
+
+`require_personal_information_removal_on_save` requires only an enabled stored
+request. It does not inspect whether the package currently contains personal
+information, define what counts as personal information, or prove that any
+host will remove anything on a later save.
+`no_personal_information_removal_on_save_changes` protects a controlled stored
+baseline. Neither rule opens Word, saves a document, identifies authors,
+rewrites properties, removes comments or revisions, or claims that a client
+will honor the request.
+
 ## Policy
 
 Policies are a deliberately small YAML subset (or equivalent JSON), with one
@@ -813,6 +835,7 @@ rather than assuming the run count resolves Word's style hierarchy:
   require_no_attached_custom_xml_schemas: true
   require_no_field_updates_on_open: true
   require_no_template_style_updates_on_open: true
+  require_personal_information_removal_on_save: true
   require_no_data_bindings: true
   require_no_external_fields: true
   require_no_modern_comment_metadata: true
@@ -846,6 +869,7 @@ later mutation:
   no_attached_custom_xml_schema_changes: true
   no_field_update_on_open_changes: true
   no_template_style_update_on_open_changes: true
+  no_personal_information_removal_on_save_changes: true
   no_data_binding_changes: true
   no_external_field_changes: true
   no_modern_comment_metadata_changes: true
@@ -1020,6 +1044,12 @@ Both make the critical boundary explicit: editing/write protection is not
 encryption or a security verdict. Microsoft also documents stored
 [password-verifier salt](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.writeprotection.salt?view=openxml-3.0.1)
 behavior, which is why DocFence keeps those fields out of reports.
+The personal-information-removal-on-save boundary follows the Open XML SDK's
+[`w:removePersonalInformation` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.removepersonalinformation?view=openxml-3.0.1),
+which specifies a request to remove authors' personal information when a
+document is saved while leaving the definition and extent of that information
+undefined. DocFence records the direct stored request without identifying,
+removing, or rewriting any document material.
 The Word document-variable and `DOCVARIABLE`-field boundary follows the Open XML SDK's
 [`w:docVar` contract](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.documentvariable?view=openxml-3.0.1)
 and Word's [Variable object documentation](https://learn.microsoft.com/en-us/office/vba/api/word.variable):

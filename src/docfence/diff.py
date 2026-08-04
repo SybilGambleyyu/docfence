@@ -722,6 +722,22 @@ def _append_package_changes(
                 },
             )
         )
+    if (
+        before.personal_information_removal_on_save.signature
+        != after.personal_information_removal_on_save.signature
+    ):
+        changes.append(
+            Change(
+                kind="personal_information_removal_on_save_inventory_changed",
+                message=(
+                    "Stored personal-information-removal-on-save inventory changed."
+                ),
+                details={
+                    "before": before.personal_information_removal_on_save.public_dict(),
+                    "after": after.personal_information_removal_on_save.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(
