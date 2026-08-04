@@ -3577,6 +3577,19 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     multiple_word_part_transforms = tmp_path / "multiple-word-part-transforms.docx"
     empty_word_part_transforms = tmp_path / "empty-word-part-transforms.docx"
+    missing_word_part_digest_value = tmp_path / "missing-word-part-digest-value.docx"
+    misordered_word_part_digest_children = (
+        tmp_path / "misordered-word-part-digest-children.docx"
+    )
+    missing_word_part_digest_algorithm = (
+        tmp_path / "missing-word-part-digest-algorithm.docx"
+    )
+    extra_word_part_digest_child = tmp_path / "extra-word-part-digest-child.docx"
+    word_part_digest_value_attribute = (
+        tmp_path / "word-part-digest-value-attribute.docx"
+    )
+    nested_word_part_digest_value = tmp_path / "nested-word-part-digest-value.docx"
+    word_part_reference_text = tmp_path / "word-part-reference-text.docx"
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -3672,6 +3685,34 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         empty_word_part_transforms,
         word_part_transform_mode="empty_transforms",
+    )
+    _write_package_signature_coverage_document(
+        missing_word_part_digest_value,
+        word_part_digest_mode="missing_digest_value",
+    )
+    _write_package_signature_coverage_document(
+        misordered_word_part_digest_children,
+        word_part_digest_mode="misordered_digest_children",
+    )
+    _write_package_signature_coverage_document(
+        missing_word_part_digest_algorithm,
+        word_part_digest_mode="missing_digest_algorithm",
+    )
+    _write_package_signature_coverage_document(
+        extra_word_part_digest_child,
+        word_part_digest_mode="extra_digest_child",
+    )
+    _write_package_signature_coverage_document(
+        word_part_digest_value_attribute,
+        word_part_digest_mode="digest_value_attribute",
+    )
+    _write_package_signature_coverage_document(
+        nested_word_part_digest_value,
+        word_part_digest_mode="nested_digest_value",
+    )
+    _write_package_signature_coverage_document(
+        word_part_reference_text,
+        word_part_digest_mode="unexpected_reference_text",
     )
 
     expected_fully_declared = {
@@ -3813,7 +3854,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_fully_declared
         )
-    expected_unsupported_word_part_transform = {
+    expected_unsupported_word_part_reference = {
         **expected_fully_declared,
         "declared_covered_word_part_count": 1,
         "declared_uncovered_word_part_count": 1,
@@ -3824,10 +3865,17 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
+        missing_word_part_digest_value,
+        misordered_word_part_digest_children,
+        missing_word_part_digest_algorithm,
+        extra_word_part_digest_child,
+        word_part_digest_value_attribute,
+        nested_word_part_digest_value,
+        word_part_reference_text,
     ):
         assert (
             load_snapshot(document).public_dict()["package_signature_coverage"]
-            == expected_unsupported_word_part_transform
+            == expected_unsupported_word_part_reference
         )
 
     policy_path.write_text(
@@ -3902,6 +3950,13 @@ rules:
         relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
+        missing_word_part_digest_value,
+        misordered_word_part_digest_children,
+        missing_word_part_digest_algorithm,
+        extra_word_part_digest_child,
+        word_part_digest_value_attribute,
+        nested_word_part_digest_value,
+        word_part_reference_text,
     ):
         assert {
             finding.rule_id
@@ -8264,6 +8319,7 @@ def _write_package_signature_coverage_document(
     include_duplicate_word_relationship_manifest_reference: bool = False,
     include_second_bound_manifest_with_duplicate_word_relationship: bool = False,
     word_part_transform_mode: str = "none",
+    word_part_digest_mode: str = "standard",
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -8353,6 +8409,10 @@ def _write_package_signature_coverage_document(
     word_part_manifest_transforms = _package_signature_part_transforms(
         mode=word_part_transform_mode,
     )
+    word_part_digest_markup = _package_signature_part_digest_markup(
+        digest_reference,
+        mode=word_part_digest_mode,
+    )
     unresolved_manifest_reference = (
         '<ds:Reference URI="/word/missing.xml?ContentType=application/xml">'
         f"{digest_reference}</ds:Reference>"
@@ -8385,7 +8445,7 @@ def _write_package_signature_coverage_document(
         f"{word_relationship_manifest_reference}"
         f"{duplicate_word_relationship_manifest_reference}"
         f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}">'
-        f"{word_part_manifest_transforms}{digest_reference}</ds:Reference>"
+        f"{word_part_manifest_transforms}{word_part_digest_markup}</ds:Reference>"
         f'<ds:Reference URI="/word/styles.xml?ContentType='
         f'{styles_manifest_content_type}">'
         f"{digest_reference}</ds:Reference>"
@@ -8520,6 +8580,42 @@ def _package_signature_part_transforms(*, mode: str) -> str:
     if mode == "empty_transforms":
         return "<ds:Transforms/>"
     raise ValueError(f"unsupported part transform fixture mode: {mode}")
+
+
+def _package_signature_part_digest_markup(digest_reference: str, *, mode: str) -> str:
+    """Build valid and malformed XMLDSIG digest child sequences."""
+
+    digest_method = (
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+    )
+    digest_value = (
+        "<ds:DigestValue>PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+    )
+
+    if mode == "standard":
+        return digest_reference
+    if mode == "missing_digest_value":
+        return digest_method
+    if mode == "misordered_digest_children":
+        return digest_value + digest_method
+    if mode == "missing_digest_algorithm":
+        return "<ds:DigestMethod/>" + digest_value
+    if mode == "extra_digest_child":
+        return digest_reference + "<ds:Object/>"
+    if mode == "digest_value_attribute":
+        return (
+            f'{digest_method}<ds:DigestValue Id="unexpected">'
+            "PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+        )
+    if mode == "nested_digest_value":
+        return (
+            f"{digest_method}<ds:DigestValue>"
+            "PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK<ds:Object/>"
+            "</ds:DigestValue>"
+        )
+    if mode == "unexpected_reference_text":
+        return "UNEXPECTED_REFERENCE_TEXT" + digest_reference
+    raise ValueError(f"unsupported part digest fixture mode: {mode}")
 
 
 def _write_word_protection_document(

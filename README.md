@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.44 focuses on Office Open XML Word documents and templates and
+Version 0.45 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -297,11 +297,16 @@ small, inspectable declaration chain. For each recognized XML signature, it
 looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
 manifests it resolves exact local part URI/content-type references with
-case-sensitive content-type matching, and standard OPC relationship-transform
-declarations: one direct `ds:Transforms` list containing only the supported
-OPC relationship and XML Canonicalization algorithms, with exactly one
-relationship transform immediately followed by XML Canonicalization (with or
-without comments), then exact `RelationshipReference/@SourceId` and
+case-sensitive content-type matching. Before a manifest reference can be
+credited, its direct XMLDSIG children must be the optional `ds:Transforms`, one
+`ds:DigestMethod` with a nonblank `Algorithm`, and one direct, attribute-free,
+child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
+that order. It then recognizes standard OPC
+relationship-transform declarations: one direct `ds:Transforms` list
+containing only the supported OPC relationship and XML Canonicalization
+algorithms, with exactly one relationship transform immediately followed by
+XML Canonicalization (with or without comments), then exact
+`RelationshipReference/@SourceId` and
 `RelationshipsGroupReference/@SourceType` selectors. Within one XML signature,
 it also rejects every transform-bearing declaration for a relationships part
 when more than one relationship transform targets that same part across bound
@@ -321,7 +326,8 @@ empty, duplicate, relationship, or unknown transform list is unsupported and
 does not credit that part with coverage.
 
 This remains deliberately narrower than cryptographic or client-effective
-coverage. DocFence does not recompute reference digests or canonicalization,
+coverage. DocFence does not parse, decode, or recompute reference digests or
+canonicalization,
 evaluate arbitrary transforms, validate a signature value, certificate chain,
 revocation or timestamp, establish signer identity, decide what an Office
 consumer will validate or render, or decide whether a signature should be

@@ -2708,6 +2708,13 @@ def _resolve_package_manifest_reference(
 ) -> _ManifestReferenceResolution:
     """Resolve one bounded package-object manifest reference locally."""
 
+    if not _manifest_reference_has_expected_xml_dsig_shape(reference):
+        return _ManifestReferenceResolution(
+            covered_part_name=None,
+            covered_relationship_ids=frozenset(),
+            unresolved_reference_count=0,
+            unsupported_reference_count=1,
+        )
     parsed_reference = _package_manifest_reference_member_name(
         reference.attrib.get("URI")
     )
@@ -2798,6 +2805,36 @@ def _package_manifest_reference_member_name(uri: str | None) -> tuple[str, str] 
     if name != "ContentType" or not equals or not value or "&" in value:
         return None
     return part_name, value
+
+
+def _manifest_reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
+    """Require the XMLDSIG ``Reference`` child order without verifying a digest."""
+
+    children = list(reference)
+    if (reference.text or "").strip() or any(
+        (child.tail or "").strip() for child in children
+    ):
+        return False
+    if len(children) == 2:
+        digest_method, digest_value = children
+    elif len(children) == 3 and _qualified_name(children[0].tag) == (
+        _XMLDSIG_NAMESPACE,
+        "Transforms",
+    ):
+        _, digest_method, digest_value = children
+    else:
+        return False
+
+    if (
+        _qualified_name(digest_method.tag) != (_XMLDSIG_NAMESPACE, "DigestMethod")
+        or not (digest_method.attrib.get("Algorithm") or "").strip()
+        or _qualified_name(digest_value.tag) != (_XMLDSIG_NAMESPACE, "DigestValue")
+        or digest_value.attrib
+        or list(digest_value)
+        or not _element_has_text_value(digest_value)
+    ):
+        return False
+    return True
 
 
 def _relationship_manifest_reference_coverage(

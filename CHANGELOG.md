@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.45.0 — 2026-08-04
+
+- Hardened the bounded XMLDSIG `Reference` shape required before a bound
+  package-manifest declaration receives coverage. References now require the
+  optional direct `ds:Transforms` list followed by one `ds:DigestMethod` with a
+  nonblank `Algorithm` and one direct, attribute-free, child-free, nonempty
+  `ds:DigestValue`, with no non-whitespace direct text. Missing, misordered,
+  malformed, or extra direct children remain aggregate unsupported references
+  rather than being credited.
+- Added regression coverage for missing and misordered digest children, a
+  missing digest-method algorithm, an unexpected digest-value attribute or
+  nested element, unexpected reference text, and an extra direct child,
+  including policy failures and private-report redaction. This remains a
+  bounded structural audit: DocFence does not parse, decode, or recompute
+  digest values, execute transforms, validate a signature or certificate,
+  establish trust, or predict Office client behavior.
+
 ## 0.44.0 — 2026-08-04
 
 - Hardened direct package-part manifest references in the static

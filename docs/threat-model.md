@@ -199,11 +199,16 @@ copying signature material into a report.
 A separate static declaration audit follows only a direct `SignedInfo` local
 fragment reference to a direct `ds:Object` with exactly one direct package
 `ds:Manifest`. From that bounded link, it resolves exact part URI/content-type
-references with case-sensitive content-type matching and standard
-relationship-transform declarations: one direct `ds:Transforms` list containing
-only the supported OPC relationship and XML Canonicalization algorithms, with
-exactly one relationship transform immediately followed by XML Canonicalization
-(with or without comments), then exact `RelationshipReference/@SourceId` and
+references with case-sensitive content-type matching. Before a manifest
+reference is credited, its direct XMLDSIG children must be optional
+`ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
+direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
+non-whitespace direct text, in that order. It then
+recognizes standard relationship-transform declarations: one direct
+`ds:Transforms` list containing only the supported OPC relationship and XML
+Canonicalization algorithms, with exactly one relationship transform
+immediately followed by XML Canonicalization (with or without comments), then
+exact `RelationshipReference/@SourceId` and
 `RelationshipsGroupReference/@SourceType` selectors. Its public surface
 is aggregate-only: signatures with or without a declaration link; covered and
 uncovered Word parts and relationships; and unresolved or unsupported
@@ -666,7 +671,7 @@ state evidence, not a statement that a signature is cryptographically valid,
 that a certificate is trusted or current, that a signer is who the package
 claims, that all relevant content is effectively covered, or that an Office
 client will make a particular trust decision. DocFence does not verify XMLDSIG
-values, recompute reference digests or canonicalization, evaluate arbitrary
+values, parse, decode, or recompute reference digests or canonicalization, evaluate arbitrary
 transforms, build or validate certificate chains, check revocation or
 timestamps, establish signer identity, evaluate a signing policy, or calculate
 cryptographic or client-effective signature coverage. It resolves only the

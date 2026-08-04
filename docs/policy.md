@@ -787,13 +787,17 @@ For every recognized XML signature part, DocFence requires at least one direct
 `SignedInfo` `Reference` to a local `#` fragment that identifies a direct
 `ds:Object` with exactly one direct `ds:Manifest`. It resolves the references
 from each such bound manifest only. Supported part references use an exact
-local part URI plus case-sensitive matching content type. Supported relationship
-references use one direct `ds:Transforms` list containing only the supported
-OPC relationship and XML Canonicalization algorithms, with exactly one
-relationship transform immediately followed by XML Canonicalization (with or
-without comments), and exact `RelationshipReference/@SourceId` or
-`RelationshipsGroupReference/@SourceType` selectors. An unsupported URI or
-relationship-transform/selector
+local part URI plus case-sensitive matching content type. Before a manifest
+reference is credited, its direct XMLDSIG children must be optional
+`ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
+direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
+non-whitespace direct text, in that order. Supported
+relationship references use one direct `ds:Transforms` list containing only
+the supported OPC relationship and XML Canonicalization algorithms, with
+exactly one relationship transform immediately followed by XML Canonicalization
+(with or without comments), and exact `RelationshipReference/@SourceId` or
+`RelationshipsGroupReference/@SourceType` selectors. An unsupported URI,
+reference-child shape, or relationship-transform/selector
 syntax is not assumed to be coverage: it is reported only as an aggregate
 unsupported reference; a missing member, content-type mismatch, missing
 relationship item, or selector that selects no stored relationship is reported
@@ -840,7 +844,8 @@ rules:
   no_package_signature_coverage_changes: true
 ```
 
-The audit does not recompute reference digests or canonicalization, evaluate
+The audit does not parse, decode, or recompute reference digests or
+canonicalization, evaluate
 arbitrary XMLDSIG transforms, verify a signature value, validate a certificate
 or trust chain, check revocation or timestamps, establish signer identity, or
 determine the effective coverage, rendering, or trust decision of an Office
