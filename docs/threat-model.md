@@ -217,6 +217,12 @@ the same part is unsupported and credits none of those selectors. That preserves
 the OPC per-relationships-part constraint without exposing the part, selector,
 or relationship identity.
 
+For a non-relationship package part, the audit accepts no transform list or one
+direct nonempty list of only the two OPC XML Canonicalization algorithms. Empty,
+duplicate, relationship, and unknown transform lists are unsupported and do not
+credit the part. This is structural filtering of a small declared subset, not
+transform execution.
+
 Word editing/write-protection state receives the same dedicated treatment.
 DocFence discovers document Settings parts through Word's conventional
 `word/settings.xml` path and Transitional or Strict settings relationships from

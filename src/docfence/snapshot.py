@@ -2727,6 +2727,13 @@ def _resolve_package_manifest_reference(
             unsupported_reference_count=0,
         )
     if not part_name.endswith(".rels"):
+        if not _part_manifest_reference_has_supported_transforms(reference):
+            return _ManifestReferenceResolution(
+                covered_part_name=None,
+                covered_relationship_ids=frozenset(),
+                unresolved_reference_count=0,
+                unsupported_reference_count=1,
+            )
         if content_types.get(part_name, "") != expected_content_type:
             return _ManifestReferenceResolution(
                 covered_part_name=None,
@@ -2912,6 +2919,33 @@ def _relationship_manifest_reference_coverage(
         covered_relationship_ids=frozenset(selected_relationship_ids),
         unresolved_reference_count=unresolved_reference_count,
         unsupported_reference_count=unsupported_reference_count,
+    )
+
+
+def _part_manifest_reference_has_supported_transforms(reference: ET.Element) -> bool:
+    """Accept no transform or a direct C14N-only list for a package part.
+
+    A relationships transform has defined input only for a Relationships part.
+    This bounded declaration audit therefore permits ordinary part references to
+    omit transforms or use OPC's two XML canonicalization algorithms, while
+    refusing to credit unknown or relationship-transform sequences.
+    """
+
+    transforms_elements = [
+        child
+        for child in reference
+        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
+    ]
+    if not transforms_elements:
+        return True
+    if len(transforms_elements) != 1:
+        return False
+    transforms = list(transforms_elements[0])
+    return bool(transforms) and all(
+        _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
+        and transform.attrib.get("Algorithm")
+        in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
+        for transform in transforms
     )
 
 

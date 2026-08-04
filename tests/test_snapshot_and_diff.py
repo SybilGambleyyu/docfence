@@ -3567,6 +3567,16 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     duplicate_relationship_transform_across_manifests = (
         tmp_path / "duplicate-relationship-transform-across-manifests.docx"
     )
+    canonicalized_word_part = tmp_path / "canonicalized-word-part.docx"
+    canonicalized_word_part_with_comments = (
+        tmp_path / "canonicalized-word-part-with-comments.docx"
+    )
+    unsupported_word_part_transform = tmp_path / "unsupported-word-part-transform.docx"
+    relationship_word_part_transform = (
+        tmp_path / "relationship-word-part-transform.docx"
+    )
+    multiple_word_part_transforms = tmp_path / "multiple-word-part-transforms.docx"
+    empty_word_part_transforms = tmp_path / "empty-word-part-transforms.docx"
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -3638,6 +3648,30 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         duplicate_relationship_transform_across_manifests,
         include_second_bound_manifest_with_duplicate_word_relationship=True,
+    )
+    _write_package_signature_coverage_document(
+        canonicalized_word_part,
+        word_part_transform_mode="canonicalization",
+    )
+    _write_package_signature_coverage_document(
+        canonicalized_word_part_with_comments,
+        word_part_transform_mode="canonicalization_with_comments",
+    )
+    _write_package_signature_coverage_document(
+        unsupported_word_part_transform,
+        word_part_transform_mode="unsupported_transform",
+    )
+    _write_package_signature_coverage_document(
+        relationship_word_part_transform,
+        word_part_transform_mode="relationship_transform",
+    )
+    _write_package_signature_coverage_document(
+        multiple_word_part_transforms,
+        word_part_transform_mode="multiple_transforms_elements",
+    )
+    _write_package_signature_coverage_document(
+        empty_word_part_transforms,
+        word_part_transform_mode="empty_transforms",
     )
 
     expected_fully_declared = {
@@ -3771,6 +3805,30 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             **expected_unsupported_relationship_transform,
             "unsupported_package_manifest_reference_count": 2,
         }
+    for document in (
+        canonicalized_word_part,
+        canonicalized_word_part_with_comments,
+    ):
+        assert (
+            load_snapshot(document).public_dict()["package_signature_coverage"]
+            == expected_fully_declared
+        )
+    expected_unsupported_word_part_transform = {
+        **expected_fully_declared,
+        "declared_covered_word_part_count": 1,
+        "declared_uncovered_word_part_count": 1,
+        "unsupported_package_manifest_reference_count": 1,
+    }
+    for document in (
+        unsupported_word_part_transform,
+        relationship_word_part_transform,
+        multiple_word_part_transforms,
+        empty_word_part_transforms,
+    ):
+        assert (
+            load_snapshot(document).public_dict()["package_signature_coverage"]
+            == expected_unsupported_word_part_transform
+        )
 
     policy_path.write_text(
         """version: 1
@@ -3832,6 +3890,18 @@ rules:
     for document in (
         duplicate_relationship_transform,
         duplicate_relationship_transform_across_manifests,
+    ):
+        assert {
+            finding.rule_id
+            for finding in apply_policy(
+                diff_documents(fully_declared, document), policy
+            ).findings
+        } == {"DFP092", "DFP093"}
+    for document in (
+        unsupported_word_part_transform,
+        relationship_word_part_transform,
+        multiple_word_part_transforms,
+        empty_word_part_transforms,
     ):
         assert {
             finding.rule_id
@@ -8193,6 +8263,7 @@ def _write_package_signature_coverage_document(
     word_relationship_transform_mode: str = "standard",
     include_duplicate_word_relationship_manifest_reference: bool = False,
     include_second_bound_manifest_with_duplicate_word_relationship: bool = False,
+    word_part_transform_mode: str = "none",
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -8279,6 +8350,9 @@ def _write_package_signature_coverage_document(
         if include_second_bound_manifest_with_duplicate_word_relationship
         else ""
     )
+    word_part_manifest_transforms = _package_signature_part_transforms(
+        mode=word_part_transform_mode,
+    )
     unresolved_manifest_reference = (
         '<ds:Reference URI="/word/missing.xml?ContentType=application/xml">'
         f"{digest_reference}</ds:Reference>"
@@ -8311,7 +8385,7 @@ def _write_package_signature_coverage_document(
         f"{word_relationship_manifest_reference}"
         f"{duplicate_word_relationship_manifest_reference}"
         f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}">'
-        f"{digest_reference}</ds:Reference>"
+        f"{word_part_manifest_transforms}{digest_reference}</ds:Reference>"
         f'<ds:Reference URI="/word/styles.xml?ContentType='
         f'{styles_manifest_content_type}">'
         f"{digest_reference}</ds:Reference>"
@@ -8409,6 +8483,43 @@ def _package_signature_relationship_transforms(
     else:
         raise ValueError(f"unsupported relationship transform fixture mode: {mode}")
     return f"<ds:Transforms>{transforms}</ds:Transforms>"
+
+
+def _package_signature_part_transforms(*, mode: str) -> str:
+    """Build bounded and unsupported transform lists for a part reference."""
+
+    canonicalization_transform = (
+        f'<ds:Transform Algorithm="{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}"/>'
+    )
+    canonicalization_with_comments_transform = (
+        '<ds:Transform Algorithm="'
+        f'{_XML_CANONICALIZATION_WITH_COMMENTS_TRANSFORM_ALGORITHM}"/>'
+    )
+    relationship_transform = (
+        f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}"/>'
+    )
+    unsupported_transform = '<ds:Transform Algorithm="urn:docfence:test:unsupported"/>'
+
+    if mode == "none":
+        return ""
+    if mode == "canonicalization":
+        return f"<ds:Transforms>{canonicalization_transform}</ds:Transforms>"
+    if mode == "canonicalization_with_comments":
+        return (
+            f"<ds:Transforms>{canonicalization_with_comments_transform}</ds:Transforms>"
+        )
+    if mode == "unsupported_transform":
+        return f"<ds:Transforms>{unsupported_transform}</ds:Transforms>"
+    if mode == "relationship_transform":
+        return f"<ds:Transforms>{relationship_transform}</ds:Transforms>"
+    if mode == "multiple_transforms_elements":
+        return (
+            f"<ds:Transforms>{canonicalization_transform}</ds:Transforms>"
+            f"<ds:Transforms>{canonicalization_transform}</ds:Transforms>"
+        )
+    if mode == "empty_transforms":
+        return "<ds:Transforms/>"
+    raise ValueError(f"unsupported part transform fixture mode: {mode}")
 
 
 def _write_word_protection_document(

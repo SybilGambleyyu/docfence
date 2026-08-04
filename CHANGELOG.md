@@ -2,6 +2,19 @@
 
 All notable changes are documented here.
 
+## 0.44.0 — 2026-08-04
+
+- Hardened direct package-part manifest references in the static
+  package-signature declaration audit. A non-relationships part now receives
+  coverage only with no transform list or one direct nonempty list containing
+  only OPC's supported XML Canonicalization algorithms. Relationship, unknown,
+  empty, and duplicate transform lists remain aggregate unsupported references.
+- Added regression coverage for permitted C14N-only part references and for
+  unsupported empty, duplicate, relationship, and unknown lists, including
+  policy failures and private-report redaction. DocFence still does not execute
+  XMLDSIG transforms, recompute digests, validate a signature or certificate,
+  establish trust, or predict Office client behavior.
+
 ## 0.43.0 — 2026-08-04
 
 - Hardened static package-signature declaration coverage for OPC's

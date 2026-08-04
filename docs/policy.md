@@ -806,6 +806,13 @@ signature. If a part has more than one, every such declaration remains an
 aggregate unsupported reference and none of its selectors are credited with
 coverage.
 
+For a non-relationship package part, supported references have no
+`ds:Transforms` element or exactly one direct nonempty `ds:Transforms` list of
+XMLDSIG `Transform` elements using only the two OPC-supported XML
+Canonicalization algorithms. Empty or duplicate lists, a relationship transform,
+or an unknown transform are unsupported rather than being treated as part
+coverage.
+
 The bounded Word scope comprises every non-relationship member under `word/`,
 root-package relationships whose type is `officeDocument`, and every stored
 relationship sourced by a Word part. `DFP092` fails if no recognized XML

@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.43 focuses on Office Open XML Word documents and templates and
+Version 0.44 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -314,6 +314,11 @@ references. Object identifiers, manifest-reference URIs, part paths,
 relationship identifiers and types, and digest material remain private. A
 private semantic signature keeps a same-count selection reassignment
 review-visible.
+
+For a non-relationship package part, the audit accepts no transform list or one
+direct nonempty list of only OPC-supported XML Canonicalization transforms. An
+empty, duplicate, relationship, or unknown transform list is unsupported and
+does not credit that part with coverage.
 
 This remains deliberately narrower than cryptographic or client-effective
 coverage. DocFence does not recompute reference digests or canonicalization,
