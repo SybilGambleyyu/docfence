@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.37 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.38 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -15,8 +15,9 @@ following properties:
   Word `w:documentProtection`/`w:writeProtection` state, and
   Word Settings `w:docVars`/`w:docVar` state and `DOCVARIABLE` field-reference
   state, Word Settings XSLT-on-single-XML-save, attached-custom-XML-schema,
-  automatic-field-recalculation-on-open, and form-data-only-save state, Word `HYPERLINK`
-  field-reference state, direct WordprocessingML
+  automatic-field-recalculation-on-open, form-data-only-save, and
+  preview-thumbnail-on-save state, Word `HYPERLINK` field-reference state,
+  direct WordprocessingML
   `w:hyperlink` markup state, and direct DrawingML click/hover/mouse-over
   hyperlink-action markup state, direct DrawingML nonvisual hidden-state
   declaration state, direct DrawingML `a:blip/@r:link`
@@ -140,6 +141,15 @@ following properties:
   nested markup, and duplicate direct leaves. This validates stored
   configuration only: no test opens Word, evaluates a form field, reads a field
   value, saves a document, or emits a delimited record;
+- preview-thumbnail-on-save state is separately inventoried from generic
+  Settings and actual package-thumbnail state. Tests cover absent,
+  implicit-enabled, explicitly enabled, explicitly disabled, and Strict
+  leaves; canonical equivalent enabled spellings; JSON/Markdown/SARIF
+  redaction; candidate and baseline policy findings; and malformed unsupported
+  attributes/boolean values, nonblank text, nested markup, and duplicate direct
+  leaves. This validates a stored future-save request only: no test opens Word,
+  saves a document, creates, decodes, or renders a thumbnail, or asserts a
+  host will generate one;
 - the conventional custom-XML candidate gate is separately tested from the
   baseline-comparison rule. A document with unbound `customXml/` data triggers
   `DFP079` even against itself, a clean document passes, and JSON, Markdown,

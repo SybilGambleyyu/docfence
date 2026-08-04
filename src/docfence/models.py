@@ -1056,6 +1056,26 @@ class SaveFormsDataInventory:
 
 
 @dataclass(frozen=True)
+class SavePreviewPictureInventory:
+    """Stored preview-thumbnail-on-save settings, aggregate only.
+
+    Settings-part paths and private fingerprints remain local. Public output
+    records only whether explicitly stored settings enable or disable the
+    direct preview-thumbnail-on-save declaration for a capable document host.
+    """
+
+    enabled_setting_count: int
+    disabled_setting_count: int
+    signature: str
+
+    def public_dict(self) -> dict[str, int]:
+        return {
+            "save_preview_picture_enabled_setting_count": self.enabled_setting_count,
+            "save_preview_picture_disabled_setting_count": self.disabled_setting_count,
+        }
+
+
+@dataclass(frozen=True)
 class DataBindingInventory:
     """Stored content-control-to-custom-XML mapping evidence."""
 
@@ -1342,6 +1362,7 @@ class DocumentSnapshot:
     template_style_updates_on_open: TemplateStyleUpdateOnOpenInventory
     personal_information_removal_on_save: PersonalInformationRemovalOnSaveInventory
     save_forms_data: SaveFormsDataInventory
+    save_preview_picture: SavePreviewPictureInventory
     data_bindings: DataBindingInventory
     external_fields: ExternalFieldInventory
     modern_comment_metadata: ModernCommentMetadataInventory
@@ -1469,6 +1490,7 @@ class DocumentSnapshot:
                 self.personal_information_removal_on_save.public_dict()
             ),
             "save_forms_data": self.save_forms_data.public_dict(),
+            "save_preview_picture": self.save_preview_picture.public_dict(),
             "data_bindings": self.data_bindings.public_dict(),
             "external_fields": self.external_fields.public_dict(),
             "modern_comment_metadata": self.modern_comment_metadata.public_dict(),

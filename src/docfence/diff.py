@@ -778,6 +778,17 @@ def _append_package_changes(
                 },
             )
         )
+    if before.save_preview_picture.signature != after.save_preview_picture.signature:
+        changes.append(
+            Change(
+                kind="save_preview_picture_inventory_changed",
+                message="Stored preview-thumbnail-on-save inventory changed.",
+                details={
+                    "before": before.save_preview_picture.public_dict(),
+                    "after": after.save_preview_picture.public_dict(),
+                },
+            )
+        )
     if before.data_bindings.signature != after.data_bindings.signature:
         changes.append(
             Change(

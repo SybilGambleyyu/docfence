@@ -41,6 +41,7 @@ from docfence.models import (
     RelationshipInventory,
     RevisionInventory,
     SaveFormsDataInventory,
+    SavePreviewPictureInventory,
     SaveThroughXsltInventory,
     SensitivityLabelInventory,
     StorySnapshot,
@@ -1012,6 +1013,12 @@ def _load_package(
                 document_settings_parts,
                 limits,
             )
+            save_preview_picture = _save_preview_picture_inventory(
+                archive,
+                members,
+                document_settings_parts,
+                limits,
+            )
             styles = _styles_inventory(archive, members, relationship_maps, limits)
             (
                 stories,
@@ -1189,6 +1196,7 @@ def _load_package(
         template_style_updates_on_open=template_style_updates_on_open,
         personal_information_removal_on_save=personal_information_removal_on_save,
         save_forms_data=save_forms_data,
+        save_preview_picture=save_preview_picture,
         data_bindings=data_bindings,
         external_fields=external_fields,
         modern_comment_metadata=modern_comment_metadata,
@@ -2895,6 +2903,63 @@ def _save_forms_data_state(element: ET.Element) -> str:
         element,
         local_name="saveFormsData",
         error_message="save-forms-data state is invalid",
+    )
+
+
+def _save_preview_picture_inventory(
+    archive: zipfile.ZipFile,
+    members: dict[str, zipfile.ZipInfo],
+    settings_part_names: frozenset[str],
+    limits: PackageLimits,
+) -> SavePreviewPictureInventory:
+    """Inventory ``w:savePreviewPicture`` without generating a thumbnail.
+
+    The direct ``CT_OnOff`` Settings leaf records a request for a capable host
+    to generate a first-page document thumbnail when saving. Its value is
+    stored configuration evidence, not an instruction to DocFence to decode an
+    image, render a page, open Word, save a document, or claim that a package
+    thumbnail exists. Canonical enabled/disabled state keeps equivalent on/off
+    spellings from creating review noise.
+    """
+
+    records: list[tuple[str, str, str]] = []
+    enabled_setting_count = 0
+    disabled_setting_count = 0
+
+    for settings_part in sorted(settings_part_names):
+        root = _read_xml(archive, members[settings_part], limits)
+        if not _is_word_element(root, "settings"):
+            raise DocumentFormatError("document settings are invalid")
+        save_preview_picture_settings = [
+            element
+            for element in root
+            if _is_word_element(element, "savePreviewPicture")
+        ]
+        if len(save_preview_picture_settings) > 1:
+            raise DocumentFormatError("save-preview-picture state is invalid")
+
+        for setting in save_preview_picture_settings:
+            state = _save_preview_picture_state(setting)
+            if state == "enabled":
+                enabled_setting_count += 1
+            else:
+                disabled_setting_count += 1
+            records.append(("save_preview_picture", settings_part, state))
+
+    return SavePreviewPictureInventory(
+        enabled_setting_count=enabled_setting_count,
+        disabled_setting_count=disabled_setting_count,
+        signature=_digest_records(records),
+    )
+
+
+def _save_preview_picture_state(element: ET.Element) -> str:
+    """Validate one direct ``w:savePreviewPicture`` ``CT_OnOff`` leaf."""
+
+    return _word_on_off_state(
+        element,
+        local_name="savePreviewPicture",
+        error_message="save-preview-picture state is invalid",
     )
 
 

@@ -290,6 +290,20 @@ or evaluate a legacy form field, read a field value, open Word, save a
 document, emit a delimited record, determine a delimiter, or claim that a host
 will honor the stored request.
 
+Preview-thumbnail-on-save settings receive a separate private-digest treatment.
+DocFence recognizes at most one direct `w:savePreviewPicture` `CT_OnOff` leaf
+per discovered Document Settings part and validates its leaf shape,
+Word-namespace attribute vocabulary, and standard on/off token. Public output
+is limited to enabled and explicitly disabled setting counts; Settings-part
+paths and fingerprints remain private. The private signature retains canonical
+enabled/disabled state so a state transition stays review-visible without
+treating equivalent token spellings as distinct events. This is configuration
+evidence only: DocFence does not infer whether a thumbnail is already stored,
+decode or render an image, open Word, save a document, generate a thumbnail,
+or claim that a host will honor the stored request. The existing
+relationship-bound OPC package-thumbnail inventory remains the separate static
+boundary for an actual stored thumbnail image.
+
 Complete `DOCVARIABLE` field instructions receive a companion private-digest
 treatment. DocFence scans direct simple-field instructions and complete complex
 pre-separator instructions across supported stories, retaining current and

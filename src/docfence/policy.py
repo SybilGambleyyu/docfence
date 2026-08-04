@@ -46,6 +46,8 @@ _RULES: Final = {
     "no_personal_information_removal_on_save_changes": "DFP078",
     "require_no_save_forms_data": "DFP086",
     "no_save_forms_data_changes": "DFP087",
+    "require_no_save_preview_picture": "DFP088",
+    "no_save_preview_picture_changes": "DFP089",
     "require_no_custom_xml_data": "DFP079",
     "require_no_package_thumbnails": "DFP080",
     "no_package_thumbnail_changes": "DFP081",
@@ -655,6 +657,19 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 },
             )
         )
+    if policy.enabled("no_save_preview_picture_changes") and (
+        before.save_preview_picture.signature != after.save_preview_picture.signature
+    ):
+        findings.append(
+            _finding(
+                "no_save_preview_picture_changes",
+                "Preview-thumbnail-on-save inventory changed.",
+                {
+                    "before": before.save_preview_picture.public_dict(),
+                    "after": after.save_preview_picture.public_dict(),
+                },
+            )
+        )
     if policy.enabled("no_data_binding_changes") and (
         before.data_bindings.signature != after.data_bindings.signature
     ):
@@ -1116,6 +1131,16 @@ def _evaluate_policy(report: DiffReport, policy: Policy) -> list[Finding]:
                 "require_no_save_forms_data",
                 "Candidate requests form-data-only saving.",
                 after.save_forms_data.public_dict(),
+            )
+        )
+    if policy.enabled("require_no_save_preview_picture") and (
+        after.save_preview_picture.enabled_setting_count
+    ):
+        findings.append(
+            _finding(
+                "require_no_save_preview_picture",
+                "Candidate requests thumbnail generation on save.",
+                after.save_preview_picture.public_dict(),
             )
         )
     if policy.enabled("require_no_data_bindings") and (

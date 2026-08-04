@@ -109,6 +109,8 @@ starter policy.
 | `no_drawing_object_visibility_changes` | `DFP085` | DrawingML nonvisual visibility inventory differs | Comparison |
 | `require_no_save_forms_data` | `DFP086` | Candidate requests form-data-only saving | Candidate |
 | `no_save_forms_data_changes` | `DFP087` | Form-data-only-save inventory differs | Comparison |
+| `require_no_save_preview_picture` | `DFP088` | Candidate requests preview-thumbnail generation on save | Candidate |
+| `no_save_preview_picture_changes` | `DFP089` | Preview-thumbnail-on-save inventory differs | Comparison |
 
 All current findings have `high` severity except macro payload changes, which
 are `critical`. SARIF deliberately contains no locations: a package member path
@@ -143,6 +145,13 @@ setting, while `require_no_save_forms_data` rejects a candidate that stores an
 enabled request. These rules inspect only the direct stored Settings leaf; they
 do not discover or evaluate form fields, read field values, save a document,
 emit a delimited record, or predict client behavior.
+`no_save_preview_picture_changes` does so for an approved stored
+preview-thumbnail-on-save setting, while `require_no_save_preview_picture`
+rejects an enabled request. These rules inspect only the direct stored Settings
+leaf: they do not prove a thumbnail is absent, decode or render an image, save
+a document, generate a thumbnail, or predict client behavior. An existing
+package thumbnail remains separately covered by the OPC package-thumbnail
+inventory.
 `no_package_thumbnail_changes` does so for a controlled template that retains
 an approved relationship-bound OPC thumbnail image.
 `no_markup_compatibility_changes` does so for a controlled template that

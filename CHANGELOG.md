@@ -2,6 +2,25 @@
 
 All notable changes are documented here.
 
+## 0.38.0 — 2026-08-04
+
+- Added a first-class, privacy-safe inventory for direct stored Word Settings
+  `w:savePreviewPicture` `CT_OnOff` declarations. Public reports contain only
+  enabled and explicitly disabled setting counts; Settings-part paths and
+  private fingerprints remain local. Canonical on/off state prevents lexical
+  equivalent declarations from adding review noise while an enabled/disabled
+  transition remains review-visible.
+- Added DFP088 to reject a candidate that requests preview-thumbnail generation
+  on save and DFP089 to protect an approved stored configuration baseline.
+  This setting is separately inventoried from an already stored OPC package
+  thumbnail: it does not prove a thumbnail exists or that a host will create
+  one.
+- Added regression coverage for absent, implicit-enabled, explicit, disabled,
+  and Strict leaves; malformed direct state; private output; Markdown, JSON,
+  and SARIF output; and policy findings. DocFence does not decode or render an
+  image, open Word, save a document, create a thumbnail, or predict Office
+  client behavior.
+
 ## 0.37.0 — 2026-08-04
 
 - Added a first-class, privacy-safe inventory for direct stored Word Settings
