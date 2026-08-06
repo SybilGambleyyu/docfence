@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.64.0 — 2026-08-06
+
+- Hardened the direct `SignedInfo` method declarations in recognized OPC XML
+  signature parts: `ds:CanonicalizationMethod` and `ds:SignatureMethod` must
+  each have exactly their required `Algorithm` attribute. An undeclared
+  attribute now fails the recognized signature shape closed.
+- This is a narrow direct-attribute grammar check from XMLDSIG Core's
+  `CanonicalizationMethodType` and `SignatureMethodType`. It deliberately
+  preserves their permitted parameter child markup and does not validate a
+  parameter, execute canonicalization, recompute a digest, verify a signature,
+  validate a certificate, or decide trust.
+- Added regressions for extra attributes on both direct method declarations.
+  The public USENIX OOXML Signature Security corpus has 21 parseable signature
+  parts where both method kinds use only `Algorithm`; all 29 captured package
+  outcomes are byte-for-byte identical to 0.63.
+
 ## 0.63.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts with XMLDSIG's direct transform

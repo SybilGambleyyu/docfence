@@ -3432,6 +3432,9 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     missing_signature_method_algorithm = (
         tmp_path / "missing-signature-method-algorithm.docx"
     )
+    signature_method_extra_attribute = (
+        tmp_path / "signature-method-extra-attribute.docx"
+    )
     signature_value_before_signed_info = (
         tmp_path / "signature-value-before-signed-info.docx"
     )
@@ -3441,8 +3444,12 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     reordered_signed_info = tmp_path / "reordered-signed-info.docx"
     unexpected_signed_info_child = tmp_path / "unexpected-signed-info-child.docx"
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
+    method_parameter_children = tmp_path / "method-parameter-children.docx"
     missing_canonicalization_method_algorithm = (
         tmp_path / "missing-canonicalization-method-algorithm.docx"
+    )
+    canonicalization_method_extra_attribute = (
+        tmp_path / "canonicalization-method-extra-attribute.docx"
     )
     unsupported_canonicalization_method = (
         tmp_path / "unsupported-canonicalization-method.docx"
@@ -3526,6 +3533,10 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         signature_method_algorithm=None,
     )
     _write_package_digital_signature_document(
+        signature_method_extra_attribute,
+        signature_method_attributes=' Unexpected="1"',
+    )
+    _write_package_digital_signature_document(
         signature_value_before_signed_info,
         signature_value_before_signed_info=True,
     )
@@ -3562,8 +3573,21 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         ),
     )
     _write_package_digital_signature_document(
+        method_parameter_children,
+        canonicalization_method_child_markup=(
+            '<test:CanonicalizationParameter xmlns:test="urn:docfence:test"/>'
+        ),
+        signature_method_child_markup=(
+            '<test:SignatureMethodParameter xmlns:test="urn:docfence:test"/>'
+        ),
+    )
+    _write_package_digital_signature_document(
         missing_canonicalization_method_algorithm,
         canonicalization_method_algorithm=None,
+    )
+    _write_package_digital_signature_document(
+        canonicalization_method_extra_attribute,
+        canonicalization_method_attributes=' Unexpected="1"',
     )
     _write_package_digital_signature_document(
         unsupported_canonicalization_method,
@@ -3673,6 +3697,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         noncanonical_relationship,
         content_type_only,
         canonicalization_with_comments,
+        method_parameter_children,
         null_signed_info_reference,
         signature_values_with_id,
         signed_infos_with_id,
@@ -3690,6 +3715,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         wrong_signature_root,
         missing_signature_method,
         missing_signature_method_algorithm,
+        signature_method_extra_attribute,
         signature_value_before_signed_info,
         unexpected_signature_child,
         nested_signature_value,
@@ -3697,6 +3723,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         reordered_signed_info,
         unexpected_signed_info_child,
         missing_canonicalization_method_algorithm,
+        canonicalization_method_extra_attribute,
         unsupported_canonicalization_method,
         md5_additional_signed_info_reference,
         xpath_additional_signed_info_reference,
@@ -8863,9 +8890,13 @@ def _write_package_digital_signature_document(
     signature_method_algorithm: str | None = (
         "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
     ),
+    signature_method_attributes: str = "",
+    signature_method_child_markup: str = "",
     canonicalization_method_algorithm: str | None = (
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
     ),
+    canonicalization_method_attributes: str = "",
+    canonicalization_method_child_markup: str = "",
     signed_info_reference_uri: str | None = "#idPackageObject",
     include_additional_signed_info_reference: bool = False,
     additional_signed_info_reference_digest_algorithm: str = (
@@ -8979,7 +9010,11 @@ def _write_package_digital_signature_document(
     signature_method = (
         ""
         if omit_signature_method
-        else f"<ds:SignatureMethod{signature_method_algorithm_attribute}/>"
+        else (
+            "<ds:SignatureMethod"
+            f"{signature_method_algorithm_attribute}{signature_method_attributes}>"
+            f"{signature_method_child_markup}</ds:SignatureMethod>"
+        )
     )
     canonicalization_method_algorithm_attribute = (
         ""
@@ -9014,7 +9049,10 @@ def _write_package_digital_signature_document(
         else ""
     )
     canonicalization_method = (
-        f"<ds:CanonicalizationMethod{canonicalization_method_algorithm_attribute}/>"
+        "<ds:CanonicalizationMethod"
+        f"{canonicalization_method_algorithm_attribute}"
+        f"{canonicalization_method_attributes}>"
+        f"{canonicalization_method_child_markup}</ds:CanonicalizationMethod>"
     )
     signed_info_reference = (
         f"<ds:Reference{signed_info_reference_uri_attribute}>"

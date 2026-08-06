@@ -3300,6 +3300,8 @@ def _has_expected_xml_dsig_signed_info_child_sequence(
         and _qualified_name(children[0].tag)
         == (_XMLDSIG_NAMESPACE, "CanonicalizationMethod")
         and _qualified_name(children[1].tag) == (_XMLDSIG_NAMESPACE, "SignatureMethod")
+        and set(children[0].attrib) == {"Algorithm"}
+        and set(children[1].attrib) == {"Algorithm"}
         and all(
             _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
             for child in children[2:]

@@ -208,9 +208,13 @@ zero or more `Object` elements. `SignedInfo` must directly contain
 `CanonicalizationMethod`, `SignatureMethod`, then one or more `Reference`
 elements. `SignedInfo` and `SignatureValue` may have only their optional
 `Id` attribute at this boundary; `SignatureValue` cannot carry child XML,
-and `SignatureMethod/@Algorithm` must be nonblank. This is a stored-sequence
-check, not full XMLDSIG schema validation: it does not validate base64 lexical
-content, method parameters, KeyInfo/Object payloads, a digest, or a signature.
+and the direct `CanonicalizationMethod` and `SignatureMethod` elements must
+each carry exactly their required `Algorithm` attribute.
+`SignatureMethod/@Algorithm` must be nonblank. XMLDSIG permits parameter
+child markup on those method elements; this bounded check leaves that markup
+outside its scope. This is a stored-sequence check, not full XMLDSIG schema
+validation: it does not validate base64 lexical content, method parameters,
+KeyInfo/Object payloads, a digest, or a signature.
 
 Every XMLDSIG `DigestMethod/@Algorithm` in a recognized package signature is
 checked for OPC's exact MD5 prohibition. This stored-syntax check neither

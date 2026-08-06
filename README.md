@@ -293,7 +293,10 @@ optional `KeyInfo`, then zero or more `Object` elements. `SignedInfo` must
 directly contain `CanonicalizationMethod`, `SignatureMethod`, then one or
 more `Reference` elements; it and `SignatureValue` permit only their
 optional `Id` attribute, and `SignatureValue` cannot contain child XML.
-`SignatureMethod/@Algorithm` must be nonblank. Their one
+The direct `CanonicalizationMethod` and `SignatureMethod` elements must each
+carry exactly their required `Algorithm` attribute; their schema-permitted
+parameter child markup remains outside this bounded check.
+`SignatureMethod/@Algorithm` must be nonblank. The
 `CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
 XML Canonicalization URIs (with or without comments); a missing or other URI
 fails the recognized signature shape closed. Every direct

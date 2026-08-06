@@ -89,8 +89,10 @@ following properties:
   JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
   SignedInfo shape including its fixed direct Signature/SignedInfo sequences,
   child-free and attribute-bounded SignatureValue markup, a required nonblank
-  SignatureMethod algorithm, both permitted OPC `CanonicalizationMethod`
-  algorithms, and missing or unsupported canonicalization-method algorithms,
+  SignatureMethod algorithm, Algorithm-only direct `SignatureMethod` and
+  `CanonicalizationMethod` attributes, both permitted OPC
+  `CanonicalizationMethod` algorithms, and missing or unsupported
+  canonicalization-method algorithms,
   explicit empty and fragment same-document SignedInfo references plus missing,
   package-relative, and absolute SignedInfo reference URIs,
   an MD5 digest method, non-OPC transform algorithm, MCE-namespace attribute

@@ -764,7 +764,9 @@ or more direct `Object` elements. `SignedInfo` must directly contain
 `CanonicalizationMethod`, `SignatureMethod`, then one or more `Reference`
 elements. `SignedInfo` and `SignatureValue` permit only their optional
 `Id` attribute at this boundary; `SignatureValue` cannot have child XML, and
-`SignatureMethod/@Algorithm` must be nonblank. The one direct
+the direct `CanonicalizationMethod` and `SignatureMethod` elements must each
+carry exactly their required `Algorithm` attribute.
+`SignatureMethod/@Algorithm` must be nonblank. The direct
 `CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
 XML Canonicalization URIs (with or without comments); a missing or other URI is
 malformed. Each direct `SignedInfo/Reference` must carry an explicit XMLDSIG
@@ -789,6 +791,11 @@ XMLDSIG `ds:Transforms` elements must be attribute-free, and every
 extra attribute is malformed anywhere in the recognized Signature, including
 outside the bounded coverage chain. This direct grammar check does not validate
 arbitrary transform parameters or child markup.
+
+XMLDSIG permits parameter child markup on `CanonicalizationMethod` and
+`SignatureMethod`, but both direct method elements must carry exactly their
+required `Algorithm` attribute. An extra attribute is malformed; this narrow
+check does not validate parameter child markup.
 
 When that permitted URI is a Relationship Transform, its local package syntax
 is also mandatory: it must be a direct `ds:Transform` under a direct
