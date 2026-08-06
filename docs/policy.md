@@ -757,7 +757,10 @@ one direct `SignedInfo` and `SignatureValue`, and the basic direct
 canonicalization/signature-method/reference shape. The one direct
 `CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
 XML Canonicalization URIs (with or without comments); a missing or other URI is
-malformed. Malformed recognized topology or XMLDSIG shape fails closed.
+malformed. Each direct `SignedInfo/Reference` must carry an explicit XMLDSIG
+same-document URI: the empty URI or a local fragment beginning with `#`.
+An omitted, relative, or absolute URI is malformed. Malformed recognized
+topology or XMLDSIG shape fails closed.
 
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,

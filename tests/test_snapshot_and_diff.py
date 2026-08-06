@@ -3434,6 +3434,14 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     unsupported_canonicalization_method = (
         tmp_path / "unsupported-canonicalization-method.docx"
     )
+    null_signed_info_reference = tmp_path / "null-signed-info-reference.docx"
+    missing_signed_info_reference_uri = (
+        tmp_path / "missing-signed-info-reference-uri.docx"
+    )
+    package_part_signed_info_reference = (
+        tmp_path / "package-part-signed-info-reference.docx"
+    )
+    external_signed_info_reference = tmp_path / "external-signed-info-reference.docx"
     external_origin_relationship = tmp_path / "external-origin-relationship.docx"
     non_root_origin_relationship = tmp_path / "non-root-origin-relationship.docx"
     missing_origin_target = tmp_path / "missing-origin-target.docx"
@@ -3488,6 +3496,24 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         ),
     )
     _write_package_digital_signature_document(
+        null_signed_info_reference,
+        include_additional_signed_info_reference=True,
+    )
+    _write_package_digital_signature_document(
+        missing_signed_info_reference_uri,
+        signed_info_reference_uri=None,
+    )
+    _write_package_digital_signature_document(
+        package_part_signed_info_reference,
+        signed_info_reference_uri="/word/document.xml",
+    )
+    _write_package_digital_signature_document(
+        external_signed_info_reference,
+        signed_info_reference_uri=(
+            "https://example.invalid/DOCFENCE_SIGNED_INFO_REFERENCE"
+        ),
+    )
+    _write_package_digital_signature_document(
         external_origin_relationship,
         origin_target_mode="External",
     )
@@ -3536,6 +3562,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         noncanonical_relationship,
         content_type_only,
         canonicalization_with_comments,
+        null_signed_info_reference,
     ):
         snapshot = load_snapshot(document)
         assert snapshot.package_digital_signatures.signature_origin_part_count == 1
@@ -3551,6 +3578,9 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         missing_signature_method,
         missing_canonicalization_method_algorithm,
         unsupported_canonicalization_method,
+        missing_signed_info_reference_uri,
+        package_part_signed_info_reference,
+        external_signed_info_reference,
         external_origin_relationship,
         non_root_origin_relationship,
         missing_origin_target,
@@ -8448,6 +8478,8 @@ def _write_package_digital_signature_document(
     canonicalization_method_algorithm: str | None = (
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
     ),
+    signed_info_reference_uri: str | None = "#idPackageObject",
+    include_additional_signed_info_reference: bool = False,
     signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
     inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
     signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
@@ -8553,6 +8585,19 @@ def _write_package_digital_signature_document(
         if canonicalization_method_algorithm is None
         else f' Algorithm="{canonicalization_method_algorithm}"'
     )
+    signed_info_reference_uri_attribute = (
+        ""
+        if signed_info_reference_uri is None
+        else f' URI="{signed_info_reference_uri}"'
+    )
+    additional_signed_info_reference = (
+        '<ds:Reference URI="">'
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+        "<ds:DigestValue>PACKAGE_ADDITIONAL_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+        "</ds:Reference>"
+        if include_additional_signed_info_reference
+        else ""
+    )
     signature_xml = (
         f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
         f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
@@ -8561,10 +8606,11 @@ def _write_package_digital_signature_document(
         f"<ds:CanonicalizationMethod"
         f"{canonicalization_method_algorithm_attribute}/>"
         f"{signature_method}"
-        '<ds:Reference URI="#idPackageObject">'
+        f"<ds:Reference{signed_info_reference_uri_attribute}>"
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
         "<ds:DigestValue>PACKAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
         "</ds:Reference>"
+        f"{additional_signed_info_reference}"
         "</ds:SignedInfo>"
         f"<ds:SignatureValue>{signature_value}</ds:SignatureValue>"
         "<ds:KeyInfo><ds:X509Data>"

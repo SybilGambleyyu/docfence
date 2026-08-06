@@ -2822,6 +2822,16 @@ def _signature_fragment_identifier(uri: str | None) -> str | None:
     return uri[1:]
 
 
+def _signed_info_reference_has_same_signature_uri(reference: ET.Element) -> bool:
+    """Require an explicit XMLDSIG same-document URI without dereferencing it."""
+
+    uri = reference.attrib.get("URI")
+    # XMLDSIG defines an empty URI as same-document. An absent URI instead
+    # leaves the object's identity to application context, which cannot
+    # establish OPC's same-Signature boundary.
+    return uri == "" or (uri is not None and uri.startswith("#") and len(uri) > 1)
+
+
 def _resolve_package_manifest_reference(
     reference: ET.Element,
     members: dict[str, zipfile.ZipInfo],
@@ -3177,6 +3187,10 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
         not in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
         or len(signature_methods) != 1
         or not signed_info_references
+        or any(
+            not _signed_info_reference_has_same_signature_uri(reference)
+            for reference in signed_info_references
+        )
     ):
         raise DocumentFormatError("package digital signature parts are invalid")
 

@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.51 focuses on Office Open XML Word documents and templates and
+Version 0.52 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -285,6 +285,9 @@ expected content type. XML signature parts must have the expected XMLDSIG root
 and basic SignedInfo shape. Their one `CanonicalizationMethod/@Algorithm` must
 be exactly one of OPC's two permitted XML Canonicalization URIs (with or
 without comments); a missing or other URI fails the recognized signature shape
+closed. Every direct `SignedInfo/Reference` must carry an explicit XMLDSIG
+same-document URI: the empty URI or a local fragment beginning with `#`.
+An omitted, relative, or absolute URI fails the recognized signature shape
 closed.
 
 Reports expose only aggregate origin-part, XML-signature-part, certificate-part,

@@ -2,6 +2,23 @@
 
 All notable changes are documented here.
 
+## 0.52.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to require every direct
+  `SignedInfo/Reference` to carry explicit XMLDSIG same-document syntax: the
+  empty URI or a nonempty local `#` fragment. An omitted URI leaves object
+  identity to application context; relative package-part and absolute URIs
+  point outside the Signature document. All three now fail the recognized
+  XML-signature shape closed.
+- This is a narrow URI-location boundary: DocFence does not dereference a URI,
+  resolve a fragment or XPointer, execute a transform, recompute a digest,
+  verify XMLDSIG, or make a trust decision.
+- Added positive empty-URI and local-fragment coverage plus missing,
+  package-relative, and absolute URI regressions. Compared with 0.51, the
+  public USENIX OOXML Signature Security corpus changes only one attacker DOCX:
+  its eight ODF-style package-file references in `SignedInfo` now fail
+  structurally; the other 28 DOCX profiles are unchanged.
+
 ## 0.51.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to require their one direct
