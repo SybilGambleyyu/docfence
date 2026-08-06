@@ -850,6 +850,13 @@ lexical shape to match its declared precision. Missing, duplicate,
 mis-targeted, or malformed timestamp declarations leave coverage unavailable;
 this recognizes only the claimed timestamp's stored syntax, not its accuracy,
 source, authority, or cryptographic validity.
+Within this bounded binding/manifest chain, each `Reference` may carry only
+XMLDSIG's `Id`, `URI`, and `Type` attributes and each direct
+`DigestMethod` must carry exactly `Algorithm`. An unknown attribute leaves a
+binding without declared coverage or reports a manifest reference as aggregate
+unsupported; it cannot lend coverage. This is not full XMLDSIG schema
+validation: DocFence does not validate method-parameter child markup, base64,
+or any digest or signature value.
 The binding reference itself must retain XMLDSIG's direct child order:
 optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `Algorithm`, then one direct, attribute-free, child-free, nonempty

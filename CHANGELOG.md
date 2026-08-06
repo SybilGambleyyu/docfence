@@ -2,6 +2,27 @@
 
 All notable changes are documented here.
 
+## 0.62.0 — 2026-08-06
+
+- Hardened the bounded static OPC package-manifest coverage audit to accept
+  only XMLDSIG ``Reference`` attributes `Id`, `URI`, and `Type`, and only the
+  required `Algorithm` attribute on its direct `DigestMethod`. An unknown
+  attribute can no longer lend declared package coverage: it leaves a bound
+  package object without declared coverage or makes a manifest reference
+  aggregate unsupported.
+- This is a narrow direct-attribute grammar check from XMLDSIG Core's
+  `ReferenceType` and `DigestMethodType`. It does not validate the full
+  XMLDSIG schema, method-parameter child markup, base64, digest or signature
+  values, certificates, cryptography, or trust.
+- Added positive regressions for valid `Reference/@Id` and `Reference/@Type`
+  and negative regressions for unknown `Reference` and `DigestMethod`
+  attributes in both the bound-object and manifest-reference paths.
+- The public USENIX OOXML Signature Security corpus has 222 XMLDSIG
+  `Reference` elements using only `URI` or `Type` plus `URI`, and 243
+  `DigestMethod` elements using only `Algorithm`. Captured results for all
+  29 DOCX files, including two expected parser failures, are byte-for-byte
+  identical to 0.61.
+
 ## 0.61.0 — 2026-08-06
 
 - Corrected bounded static OPC package-manifest coverage to compare

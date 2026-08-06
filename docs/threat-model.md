@@ -256,7 +256,13 @@ A separate static declaration audit follows only one direct
 direct `SignedInfo` local-fragment reference to that object. That binding
 must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
 `DigestValue` shape; when present, transforms can use only OPC's two XML
-Canonicalization algorithms. OPC's global `ds:Transform/@Algorithm` restriction,
+Canonicalization algorithms. Within this bounded binding/manifest chain, each
+`Reference` may carry only XMLDSIG's `Id`, `URI`, and `Type` attributes and
+each direct `DigestMethod` must carry exactly `Algorithm`. Unknown attributes
+leave a binding unavailable or a manifest reference aggregate unsupported,
+rather than lending coverage. This is not full XMLDSIG schema validation:
+DocFence does not validate method-parameter child markup, base64, or any
+digest or signature value. OPC's global `ds:Transform/@Algorithm` restriction,
 Relationship Transform local context, relationship-selector shape, and
 `ds:XPath` prohibition are enforced before this bounded declaration chain is
 evaluated, including references outside the chain, as is OPC §10.5.2's

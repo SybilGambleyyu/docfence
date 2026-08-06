@@ -3823,8 +3823,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     word_part_digest_value_attribute = (
         tmp_path / "word-part-digest-value-attribute.docx"
     )
+    word_part_digest_method_attribute = (
+        tmp_path / "word-part-digest-method-attribute.docx"
+    )
     nested_word_part_digest_value = tmp_path / "nested-word-part-digest-value.docx"
     word_part_reference_text = tmp_path / "word-part-reference-text.docx"
+    word_part_reference_extra_attribute = (
+        tmp_path / "word-part-reference-extra-attribute.docx"
+    )
     policy_path = tmp_path / "docfence.yml"
 
     _write_package_signature_coverage_document(fully_declared)
@@ -4043,6 +4049,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         word_part_reference_text,
         word_part_digest_mode="unexpected_reference_text",
     )
+    _write_package_signature_coverage_document(
+        word_part_digest_method_attribute,
+        word_part_digest_mode="digest_method_attribute",
+    )
+    _write_package_signature_coverage_document(
+        word_part_reference_extra_attribute,
+        word_part_manifest_reference_attributes=' Unexpected="1"',
+    )
 
     expected_fully_declared = {
         "signature_with_declared_package_coverage_count": 1,
@@ -4192,8 +4206,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         missing_word_part_digest_algorithm,
         extra_word_part_digest_child,
         word_part_digest_value_attribute,
+        word_part_digest_method_attribute,
         nested_word_part_digest_value,
         word_part_reference_text,
+        word_part_reference_extra_attribute,
     ):
         assert (
             load_snapshot(document).public_dict()["package_signature_coverage"]
@@ -4294,8 +4310,10 @@ rules:
         missing_word_part_digest_algorithm,
         extra_word_part_digest_child,
         word_part_digest_value_attribute,
+        word_part_digest_method_attribute,
         nested_word_part_digest_value,
         word_part_reference_text,
+        word_part_reference_extra_attribute,
     ):
         assert {
             finding.rule_id
@@ -4401,6 +4419,26 @@ def test_package_signature_coverage_matches_content_types_case_insensitively(
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected
         )
+
+
+def test_package_signature_coverage_allows_xml_dsig_reference_attributes(
+    tmp_path,
+) -> None:
+    baseline = tmp_path / "reference-attributes-baseline.docx"
+    allowed_attributes = tmp_path / "reference-attributes-allowed.docx"
+
+    _write_package_signature_coverage_document(baseline)
+    _write_package_signature_coverage_document(
+        allowed_attributes,
+        word_part_manifest_reference_attributes=(
+            ' Id="idWordPartReference" Type="urn:docfence:test:word-part"'
+        ),
+    )
+
+    assert (
+        load_snapshot(allowed_attributes).public_dict()["package_signature_coverage"]
+        == load_snapshot(baseline).public_dict()["package_signature_coverage"]
+    )
 
 
 def test_package_signature_coverage_requires_opc_signature_time_shape(
@@ -4566,6 +4604,28 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
             coverage.signature_without_declared_package_coverage_count,
         ) == (1, 0)
 
+    document = tmp_path / "bound-object-reference-allowed-attribute.docx"
+    _write_package_signature_coverage_document(
+        document,
+        package_object_binding_reference_attributes=' Id="idPackageObjectReference"',
+    )
+    coverage = load_snapshot(document).package_signature_coverage
+    assert (
+        coverage.signature_with_declared_package_coverage_count,
+        coverage.signature_without_declared_package_coverage_count,
+    ) == (1, 0)
+
+    document = tmp_path / "bound-object-reference-extra-attribute.docx"
+    _write_package_signature_coverage_document(
+        document,
+        package_object_binding_reference_attributes=' Unexpected="1"',
+    )
+    coverage = load_snapshot(document).package_signature_coverage
+    assert (
+        coverage.signature_with_declared_package_coverage_count,
+        coverage.signature_without_declared_package_coverage_count,
+    ) == (0, 1)
+
     for mode in (
         "multiple_transforms_elements",
         "empty_transforms",
@@ -4619,6 +4679,7 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         "missing_digest_algorithm",
         "extra_digest_child",
         "digest_value_attribute",
+        "digest_method_attribute",
         "nested_digest_value",
         "unexpected_reference_text",
     ):
@@ -9055,6 +9116,7 @@ def _write_package_signature_coverage_document(
     package_signature_properties_markup: str | None = None,
     package_object_binding_transform_mode: str = "none",
     package_object_binding_digest_mode: str = "standard",
+    package_object_binding_reference_attributes: str = "",
     additional_signed_info_reference_transform_mode: str = "none",
     include_signature_markup_compatibility_attribute: bool = False,
     include_signature_markup_compatibility_element: bool = False,
@@ -9063,6 +9125,7 @@ def _write_package_signature_coverage_document(
     include_duplicate_package_object_reference: bool = False,
     word_part_transform_mode: str = "none",
     word_part_digest_mode: str = "standard",
+    word_part_manifest_reference_attributes: str = "",
 ) -> None:
     """Write a non-cryptographic package-signature coverage fixture.
 
@@ -9248,7 +9311,7 @@ def _write_package_signature_coverage_document(
         "<ds:SignatureMethod "
         'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
         f'<ds:Reference Type="{_XMLDSIG_NAMESPACE}Object" '
-        f'URI="{signed_info_reference}">'
+        f'URI="{signed_info_reference}"{package_object_binding_reference_attributes}>'
         f"{package_object_binding_transforms}{package_object_binding_digest_markup}"
         f"</ds:Reference>{duplicate_package_object_reference}"
         f"{additional_signed_info_reference}"
@@ -9259,7 +9322,8 @@ def _write_package_signature_coverage_document(
         f"{root_relationship_manifest_reference}"
         f"{word_relationship_manifest_reference}"
         f"{duplicate_word_relationship_manifest_reference}"
-        f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}">'
+        f'<ds:Reference URI="/word/document.xml?ContentType={DOCX_MAIN_TYPE}"'
+        f"{word_part_manifest_reference_attributes}>"
         f"{word_part_manifest_transforms}{word_part_digest_markup}</ds:Reference>"
         f'<ds:Reference URI="/word/styles.xml?ContentType='
         f'{styles_manifest_content_type}">'
@@ -9465,6 +9529,11 @@ def _package_signature_part_digest_markup(digest_reference: str, *, mode: str) -
         return (
             f'{digest_method}<ds:DigestValue Id="unexpected">'
             "PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
+        )
+    if mode == "digest_method_attribute":
+        return (
+            '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256" '
+            'Unexpected="1"/>' + digest_value
         )
     if mode == "nested_digest_value":
         return (

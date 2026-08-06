@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.61 focuses on Office Open XML Word documents and templates and
+Version 0.62 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -345,9 +345,13 @@ certificate mutation remains review-visible.
 The companion static declared package-signature coverage inventory follows a
 small, inspectable declaration chain. For each recognized XML signature, it
 looks for a direct `SignedInfo` local-fragment reference to a direct
-`ds:Object` with exactly one direct package `ds:Manifest`. From those bound
-manifests it resolves exact local part URIs with ASCII-case-insensitive
-content-type matching. OPC's global `ds:Transform/@Algorithm`
+`ds:Object` with exactly one direct package `ds:Manifest`. Its binding and
+each manifest `Reference` may carry only XMLDSIG's `Id`, `URI`, and `Type`
+attributes, and each direct `DigestMethod` must carry exactly `Algorithm`.
+Unknown attributes make a binding unavailable or a manifest reference
+unsupported rather than lending coverage. From those bound manifests it
+resolves exact local part URIs with ASCII-case-insensitive content-type
+matching. OPC's global `ds:Transform/@Algorithm`
 restriction, Relationship Transform local-context and selector-shape
 requirements, and `ds:XPath` prohibition are enforced before this coverage
 audit,
@@ -362,7 +366,9 @@ forbidden MD5 URI in every `DigestMethod`, every non-OPC `ds:Transform`
 algorithm, every malformed Relationship Transform or relationship selector,
 every `ds:XPath` element, and MCE namespace markup; it does not
 otherwise endorse, cryptographically assess, or broadly reject algorithms such
-as legacy SHA-1.
+as legacy SHA-1. This bounded attribute check is not full XMLDSIG schema
+validation: DocFence does not validate method-parameter child markup, base64,
+digest or signature values, certificates, or trust.
 It then recognizes standard OPC
 relationship-transform declarations: one direct `ds:Transforms` list
 containing only the supported OPC relationship and XML Canonicalization

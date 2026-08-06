@@ -3033,8 +3033,16 @@ def _package_manifest_reference_member_name(uri: str | None) -> tuple[str, str] 
 
 
 def _reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
-    """Require the XMLDSIG ``Reference`` child order without verifying a digest."""
+    """Require the bounded XMLDSIG ``Reference`` declaration shape.
 
+    This is intentionally a declaration audit, not XMLDSIG schema or
+    cryptographic validation. It accepts the attributes declared directly on
+    XMLDSIG ``Reference`` and requires ``DigestMethod`` to use its sole declared
+    attribute, so extension markup cannot silently receive coverage credit.
+    """
+
+    if not set(reference.attrib) <= {"Id", "URI", "Type"}:
+        return False
     children = list(reference)
     if (reference.text or "").strip() or any(
         (child.tail or "").strip() for child in children
@@ -3053,6 +3061,7 @@ def _reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
     digest_algorithm = (digest_method.attrib.get("Algorithm") or "").strip()
     if (
         _qualified_name(digest_method.tag) != (_XMLDSIG_NAMESPACE, "DigestMethod")
+        or set(digest_method.attrib) != {"Algorithm"}
         or not digest_algorithm
         or digest_algorithm == _OPC_DISALLOWED_DIGEST_METHOD_ALGORITHM
         or _qualified_name(digest_value.tag) != (_XMLDSIG_NAMESPACE, "DigestValue")
