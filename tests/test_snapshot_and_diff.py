@@ -3435,6 +3435,9 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         tmp_path / "unsupported-canonicalization-method.docx"
     )
     null_signed_info_reference = tmp_path / "null-signed-info-reference.docx"
+    md5_additional_signed_info_reference = (
+        tmp_path / "md5-additional-signed-info-reference.docx"
+    )
     missing_signed_info_reference_uri = (
         tmp_path / "missing-signed-info-reference-uri.docx"
     )
@@ -3498,6 +3501,13 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     _write_package_digital_signature_document(
         null_signed_info_reference,
         include_additional_signed_info_reference=True,
+    )
+    _write_package_digital_signature_document(
+        md5_additional_signed_info_reference,
+        include_additional_signed_info_reference=True,
+        additional_signed_info_reference_digest_algorithm=(
+            "http://www.w3.org/2001/04/xmldsig-more#md5"
+        ),
     )
     _write_package_digital_signature_document(
         missing_signed_info_reference_uri,
@@ -3578,6 +3588,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         missing_signature_method,
         missing_canonicalization_method_algorithm,
         unsupported_canonicalization_method,
+        md5_additional_signed_info_reference,
         missing_signed_info_reference_uri,
         package_part_signed_info_reference,
         external_signed_info_reference,
@@ -3952,7 +3963,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     }
     for document in (
         xpath_relationship_transform,
-        md5_relationship_digest,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -3984,7 +3994,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     }
     for document in (
         xpath_word_part_transform,
-        md5_word_part_digest,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -4001,6 +4010,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_unsupported_word_part_reference
         )
+    for document in (md5_relationship_digest, md5_word_part_digest):
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
 
     policy_path.write_text(
         """version: 1
@@ -4049,7 +4061,6 @@ rules:
     } == {"DFP092", "DFP093"}
     for document in (
         xpath_relationship_transform,
-        md5_relationship_digest,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -4083,7 +4094,6 @@ rules:
         } == {"DFP092", "DFP093"}
     for document in (
         xpath_word_part_transform,
-        md5_word_part_digest,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -4328,7 +4338,6 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         "missing_digest_value",
         "misordered_digest_children",
         "missing_digest_algorithm",
-        "md5_digest_algorithm",
         "extra_digest_child",
         "digest_value_attribute",
         "nested_digest_value",
@@ -4344,6 +4353,14 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
             coverage.signature_with_declared_package_coverage_count,
             coverage.signature_without_declared_package_coverage_count,
         ) == (0, 1)
+
+    md5_document = tmp_path / "bound-object-reference-digest-md5.docx"
+    _write_package_signature_coverage_document(
+        md5_document,
+        package_object_binding_digest_mode="md5_digest_algorithm",
+    )
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(md5_document)
 
 
 def test_word_protection_inventory_is_private_and_semantic(tmp_path) -> None:
@@ -8480,6 +8497,9 @@ def _write_package_digital_signature_document(
     ),
     signed_info_reference_uri: str | None = "#idPackageObject",
     include_additional_signed_info_reference: bool = False,
+    additional_signed_info_reference_digest_algorithm: str = (
+        "http://www.w3.org/2001/04/xmlenc#sha256"
+    ),
     signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
     inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
     signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
@@ -8592,7 +8612,8 @@ def _write_package_digital_signature_document(
     )
     additional_signed_info_reference = (
         '<ds:Reference URI="">'
-        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
+        f'<ds:DigestMethod Algorithm="'
+        f'{additional_signed_info_reference_digest_algorithm}"/>'
         "<ds:DigestValue>PACKAGE_ADDITIONAL_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
         "</ds:Reference>"
         if include_additional_signed_info_reference

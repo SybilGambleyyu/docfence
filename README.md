@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.52 focuses on Office Open XML Word documents and templates and
+Version 0.53 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -288,7 +288,10 @@ without comments); a missing or other URI fails the recognized signature shape
 closed. Every direct `SignedInfo/Reference` must carry an explicit XMLDSIG
 same-document URI: the empty URI or a local fragment beginning with `#`.
 An omitted, relative, or absolute URI fails the recognized signature shape
-closed.
+closed. Every XMLDSIG `DigestMethod/@Algorithm` in a recognized package
+signature must also avoid OPC's expressly forbidden MD5 URI. This exact syntax
+rule does not broadly reject, endorse, or cryptographically assess SHA-1 or
+other algorithms.
 
 Reports expose only aggregate origin-part, XML-signature-part, certificate-part,
 SignedInfo-reference, manifest-reference, relationship-reference, inline-X.509
@@ -310,10 +313,10 @@ parameter. Before a manifest reference can be
 credited, its direct XMLDSIG children must be the optional `ds:Transforms`, one
 `ds:DigestMethod` with a nonblank `Algorithm`, and one direct, attribute-free,
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
-that order. Every `DigestMethod` on the bounded binding/manifest chain cannot
-use OPC's expressly forbidden MD5 URI; this does not endorse,
-cryptographically assess, or broadly reject other algorithms such as legacy
-SHA-1. It then recognizes standard OPC
+that order. The recognized-signature boundary already rejects OPC's expressly
+forbidden MD5 URI in every `DigestMethod`; it does not otherwise endorse,
+cryptographically assess, or broadly reject algorithms such as legacy SHA-1.
+It then recognizes standard OPC
 relationship-transform declarations: one direct `ds:Transforms` list
 containing only the supported OPC relationship and XML Canonicalization
 algorithms, with exactly one relationship transform immediately followed by

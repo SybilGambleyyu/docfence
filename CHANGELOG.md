@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.53.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to reject the one
+  `DigestMethod/@Algorithm` URI OPC expressly forbids—MD5—anywhere in the
+  XML signature, not only along the bounded declaration-coverage chain. An MD5
+  application-object or other non-coverage reference can no longer leave the
+  package recognized as an OPC XML signature.
+- This remains an exact stored-syntax rule. DocFence does not decode or
+  recompute a digest, execute a transform, verify XMLDSIG, or turn SHA-1
+  guidance into a broader cryptographic policy or trust decision.
+- Added a regression for MD5 on an additional same-document `SignedInfo`
+  reference. The public USENIX OOXML Signature Security corpus still used 243
+  SHA-256 digest methods and no MD5 declarations, so all 29 DOCX profiles
+  remain unchanged from 0.52.
+
 ## 0.52.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to require every direct

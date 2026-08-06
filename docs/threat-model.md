@@ -196,6 +196,11 @@ times, comments, provider data, relationship IDs, paths, or digests. A
 same-count signature or certificate rewrite is therefore visible without
 copying signature material into a report.
 
+Every XMLDSIG `DigestMethod/@Algorithm` in a recognized package signature is
+checked for OPC's exact MD5 prohibition. This stored-syntax check neither
+endorses nor broadly rejects SHA-1 or other algorithms, and does not recompute
+any digest.
+
 A separate static declaration audit follows only one direct
 `ds:Object Id="idPackageObject"` with no other attributes and exactly direct
 `ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
@@ -218,9 +223,9 @@ URI/content-type references with case-sensitive content-type matching. Before a
 manifest reference is credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
-non-whitespace direct text, in that order. Every `DigestMethod` on the bounded
-binding/manifest chain cannot use OPC's expressly forbidden MD5 URI; DocFence
-does not otherwise judge an algorithm's cryptographic suitability. It then
+non-whitespace direct text, in that order. The global recognized-signature
+boundary rejects OPC's expressly forbidden MD5 URI; DocFence does not
+otherwise judge an algorithm's cryptographic suitability. It then
 recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML
 Canonicalization algorithms, with exactly one relationship transform

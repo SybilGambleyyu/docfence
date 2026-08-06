@@ -2832,6 +2832,17 @@ def _signed_info_reference_has_same_signature_uri(reference: ET.Element) -> bool
     return uri == "" or (uri is not None and uri.startswith("#") and len(uri) > 1)
 
 
+def _has_opc_disallowed_digest_method(root: ET.Element) -> bool:
+    """Return whether a package signature declares OPC's forbidden MD5 URI."""
+
+    return any(
+        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "DigestMethod")
+        and (element.attrib.get("Algorithm") or "").strip()
+        == _OPC_DISALLOWED_DIGEST_METHOD_ALGORITHM
+        for element in root.iter()
+    )
+
+
 def _resolve_package_manifest_reference(
     reference: ET.Element,
     members: dict[str, zipfile.ZipInfo],
@@ -3191,6 +3202,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
             not _signed_info_reference_has_same_signature_uri(reference)
             for reference in signed_info_references
         )
+        or _has_opc_disallowed_digest_method(root)
     ):
         raise DocumentFormatError("package digital signature parts are invalid")
 

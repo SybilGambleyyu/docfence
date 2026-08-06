@@ -760,7 +760,10 @@ XML Canonicalization URIs (with or without comments); a missing or other URI is
 malformed. Each direct `SignedInfo/Reference` must carry an explicit XMLDSIG
 same-document URI: the empty URI or a local fragment beginning with `#`.
 An omitted, relative, or absolute URI is malformed. Malformed recognized
-topology or XMLDSIG shape fails closed.
+topology or XMLDSIG shape fails closed. Every XMLDSIG
+`DigestMethod/@Algorithm` in a recognized package signature must also avoid
+OPC's expressly forbidden MD5 URI; this is not a broad cryptographic judgment
+about SHA-1 or other algorithms.
 
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,
@@ -815,16 +818,17 @@ or carry one direct nonempty list of only OPC's two XML Canonicalization
 algorithms. Every transform in the bounded binding/manifest chain must also
 be free of XMLDSIG's `ds:XPath` element, which OPC disallows; relationship and
 unknown transform declarations leave coverage unavailable. A `DigestMethod`
-cannot use OPC's expressly forbidden MD5 URI; the audit does not otherwise
-judge an algorithm's cryptographic suitability. DocFence checks that
-stored syntax and the binding URI fragment, but
+in the recognized signature cannot use OPC's expressly forbidden MD5 URI; the
+audit does not otherwise judge an algorithm's cryptographic suitability.
+DocFence checks that stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
 URI plus case-sensitive matching content type. Before a manifest reference is
 credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
-non-whitespace direct text, in that order; the exact MD5 URI is unsupported.
+non-whitespace direct text, in that order; the globally rejected exact MD5 URI
+cannot lend coverage.
 Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
