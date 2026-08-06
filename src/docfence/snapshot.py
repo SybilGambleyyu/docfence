@@ -3229,49 +3229,82 @@ def _transform_has_no_opc_disallowed_xpath_element(transform: ET.Element) -> boo
     return not _has_opc_disallowed_xpath_element(transform)
 
 
+def _has_expected_xml_dsig_signature_child_sequence(root: ET.Element) -> bool:
+    """Return whether direct Signature children use XMLDSIG's fixed sequence."""
+
+    children = list(root)
+    if (
+        not _has_only_whitespace_interstitial_text(root)
+        or len(children) < 2
+        or _qualified_name(children[0].tag) != (_XMLDSIG_NAMESPACE, "SignedInfo")
+        or _qualified_name(children[1].tag) != (_XMLDSIG_NAMESPACE, "SignatureValue")
+    ):
+        return False
+
+    remaining_children = children[2:]
+    if remaining_children and _qualified_name(remaining_children[0].tag) == (
+        _XMLDSIG_NAMESPACE,
+        "KeyInfo",
+    ):
+        remaining_children = remaining_children[1:]
+    return all(
+        _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Object")
+        for child in remaining_children
+    )
+
+
+def _has_expected_xml_dsig_signed_info_child_sequence(
+    signed_info: ET.Element,
+) -> bool:
+    """Return whether direct SignedInfo children use XMLDSIG's fixed sequence."""
+
+    children = list(signed_info)
+    return (
+        set(signed_info.attrib) <= {"Id"}
+        and _has_only_whitespace_interstitial_text(signed_info)
+        and len(children) >= 3
+        and _qualified_name(children[0].tag)
+        == (_XMLDSIG_NAMESPACE, "CanonicalizationMethod")
+        and _qualified_name(children[1].tag) == (_XMLDSIG_NAMESPACE, "SignatureMethod")
+        and all(
+            _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
+            for child in children[2:]
+        )
+    )
+
+
+def _has_expected_xml_dsig_signature_value_shape(
+    signature_value: ET.Element,
+) -> bool:
+    """Return whether SignatureValue retains its direct XMLDSIG markup shape."""
+
+    return (
+        set(signature_value.attrib) <= {"Id"}
+        and not list(signature_value)
+        and _element_has_text_value(signature_value)
+    )
+
+
 def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]:
     """Check a bounded XMLDSIG shape without verifying cryptographic validity."""
 
     if _qualified_name(root.tag) != (_XMLDSIG_NAMESPACE, "Signature"):
         raise DocumentFormatError("package digital signature parts are invalid")
 
-    signed_infos = [
-        child
-        for child in root
-        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignedInfo")
-    ]
-    signature_values = [
-        child
-        for child in root
-        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignatureValue")
-    ]
-    if len(signed_infos) != 1 or len(signature_values) != 1:
-        raise DocumentFormatError("package digital signature parts are invalid")
-    if not _element_has_text_value(signature_values[0]):
+    if not _has_expected_xml_dsig_signature_child_sequence(root):
         raise DocumentFormatError("package digital signature parts are invalid")
 
-    signed_info = signed_infos[0]
-    canonicalization_methods = [
-        child
-        for child in signed_info
-        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "CanonicalizationMethod")
-    ]
-    signature_methods = [
-        child
-        for child in signed_info
-        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "SignatureMethod")
-    ]
-    signed_info_references = [
-        child
-        for child in signed_info
-        if _qualified_name(child.tag) == (_XMLDSIG_NAMESPACE, "Reference")
-    ]
+    signed_info, signature_value = list(root)[:2]
+    if not _has_expected_xml_dsig_signature_value_shape(signature_value):
+        raise DocumentFormatError("package digital signature parts are invalid")
+    if not _has_expected_xml_dsig_signed_info_child_sequence(signed_info):
+        raise DocumentFormatError("package digital signature parts are invalid")
+
+    canonicalization_method, signature_method, *signed_info_references = signed_info
     if (
-        len(canonicalization_methods) != 1
-        or canonicalization_methods[0].attrib.get("Algorithm")
+        canonicalization_method.attrib.get("Algorithm")
         not in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
-        or len(signature_methods) != 1
-        or not signed_info_references
+        or not (signature_method.attrib.get("Algorithm") or "").strip()
         or any(
             not _signed_info_reference_has_same_signature_uri(reference)
             for reference in signed_info_references

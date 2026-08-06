@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.59 focuses on Office Open XML Word documents and templates and
+Version 0.60 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -288,11 +288,17 @@ be root-package scoped, internal, resolve to a stored member, and occur at most
 once. Recognized signature and certificate relationships must originate at the
 expected preceding part, be internal, resolve to a stored member, and carry the
 expected content type. XML signature parts must have the expected XMLDSIG root
-and basic SignedInfo shape. Their one `CanonicalizationMethod/@Algorithm` must
-be exactly one of OPC's two permitted XML Canonicalization URIs (with or
-without comments); a missing or other URI fails the recognized signature shape
-closed. Every direct `SignedInfo/Reference` must carry an explicit XMLDSIG
-same-document URI: the empty URI or a local fragment beginning with `#`.
+and fixed direct `Signature` sequence: `SignedInfo`, `SignatureValue`,
+optional `KeyInfo`, then zero or more `Object` elements. `SignedInfo` must
+directly contain `CanonicalizationMethod`, `SignatureMethod`, then one or
+more `Reference` elements; it and `SignatureValue` permit only their
+optional `Id` attribute, and `SignatureValue` cannot contain child XML.
+`SignatureMethod/@Algorithm` must be nonblank. Their one
+`CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
+XML Canonicalization URIs (with or without comments); a missing or other URI
+fails the recognized signature shape closed. Every direct
+`SignedInfo/Reference` must carry an explicit XMLDSIG same-document URI: the
+empty URI or a local fragment beginning with `#`.
 An omitted, relative, or absolute URI fails the recognized signature shape
 closed. Every XMLDSIG `DigestMethod/@Algorithm` in a recognized package
 signature must also avoid OPC's expressly forbidden MD5 URI. Every XMLDSIG
@@ -303,7 +309,9 @@ element is likewise prohibited anywhere in a recognized package Signature.
 OPC §10.5.2 also prohibits every MCE-namespace element and attribute anywhere
 in that recognized Signature. These exact stored-syntax rules do not broadly
 reject, endorse, or cryptographically assess SHA-1 or other algorithms, and
-the MCE rule does not evaluate compatibility markup.
+the MCE rule does not evaluate compatibility markup. The direct-sequence check
+is not full XMLDSIG schema validation: DocFence does not validate base64
+lexical content, method parameters, KeyInfo or Object payloads, or cryptography.
 
 The Relationship Transform URI has its own mandatory local context. It must be
 a direct `ds:Transform` under a direct `ds:Manifest/ds:Reference/ds:Transforms`

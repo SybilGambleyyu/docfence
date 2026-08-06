@@ -759,8 +759,12 @@ relationships must originate at a recognized origin; recognized certificate
 relationships must originate at a recognized XML-signature part. Each must be
 internal, resolve to a stored member, and have the expected content type.
 Recognized XML signature parts must have the XMLDSIG `Signature` root, exactly
-one direct `SignedInfo` and `SignatureValue`, and the basic direct
-canonicalization/signature-method/reference shape. The one direct
+one direct `SignedInfo` then `SignatureValue`, optional `KeyInfo`, and zero
+or more direct `Object` elements. `SignedInfo` must directly contain
+`CanonicalizationMethod`, `SignatureMethod`, then one or more `Reference`
+elements. `SignedInfo` and `SignatureValue` permit only their optional
+`Id` attribute at this boundary; `SignatureValue` cannot have child XML, and
+`SignatureMethod/@Algorithm` must be nonblank. The one direct
 `CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
 XML Canonicalization URIs (with or without comments); a missing or other URI is
 malformed. Each direct `SignedInfo/Reference` must carry an explicit XMLDSIG
@@ -776,7 +780,9 @@ Signature. Every XMLDSIG `ds:XPath` element is also rejected anywhere in the
 recognized Signature because OPC says it shall not be present. OPC §10.5.2
 also forbids MCE-namespace elements and attributes anywhere in that Signature.
 DocFence does not parse or execute XPath or a transform, validate MCE
-conformance, or select an MCE branch.
+conformance, or select an MCE branch. The direct-sequence rule is not full
+XMLDSIG schema validation: it does not validate base64 lexical content, method
+parameters, KeyInfo/Object payloads, a digest, or a signature.
 
 When that permitted URI is a Relationship Transform, its local package syntax
 is also mandatory: it must be a direct `ds:Transform` under a direct

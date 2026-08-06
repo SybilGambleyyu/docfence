@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.60.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts with XMLDSIG's direct
+  `Signature` and `SignedInfo` child sequences: `SignedInfo`,
+  `SignatureValue`, optional `KeyInfo`, then zero or more `Object`
+  elements; and `CanonicalizationMethod`, `SignatureMethod`, then one or
+  more `Reference` elements. `SignatureValue` and `SignedInfo` now allow
+  only their optional `Id` attribute at this boundary, `SignatureValue`
+  cannot contain child XML, and `SignatureMethod/@Algorithm` must be
+  nonblank.
+- This is a narrow stored-grammar check from the XMLDSIG core schema and OPC
+  §10.5.1. It does not validate base64 lexical content, method parameters,
+  `KeyInfo` or application-defined `Object` payloads, reference digests,
+  XMLDSIG cryptography, certificates, or trust.
+- Added regressions for reordered and stray direct signature children,
+  malformed `SignatureValue` markup, reordered and stray `SignedInfo`
+  children, and a missing SignatureMethod algorithm. All 21 parseable XML
+  signatures in the 29-document public USENIX OOXML Signature Security corpus
+  use these direct sequences; its public profiles are identical to 0.59.
+
 ## 0.59.0 — 2026-08-06
 
 - Corrected the bounded static OPC Relationship Transform resolver to match

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.59 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.60 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -87,8 +87,10 @@ following properties:
   noncanonical relationship targets, content-type-only signature residue,
   conventional orphan origins, same-count signature/certificate mutations,
   JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
-  SignedInfo shape including both permitted OPC `CanonicalizationMethod`
-  algorithms and missing or unsupported canonicalization-method algorithms,
+  SignedInfo shape including its fixed direct Signature/SignedInfo sequences,
+  child-free and attribute-bounded SignatureValue markup, a required nonblank
+  SignatureMethod algorithm, both permitted OPC `CanonicalizationMethod`
+  algorithms, and missing or unsupported canonicalization-method algorithms,
   explicit empty and fragment same-document SignedInfo references plus missing,
   package-relative, and absolute SignedInfo reference URIs,
   an MD5 digest method, non-OPC transform algorithm, MCE-namespace attribute
@@ -648,12 +650,13 @@ duplicate-document, and evil-type attacker variants are rejected for static
 declaration gaps. This is a structural compatibility smoke test over a bounded
 scope, not a claim that signatures are valid, trusted, exhaustive, or that a
 client will handle any sample in a particular way; the fixtures are not runtime
-dependencies. For 0.59, the full public corpus contains 38 Relationship
+dependencies. For 0.60, the full public corpus contains 38 Relationship
 Transforms and 106 direct relationship selectors in 21 parseable XML signature
 parts (22 XML signature parts across 29 DOCX files); every selector has the
-expected direct parent, attribute, and child-free shape. No selector has a
-case-only stored relationship match or a folded-ID collision, and public
-profiles are byte-for-byte identical to 0.58
+expected direct parent, attribute, and child-free shape. All 21 parseable
+signature roots use XMLDSIG's direct Signature/SignedInfo sequences. No
+selector has a case-only stored relationship match or a folded-ID collision,
+and public profiles are byte-for-byte identical to 0.59
 (`8a4b968515b0ea36d8db1430b79315b6045a95f9fa14a037cf044fd29639f7f2`).
 
 For the Word-protection boundary, the release check profiles two independent
@@ -723,5 +726,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.59 contract; see
+only, not field evaluation. Those limits are explicit in the 0.60 contract; see
 [threat model](threat-model.md).

@@ -3427,6 +3427,19 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     conventional_origin_only = tmp_path / "conventional-origin-only.docx"
     wrong_signature_root = tmp_path / "wrong-signature-root.docx"
     missing_signature_method = tmp_path / "missing-signature-method.docx"
+    signature_values_with_id = tmp_path / "signature-values-with-id.docx"
+    signed_infos_with_id = tmp_path / "signed-infos-with-id.docx"
+    missing_signature_method_algorithm = (
+        tmp_path / "missing-signature-method-algorithm.docx"
+    )
+    signature_value_before_signed_info = (
+        tmp_path / "signature-value-before-signed-info.docx"
+    )
+    unexpected_signature_child = tmp_path / "unexpected-signature-child.docx"
+    nested_signature_value = tmp_path / "nested-signature-value.docx"
+    signature_value_extra_attribute = tmp_path / "signature-value-extra-attribute.docx"
+    reordered_signed_info = tmp_path / "reordered-signed-info.docx"
+    unexpected_signed_info_child = tmp_path / "unexpected-signed-info-child.docx"
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
     missing_canonicalization_method_algorithm = (
         tmp_path / "missing-canonicalization-method-algorithm.docx"
@@ -3496,6 +3509,51 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     _write_package_digital_signature_document(
         missing_signature_method,
         omit_signature_method=True,
+    )
+    _write_package_digital_signature_document(
+        signature_values_with_id,
+        signature_value_markup=(
+            '<ds:SignatureValue Id="idSignatureValue">'
+            "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK</ds:SignatureValue>"
+        ),
+    )
+    _write_package_digital_signature_document(
+        signed_infos_with_id,
+        signed_info_id="idSignedInfo",
+    )
+    _write_package_digital_signature_document(
+        missing_signature_method_algorithm,
+        signature_method_algorithm=None,
+    )
+    _write_package_digital_signature_document(
+        signature_value_before_signed_info,
+        signature_value_before_signed_info=True,
+    )
+    _write_package_digital_signature_document(
+        unexpected_signature_child,
+        extra_signature_child_markup="<ds:UnexpectedSignatureChild/>",
+    )
+    _write_package_digital_signature_document(
+        nested_signature_value,
+        signature_value_markup=(
+            "<ds:SignatureValue>PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK"
+            "<ds:UnexpectedSignatureValueChild/></ds:SignatureValue>"
+        ),
+    )
+    _write_package_digital_signature_document(
+        signature_value_extra_attribute,
+        signature_value_markup=(
+            '<ds:SignatureValue Unexpected="1">'
+            "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK</ds:SignatureValue>"
+        ),
+    )
+    _write_package_digital_signature_document(
+        reordered_signed_info,
+        signed_info_methods_reordered=True,
+    )
+    _write_package_digital_signature_document(
+        unexpected_signed_info_child,
+        extra_signed_info_child_markup="<ds:UnexpectedSignedInfoChild/>",
     )
     _write_package_digital_signature_document(
         canonicalization_with_comments,
@@ -3616,6 +3674,8 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         content_type_only,
         canonicalization_with_comments,
         null_signed_info_reference,
+        signature_values_with_id,
+        signed_infos_with_id,
     ):
         snapshot = load_snapshot(document)
         assert snapshot.package_digital_signatures.signature_origin_part_count == 1
@@ -3629,6 +3689,13 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     for document in (
         wrong_signature_root,
         missing_signature_method,
+        missing_signature_method_algorithm,
+        signature_value_before_signed_info,
+        unexpected_signature_child,
+        nested_signature_value,
+        signature_value_extra_attribute,
+        reordered_signed_info,
+        unexpected_signed_info_child,
         missing_canonicalization_method_algorithm,
         unsupported_canonicalization_method,
         md5_additional_signed_info_reference,
@@ -8694,6 +8761,9 @@ def _write_package_digital_signature_document(
     duplicate_origin_relationship: bool = False,
     wrong_signature_root: bool = False,
     omit_signature_method: bool = False,
+    signature_method_algorithm: str | None = (
+        "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+    ),
     canonicalization_method_algorithm: str | None = (
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
     ),
@@ -8705,6 +8775,12 @@ def _write_package_digital_signature_document(
     additional_signed_info_reference_transform_mode: str = "none",
     include_standalone_relationship_selector: bool = False,
     signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
+    signature_value_markup: str | None = None,
+    signature_value_before_signed_info: bool = False,
+    signed_info_id: str | None = None,
+    signed_info_methods_reordered: bool = False,
+    extra_signed_info_child_markup: str = "",
+    extra_signature_child_markup: str = "",
     inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
     signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
     certificate_payload_marker: str = "PACKAGE_CERTIFICATE_DO_NOT_LEAK",
@@ -8796,13 +8872,15 @@ def _write_package_digital_signature_document(
         )
 
     signature_root_name = "NotSignature" if wrong_signature_root else "Signature"
+    signature_method_algorithm_attribute = (
+        ""
+        if signature_method_algorithm is None
+        else f' Algorithm="{signature_method_algorithm}"'
+    )
     signature_method = (
         ""
         if omit_signature_method
-        else (
-            "<ds:SignatureMethod "
-            'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
-        )
+        else f"<ds:SignatureMethod{signature_method_algorithm_attribute}/>"
     )
     canonicalization_method_algorithm_attribute = (
         ""
@@ -8836,21 +8914,44 @@ def _write_package_digital_signature_document(
         if include_standalone_relationship_selector
         else ""
     )
-    signature_xml = (
-        f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
-        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
-        'Id="idPackageSignature">'
-        "<ds:SignedInfo>"
-        f"<ds:CanonicalizationMethod"
-        f"{canonicalization_method_algorithm_attribute}/>"
-        f"{signature_method}"
+    canonicalization_method = (
+        f"<ds:CanonicalizationMethod{canonicalization_method_algorithm_attribute}/>"
+    )
+    signed_info_reference = (
         f"<ds:Reference{signed_info_reference_uri_attribute}>"
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
         "<ds:DigestValue>PACKAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
         "</ds:Reference>"
-        f"{additional_signed_info_reference}"
+    )
+    signed_info_children = (
+        f"{signature_method}{canonicalization_method}"
+        if signed_info_methods_reordered
+        else f"{canonicalization_method}{signature_method}"
+    )
+    signed_info_id_attribute = (
+        "" if signed_info_id is None else f' Id="{signed_info_id}"'
+    )
+    signed_info_markup = (
+        f"<ds:SignedInfo{signed_info_id_attribute}>"
+        f"{signed_info_children}{signed_info_reference}"
+        f"{additional_signed_info_reference}{extra_signed_info_child_markup}"
         "</ds:SignedInfo>"
+    )
+    signature_value_markup = (
         f"<ds:SignatureValue>{signature_value}</ds:SignatureValue>"
+        if signature_value_markup is None
+        else signature_value_markup
+    )
+    signature_prefix = (
+        f"{signature_value_markup}{signed_info_markup}"
+        if signature_value_before_signed_info
+        else f"{signed_info_markup}{signature_value_markup}"
+    )
+    signature_xml = (
+        f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
+        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
+        'Id="idPackageSignature">'
+        f"{signature_prefix}{extra_signature_child_markup}"
         "<ds:KeyInfo><ds:X509Data>"
         f"<ds:X509Certificate>{inline_certificate_marker}</ds:X509Certificate>"
         "</ds:X509Data></ds:KeyInfo>"
