@@ -3667,6 +3667,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         tmp_path / "canonicalized-word-part-with-comments.docx"
     )
     xpath_word_part_transform = tmp_path / "xpath-word-part-transform.docx"
+    xpath_additional_signed_info_reference = (
+        tmp_path / "xpath-additional-signed-info-reference.docx"
+    )
     md5_word_part_digest = tmp_path / "md5-word-part-digest.docx"
     unsupported_word_part_transform = tmp_path / "unsupported-word-part-transform.docx"
     relationship_word_part_transform = (
@@ -3794,6 +3797,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         xpath_word_part_transform,
         word_part_transform_mode="canonicalization_with_xpath_parameter",
+    )
+    _write_package_signature_coverage_document(
+        xpath_additional_signed_info_reference,
+        additional_signed_info_reference_transform_mode=(
+            "canonicalization_with_xpath_parameter"
+        ),
     )
     _write_package_signature_coverage_document(
         md5_word_part_digest,
@@ -4022,7 +4031,11 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     for document in (md5_relationship_digest, md5_word_part_digest):
         with pytest.raises(DocumentFormatError):
             load_snapshot(document)
-    for document in (xpath_relationship_transform, xpath_word_part_transform):
+    for document in (
+        xpath_relationship_transform,
+        xpath_word_part_transform,
+        xpath_additional_signed_info_reference,
+    ):
         with pytest.raises(DocumentFormatError):
             load_snapshot(document)
 
@@ -8750,6 +8763,7 @@ def _write_package_signature_coverage_document(
     package_signature_properties_markup: str | None = None,
     package_object_binding_transform_mode: str = "none",
     package_object_binding_digest_mode: str = "standard",
+    additional_signed_info_reference_transform_mode: str = "none",
     include_extra_package_object_child: bool = False,
     include_duplicate_package_object: bool = False,
     include_duplicate_package_object_reference: bool = False,
@@ -8797,6 +8811,20 @@ def _write_package_signature_coverage_document(
     package_object_binding_digest_markup = _package_signature_part_digest_markup(
         digest_reference,
         mode=package_object_binding_digest_mode,
+    )
+    additional_signed_info_reference_transforms = (
+        _package_signature_part_transforms(
+            mode=additional_signed_info_reference_transform_mode
+        )
+        if additional_signed_info_reference_transform_mode != "none"
+        else ""
+    )
+    additional_signed_info_reference = (
+        '<ds:Reference URI="">'
+        f"{additional_signed_info_reference_transforms}"
+        f"{digest_reference}</ds:Reference>"
+        if additional_signed_info_reference_transform_mode != "none"
+        else ""
     )
     root_relationship_transforms = _package_signature_relationship_transforms(
         '<opc:RelationshipReference SourceId="rIdDocument"/>',
@@ -8906,6 +8934,7 @@ def _write_package_signature_coverage_document(
         f'URI="{signed_info_reference}">'
         f"{package_object_binding_transforms}{package_object_binding_digest_markup}"
         f"</ds:Reference>{duplicate_package_object_reference}"
+        f"{additional_signed_info_reference}"
         "</ds:SignedInfo>"
         "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
         f'<ds:Object Id="{package_object_id}"><ds:Manifest>'
