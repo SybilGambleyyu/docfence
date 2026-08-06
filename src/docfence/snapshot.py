@@ -389,6 +389,9 @@ _OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS: Final = (
     _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
     | frozenset({_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM})
 )
+_OPC_DISALLOWED_DIGEST_METHOD_ALGORITHM: Final = (
+    "http://www.w3.org/2001/04/xmldsig-more#md5"
+)
 _PACKAGE_RELATIONSHIP_CONTENT_TYPE: Final = (
     "application/vnd.openxmlformats-package.relationships+xml"
 )
@@ -2944,9 +2947,11 @@ def _reference_has_expected_xml_dsig_shape(reference: ET.Element) -> bool:
     else:
         return False
 
+    digest_algorithm = (digest_method.attrib.get("Algorithm") or "").strip()
     if (
         _qualified_name(digest_method.tag) != (_XMLDSIG_NAMESPACE, "DigestMethod")
-        or not (digest_method.attrib.get("Algorithm") or "").strip()
+        or not digest_algorithm
+        or digest_algorithm == _OPC_DISALLOWED_DIGEST_METHOD_ALGORITHM
         or _qualified_name(digest_value.tag) != (_XMLDSIG_NAMESPACE, "DigestValue")
         or digest_value.attrib
         or list(digest_value)

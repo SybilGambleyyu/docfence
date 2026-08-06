@@ -809,7 +809,9 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 or carry one direct nonempty list of only OPC's two XML Canonicalization
 algorithms. Every transform in the bounded binding/manifest chain must also
 be free of XMLDSIG's `ds:XPath` element, which OPC disallows; relationship and
-unknown transform declarations leave coverage unavailable. DocFence checks that
+unknown transform declarations leave coverage unavailable. A `DigestMethod`
+cannot use OPC's expressly forbidden MD5 URI; the audit does not otherwise
+judge an algorithm's cryptographic suitability. DocFence checks that
 stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
@@ -817,7 +819,8 @@ URI plus case-sensitive matching content type. Before a manifest reference is
 credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
-non-whitespace direct text, in that order. Supported
+non-whitespace direct text, in that order; the exact MD5 URI is unsupported.
+Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
 exactly one relationship transform immediately followed by XML Canonicalization

@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.49 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.50 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -101,7 +101,9 @@ following properties:
   canonicalization form, plus unsupported/relationship/empty/duplicate
   transform lists, `ds:XPath` parameters in binding, relationship, and part
   transforms, and missing, misordered, malformed, nested, extra, or
-  text-bearing binding digest children,
+  text-bearing binding digest children, plus MD5 digest-method declarations in
+  binding, relationship, and part references while a legacy SHA-1 binding
+  declaration remains structurally accepted,
   unresolved and unsupported manifest references, a case-mismatched content
   type, standard `RelationshipsGroupReference/@SourceType` selectors,
   malformed nonstandard `RelationshipReference/@SourceType` lookalikes,
@@ -700,5 +702,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.49 contract; see
+only, not field evaluation. Those limits are explicit in the 0.50 contract; see
 [threat model](threat-model.md).

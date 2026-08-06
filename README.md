@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.49 focuses on Office Open XML Word documents and templates and
+Version 0.50 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -304,7 +304,10 @@ parameter. Before a manifest reference can be
 credited, its direct XMLDSIG children must be the optional `ds:Transforms`, one
 `ds:DigestMethod` with a nonblank `Algorithm`, and one direct, attribute-free,
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
-that order. It then recognizes standard OPC
+that order. Every `DigestMethod` on the bounded binding/manifest chain cannot
+use OPC's expressly forbidden MD5 URI; this does not endorse,
+cryptographically assess, or broadly reject other algorithms such as legacy
+SHA-1. It then recognizes standard OPC
 relationship-transform declarations: one direct `ds:Transforms` list
 containing only the supported OPC relationship and XML Canonicalization
 algorithms, with exactly one relationship transform immediately followed by

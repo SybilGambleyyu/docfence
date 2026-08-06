@@ -3554,6 +3554,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
     xpath_relationship_transform = tmp_path / "xpath-relationship-transform.docx"
+    md5_relationship_digest = tmp_path / "md5-relationship-digest.docx"
     missing_relationship_canonicalization = (
         tmp_path / "missing-relationship-canonicalization.docx"
     )
@@ -3585,6 +3586,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         tmp_path / "canonicalized-word-part-with-comments.docx"
     )
     xpath_word_part_transform = tmp_path / "xpath-word-part-transform.docx"
+    md5_word_part_digest = tmp_path / "md5-word-part-digest.docx"
     unsupported_word_part_transform = tmp_path / "unsupported-word-part-transform.docx"
     relationship_word_part_transform = (
         tmp_path / "relationship-word-part-transform.docx"
@@ -3657,6 +3659,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         word_relationship_transform_mode="xpath_parameter",
     )
     _write_package_signature_coverage_document(
+        md5_relationship_digest,
+        word_relationship_digest_mode="md5_digest_algorithm",
+    )
+    _write_package_signature_coverage_document(
         missing_relationship_canonicalization,
         word_relationship_transform_mode="missing_canonicalization",
     )
@@ -3707,6 +3713,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         xpath_word_part_transform,
         word_part_transform_mode="canonicalization_with_xpath_parameter",
+    )
+    _write_package_signature_coverage_document(
+        md5_word_part_digest,
+        word_part_digest_mode="md5_digest_algorithm",
     )
     _write_package_signature_coverage_document(
         unsupported_word_part_transform,
@@ -3883,6 +3893,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     }
     for document in (
         xpath_relationship_transform,
+        md5_relationship_digest,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -3914,6 +3925,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     }
     for document in (
         xpath_word_part_transform,
+        md5_word_part_digest,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -3978,6 +3990,7 @@ rules:
     } == {"DFP092", "DFP093"}
     for document in (
         xpath_relationship_transform,
+        md5_relationship_digest,
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
         unsupported_trailing_transform,
@@ -4011,6 +4024,7 @@ rules:
         } == {"DFP092", "DFP093"}
     for document in (
         xpath_word_part_transform,
+        md5_word_part_digest,
         unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
@@ -4237,9 +4251,25 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         ) == (0, 1)
 
     for mode in (
+        "standard",
+        "sha1_digest_algorithm",
+    ):
+        document = tmp_path / f"bound-object-reference-compatible-digest-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_object_binding_digest_mode=mode,
+        )
+        coverage = load_snapshot(document).package_signature_coverage
+        assert (
+            coverage.signature_with_declared_package_coverage_count,
+            coverage.signature_without_declared_package_coverage_count,
+        ) == (1, 0)
+
+    for mode in (
         "missing_digest_value",
         "misordered_digest_children",
         "missing_digest_algorithm",
+        "md5_digest_algorithm",
         "extra_digest_child",
         "digest_value_attribute",
         "nested_digest_value",
@@ -8583,6 +8613,7 @@ def _write_package_signature_coverage_document(
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
     word_relationship_transform_mode: str = "standard",
+    word_relationship_digest_mode: str = "standard",
     include_duplicate_word_relationship_manifest_reference: bool = False,
     package_object_id: str = "idPackageObject",
     include_package_signature_properties: bool = True,
@@ -8664,11 +8695,15 @@ def _write_package_signature_coverage_document(
         word_relationship_selector,
         mode=word_relationship_transform_mode,
     )
+    word_relationship_digest_markup = _package_signature_part_digest_markup(
+        digest_reference,
+        mode=word_relationship_digest_mode,
+    )
     word_relationship_manifest_reference = (
         f'<ds:Reference URI="/word/_rels/document.xml.rels?ContentType='
         f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
-        f"{word_relationship_transforms}"
-        f"{digest_reference}</ds:Reference>"
+        f"{word_relationship_transforms}{word_relationship_digest_markup}"
+        "</ds:Reference>"
     )
     duplicate_word_relationship_manifest_reference = (
         word_relationship_manifest_reference
@@ -8904,6 +8939,12 @@ def _package_signature_part_digest_markup(digest_reference: str, *, mode: str) -
     digest_method = (
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
     )
+    sha1_digest_method = (
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/>'
+    )
+    md5_digest_method = (
+        '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmldsig-more#md5"/>'
+    )
     digest_value = (
         "<ds:DigestValue>PACKAGE_COVERAGE_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
     )
@@ -8916,6 +8957,10 @@ def _package_signature_part_digest_markup(digest_reference: str, *, mode: str) -
         return digest_value + digest_method
     if mode == "missing_digest_algorithm":
         return "<ds:DigestMethod/>" + digest_value
+    if mode == "sha1_digest_algorithm":
+        return sha1_digest_method + digest_value
+    if mode == "md5_digest_algorithm":
+        return md5_digest_method + digest_value
     if mode == "extra_digest_child":
         return digest_reference + "<ds:Object/>"
     if mode == "digest_value_attribute":

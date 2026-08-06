@@ -2,6 +2,22 @@
 
 All notable changes are documented here.
 
+## 0.50.0 — 2026-08-06
+
+- Hardened the bounded OPC package-signature declaration audit to reject the
+  one `DigestMethod/@Algorithm` URI OPC expressly forbids:
+  `http://www.w3.org/2001/04/xmldsig-more#md5`.
+- An MD5 package-object binding now leaves declaration coverage unavailable;
+  an MD5 manifest part or relationship reference is aggregate unsupported and
+  cannot lend part or selector coverage. The parser does not decode or
+  recompute a digest. It deliberately retains legacy SHA-1 and other values as
+  structural syntax because OPC only discourages SHA-1 and permits other
+  algorithms.
+- Added binding, part, and relationship MD5 regressions plus a SHA-1
+  compatibility regression. The public USENIX OOXML Signature Security corpus
+  used 243 SHA-256 `DigestMethod` declarations and no MD5 declarations during
+  the compatibility scan.
+
 ## 0.49.0 — 2026-08-04
 
 - Hardened the bounded OPC package-signature declaration audit to reject a
