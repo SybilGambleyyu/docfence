@@ -758,9 +758,10 @@ be root-package scoped, internal, resolvable, and unique. Recognized signature
 relationships must originate at a recognized origin; recognized certificate
 relationships must originate at a recognized XML-signature part. Each must be
 internal, resolve to a stored member, and have the expected content type.
-Recognized XML signature parts must have the XMLDSIG `Signature` root, exactly
-one direct `SignedInfo` then `SignatureValue`, optional `KeyInfo`, and zero
-or more direct `Object` elements. `SignedInfo` must directly contain
+Recognized XML signature parts must have the XMLDSIG `Signature` root with
+only its optional `Id` attribute, exactly one direct `SignedInfo` then
+`SignatureValue`, optional `KeyInfo`, and zero or more direct `Object`
+elements. `SignedInfo` must directly contain
 `CanonicalizationMethod`, `SignatureMethod`, then one or more `Reference`
 elements. `SignedInfo` and `SignatureValue` permit only their optional
 `Id` attribute at this boundary; `SignatureValue` cannot have child XML, and

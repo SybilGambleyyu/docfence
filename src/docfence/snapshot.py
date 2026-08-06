@@ -3264,11 +3264,12 @@ def _transform_has_no_opc_disallowed_xpath_element(transform: ET.Element) -> boo
 
 
 def _has_expected_xml_dsig_signature_child_sequence(root: ET.Element) -> bool:
-    """Return whether direct Signature children use XMLDSIG's fixed sequence."""
+    """Return whether Signature uses the bounded direct XMLDSIG shape."""
 
     children = list(root)
     if (
-        not _has_only_whitespace_interstitial_text(root)
+        not set(root.attrib) <= {"Id"}
+        or not _has_only_whitespace_interstitial_text(root)
         or len(children) < 2
         or _qualified_name(children[0].tag) != (_XMLDSIG_NAMESPACE, "SignedInfo")
         or _qualified_name(children[1].tag) != (_XMLDSIG_NAMESPACE, "SignatureValue")

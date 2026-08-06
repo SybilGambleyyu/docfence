@@ -2,6 +2,20 @@
 
 All notable changes are documented here.
 
+## 0.65.0 — 2026-08-06
+
+- Hardened the direct XMLDSIG `Signature` root in recognized OPC package
+  signature parts: it may carry only its optional `Id` attribute. An
+  undeclared root attribute now fails the recognized signature shape closed,
+  while an omitted `Id` remains valid.
+- This is a narrow direct-attribute grammar check from XMLDSIG Core's
+  `SignatureType`. It does not validate base64 content, KeyInfo/Object
+  payloads, a digest, a signature, a certificate, or trust.
+- Added regressions for an unknown root attribute and an omitted optional
+  `Id`. The public USENIX OOXML Signature Security corpus has 21 parseable
+  signature roots using only `Id`; all 29 captured package outcomes are
+  byte-for-byte identical to 0.64.
+
 ## 0.64.0 — 2026-08-06
 
 - Hardened the direct `SignedInfo` method declarations in recognized OPC XML

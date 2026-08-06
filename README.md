@@ -288,7 +288,8 @@ be root-package scoped, internal, resolve to a stored member, and occur at most
 once. Recognized signature and certificate relationships must originate at the
 expected preceding part, be internal, resolve to a stored member, and carry the
 expected content type. XML signature parts must have the expected XMLDSIG root
-and fixed direct `Signature` sequence: `SignedInfo`, `SignatureValue`,
+whose direct attributes may contain only its optional `Id`, and fixed direct
+`Signature` sequence: `SignedInfo`, `SignatureValue`,
 optional `KeyInfo`, then zero or more `Object` elements. `SignedInfo` must
 directly contain `CanonicalizationMethod`, `SignatureMethod`, then one or
 more `Reference` elements; it and `SignatureValue` permit only their

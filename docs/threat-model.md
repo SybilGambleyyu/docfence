@@ -203,8 +203,9 @@ same-count signature or certificate rewrite is therefore visible without
 copying signature material into a report.
 
 The direct XMLDSIG grammar is constrained before inventory: `Signature` must
-directly contain `SignedInfo`, `SignatureValue`, optional `KeyInfo`, then
-zero or more `Object` elements. `SignedInfo` must directly contain
+have only its optional `Id` attribute and directly contain `SignedInfo`,
+`SignatureValue`, optional `KeyInfo`, then zero or more `Object` elements.
+`SignedInfo` must directly contain
 `CanonicalizationMethod`, `SignatureMethod`, then one or more `Reference`
 elements. `SignedInfo` and `SignatureValue` may have only their optional
 `Id` attribute at this boundary; `SignatureValue` cannot carry child XML,

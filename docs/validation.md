@@ -86,8 +86,9 @@ following properties:
   opaque payloads. Tests cover origin relationships and default content types,
   noncanonical relationship targets, content-type-only signature residue,
   conventional orphan origins, same-count signature/certificate mutations,
-  JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
-  SignedInfo shape including its fixed direct Signature/SignedInfo sequences,
+  JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots,
+  optional-Id-only Signature-root attributes, and SignedInfo shape including
+  its fixed direct Signature/SignedInfo sequences,
   child-free and attribute-bounded SignatureValue markup, a required nonblank
   SignatureMethod algorithm, Algorithm-only direct `SignatureMethod` and
   `CanonicalizationMethod` attributes, both permitted OPC

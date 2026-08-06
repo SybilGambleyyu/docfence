@@ -3426,6 +3426,8 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     content_type_only = tmp_path / "content-type-only.docx"
     conventional_origin_only = tmp_path / "conventional-origin-only.docx"
     wrong_signature_root = tmp_path / "wrong-signature-root.docx"
+    signature_root_extra_attribute = tmp_path / "signature-root-extra-attribute.docx"
+    signature_root_without_id = tmp_path / "signature-root-without-id.docx"
     missing_signature_method = tmp_path / "missing-signature-method.docx"
     signature_values_with_id = tmp_path / "signature-values-with-id.docx"
     signed_infos_with_id = tmp_path / "signed-infos-with-id.docx"
@@ -3512,6 +3514,14 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     _write_package_digital_signature_document(
         wrong_signature_root,
         wrong_signature_root=True,
+    )
+    _write_package_digital_signature_document(
+        signature_root_extra_attribute,
+        signature_root_attributes=' Unexpected="1"',
+    )
+    _write_package_digital_signature_document(
+        signature_root_without_id,
+        signature_root_id=None,
     )
     _write_package_digital_signature_document(
         missing_signature_method,
@@ -3701,6 +3711,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         null_signed_info_reference,
         signature_values_with_id,
         signed_infos_with_id,
+        signature_root_without_id,
     ):
         snapshot = load_snapshot(document)
         assert snapshot.package_digital_signatures.signature_origin_part_count == 1
@@ -3713,6 +3724,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
 
     for document in (
         wrong_signature_root,
+        signature_root_extra_attribute,
         missing_signature_method,
         missing_signature_method_algorithm,
         signature_method_extra_attribute,
@@ -8886,6 +8898,8 @@ def _write_package_digital_signature_document(
     relationship_id_suffix: str = "1",
     duplicate_origin_relationship: bool = False,
     wrong_signature_root: bool = False,
+    signature_root_attributes: str = "",
+    signature_root_id: str | None = "idPackageSignature",
     omit_signature_method: bool = False,
     signature_method_algorithm: str | None = (
         "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
@@ -9002,6 +9016,12 @@ def _write_package_digital_signature_document(
         )
 
     signature_root_name = "NotSignature" if wrong_signature_root else "Signature"
+    signature_root_id_attribute = (
+        "" if signature_root_id is None else f' Id="{signature_root_id}"'
+    )
+    signature_property_target = (
+        "" if signature_root_id is None else f"#{signature_root_id}"
+    )
     signature_method_algorithm_attribute = (
         ""
         if signature_method_algorithm is None
@@ -9087,7 +9107,7 @@ def _write_package_digital_signature_document(
     signature_xml = (
         f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
         f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
-        'Id="idPackageSignature">'
+        f"{signature_root_attributes}{signature_root_id_attribute}>"
         f"{signature_prefix}{extra_signature_child_markup}"
         "<ds:KeyInfo><ds:X509Data>"
         f"<ds:X509Certificate>{inline_certificate_marker}</ds:X509Certificate>"
@@ -9100,7 +9120,7 @@ def _write_package_digital_signature_document(
         "<ds:DigestValue>PACKAGE_MANIFEST_DIGEST_DO_NOT_LEAK</ds:DigestValue>"
         "</ds:Reference></ds:Manifest>"
         "<ds:SignatureProperties><ds:SignatureProperty "
-        'Id="idSignatureDetails" Target="#idPackageSignature">'
+        f'Id="idSignatureDetails" Target="{signature_property_target}">'
         f"<opc:SignatureTime>{signature_comment}</opc:SignatureTime>"
         "</ds:SignatureProperty></ds:SignatureProperties>"
         f"{standalone_relationship_selector}"
