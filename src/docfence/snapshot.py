@@ -2843,6 +2843,15 @@ def _has_opc_disallowed_digest_method(root: ET.Element) -> bool:
     )
 
 
+def _has_opc_disallowed_xpath_element(root: ET.Element) -> bool:
+    """Return whether a package signature contains OPC's forbidden XPath element."""
+
+    return any(
+        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "XPath")
+        for element in root.iter()
+    )
+
+
 def _resolve_package_manifest_reference(
     reference: ET.Element,
     members: dict[str, zipfile.ZipInfo],
@@ -3135,12 +3144,9 @@ def _reference_has_supported_canonicalization_transforms(reference: ET.Element) 
 
 
 def _transform_has_no_opc_disallowed_xpath_element(transform: ET.Element) -> bool:
-    """Reject XMLDSIG XPath parameters from the bounded OPC coverage chain."""
+    """Return whether a coverage transform has no OPC-disallowed XPath element."""
 
-    return not any(
-        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "XPath")
-        for element in transform.iter()
-    )
+    return not _has_opc_disallowed_xpath_element(transform)
 
 
 def _relationship_transform_count(reference: ET.Element) -> int:
@@ -3203,6 +3209,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
             for reference in signed_info_references
         )
         or _has_opc_disallowed_digest_method(root)
+        or _has_opc_disallowed_xpath_element(root)
     ):
         raise DocumentFormatError("package digital signature parts are invalid")
 

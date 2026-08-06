@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.54.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to reject XMLDSIG
+  `ds:XPath` elements anywhere in the signature, rather than only in transforms
+  used by the bounded declaration-coverage chain. An XPath-bearing
+  application-object or other non-coverage reference can no longer leave the
+  package recognized as an OPC XML signature.
+- This is a stored-markup boundary for OPC's global XPath prohibition. DocFence
+  does not parse or execute an XPath expression, evaluate a transform, verify
+  XMLDSIG, or make a trust decision.
+- Added a regression for XPath on an additional same-document
+  `SignedInfo` reference. The public USENIX OOXML Signature Security corpus
+  contained no XMLDSIG XPath elements in its 22 XML signature parts, so all 29
+  DOCX profiles remain unchanged from 0.53.
+
 ## 0.53.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to reject the one

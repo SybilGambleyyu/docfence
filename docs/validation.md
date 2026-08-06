@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.53 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.54 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -91,7 +91,8 @@ following properties:
   algorithms and missing or unsupported canonicalization-method algorithms,
   explicit empty and fragment same-document SignedInfo references plus missing,
   package-relative, and absolute SignedInfo reference URIs,
-  an MD5 digest method on an additional non-coverage SignedInfo reference,
+  an MD5 digest method and an XPath-bearing transform on additional
+  non-coverage SignedInfo references,
   unavailable/external/non-root/duplicate origin
   relationships, and unavailable/external signature and certificate targets.
   The static declared-coverage boundary has a fully declared synthetic package
@@ -105,7 +106,8 @@ following properties:
   direct package-object binding references with no transform or either
   canonicalization form, plus unsupported/relationship/empty/duplicate
   transform lists, `ds:XPath` parameters in binding, relationship, and part
-  transforms, and missing, misordered, malformed, nested, extra, or
+  transforms, plus an XPath-bearing additional non-coverage SignedInfo
+  reference, and missing, misordered, malformed, nested, extra, or
   text-bearing binding digest children, plus MD5 digest-method declarations in
   binding, relationship, and part references while a legacy SHA-1 binding
   declaration remains structurally accepted,
@@ -707,5 +709,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.53 contract; see
+only, not field evaluation. Those limits are explicit in the 0.54 contract; see
 [threat model](threat-model.md).

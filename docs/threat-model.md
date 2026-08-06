@@ -201,15 +201,20 @@ checked for OPC's exact MD5 prohibition. This stored-syntax check neither
 endorses nor broadly rejects SHA-1 or other algorithms, and does not recompute
 any digest.
 
+Every XMLDSIG `ds:XPath` element in a recognized package signature is also
+rejected because OPC says the XPath element shall not be present. This is a
+global stored-markup check: DocFence neither parses nor evaluates an XPath
+expression or transform.
+
 A separate static declaration audit follows only one direct
 `ds:Object Id="idPackageObject"` with no other attributes and exactly direct
 `ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
 direct `SignedInfo` local-fragment reference to that object. That binding
 must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
 `DigestValue` shape; when present, transforms can use only OPC's two XML
-Canonicalization algorithms. Every transform used by this bounded declaration
-chain must be free of XMLDSIG's `ds:XPath` element, which OPC disallows. It
-does not decode or recompute the digest,
+Canonicalization algorithms. OPC's global `ds:XPath` prohibition is
+enforced before this bounded declaration chain is evaluated, including
+references outside the chain. It does not decode or recompute the digest,
 execute transforms, or verify XMLDSIG. It resolves only that package-specific
 manifest using the binding reference's direct URI fragment. Its direct
 `SignatureProperties` must have one `SignatureProperty` with the fixed
@@ -224,8 +229,9 @@ manifest reference is credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. The global recognized-signature
-boundary rejects OPC's expressly forbidden MD5 URI; DocFence does not
-otherwise judge an algorithm's cryptographic suitability. It then
+boundary rejects OPC's expressly forbidden MD5 URI and every `ds:XPath`
+element; DocFence does not otherwise judge an algorithm's cryptographic
+suitability. It then
 recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML
 Canonicalization algorithms, with exactly one relationship transform
