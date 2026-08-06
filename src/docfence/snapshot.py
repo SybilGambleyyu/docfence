@@ -2852,6 +2852,19 @@ def _has_opc_disallowed_xpath_element(root: ET.Element) -> bool:
     )
 
 
+def _has_opc_disallowed_markup_compatibility(root: ET.Element) -> bool:
+    """Return whether a package signature contains MCE namespace markup."""
+
+    return any(
+        _qualified_name(element.tag)[0] == _MARKUP_COMPATIBILITY_NAMESPACE
+        or any(
+            _qualified_name(attribute)[0] == _MARKUP_COMPATIBILITY_NAMESPACE
+            for attribute in element.attrib
+        )
+        for element in root.iter()
+    )
+
+
 def _resolve_package_manifest_reference(
     reference: ET.Element,
     members: dict[str, zipfile.ZipInfo],
@@ -3210,6 +3223,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
         )
         or _has_opc_disallowed_digest_method(root)
         or _has_opc_disallowed_xpath_element(root)
+        or _has_opc_disallowed_markup_compatibility(root)
     ):
         raise DocumentFormatError("package digital signature parts are invalid")
 

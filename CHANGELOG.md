@@ -2,6 +2,19 @@
 
 All notable changes are documented here.
 
+## 0.55.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to reject every element or
+  attribute in the OOXML Markup Compatibility namespace, as required by OPC
+  §10.5.2. MCE markup can no longer remain inside an otherwise fully declared
+  package signature.
+- This is a structural signature boundary distinct from DocFence's Word-part
+  MCE inventory: it does not validate MCE conformance, select a branch,
+  preprocess a package, or assess an Office client's behavior.
+- Added fully declared synthetic regressions for both an MCE attribute and an
+  MCE element in a package XML signature. Corpus and release-profile evidence
+  is recorded with the release.
+
 ## 0.54.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to reject XMLDSIG

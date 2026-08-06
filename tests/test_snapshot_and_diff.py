@@ -3670,6 +3670,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     xpath_additional_signed_info_reference = (
         tmp_path / "xpath-additional-signed-info-reference.docx"
     )
+    markup_compatibility_attribute_in_signature = (
+        tmp_path / "markup-compatibility-attribute-in-signature.docx"
+    )
+    markup_compatibility_element_in_signature = (
+        tmp_path / "markup-compatibility-element-in-signature.docx"
+    )
     md5_word_part_digest = tmp_path / "md5-word-part-digest.docx"
     unsupported_word_part_transform = tmp_path / "unsupported-word-part-transform.docx"
     relationship_word_part_transform = (
@@ -3803,6 +3809,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         additional_signed_info_reference_transform_mode=(
             "canonicalization_with_xpath_parameter"
         ),
+    )
+    _write_package_signature_coverage_document(
+        markup_compatibility_attribute_in_signature,
+        include_signature_markup_compatibility_attribute=True,
+    )
+    _write_package_signature_coverage_document(
+        markup_compatibility_element_in_signature,
+        include_signature_markup_compatibility_element=True,
     )
     _write_package_signature_coverage_document(
         md5_word_part_digest,
@@ -4035,6 +4049,8 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         xpath_relationship_transform,
         xpath_word_part_transform,
         xpath_additional_signed_info_reference,
+        markup_compatibility_attribute_in_signature,
+        markup_compatibility_element_in_signature,
     ):
         with pytest.raises(DocumentFormatError):
             load_snapshot(document)
@@ -8764,6 +8780,8 @@ def _write_package_signature_coverage_document(
     package_object_binding_transform_mode: str = "none",
     package_object_binding_digest_mode: str = "standard",
     additional_signed_info_reference_transform_mode: str = "none",
+    include_signature_markup_compatibility_attribute: bool = False,
+    include_signature_markup_compatibility_element: bool = False,
     include_extra_package_object_child: bool = False,
     include_duplicate_package_object: bool = False,
     include_duplicate_package_object_reference: bool = False,
@@ -8923,9 +8941,30 @@ def _write_package_signature_coverage_document(
         if include_case_mismatched_manifest_content_type
         else "application/xml"
     )
+    signature_markup_compatibility_namespace = (
+        f' xmlns:mc="{_MARKUP_COMPATIBILITY_NAMESPACE}"'
+        if (
+            include_signature_markup_compatibility_attribute
+            or include_signature_markup_compatibility_element
+        )
+        else ""
+    )
+    signature_markup_compatibility_attribute = (
+        ' mc:Ignorable="PACKAGE_SIGNATURE_MCE_DO_NOT_LEAK"'
+        if include_signature_markup_compatibility_attribute
+        else ""
+    )
+    signature_markup_compatibility_element = (
+        "<mc:AlternateContent/>"
+        if include_signature_markup_compatibility_element
+        else ""
+    )
     signature_xml = (
         f'<ds:Signature xmlns:ds="{_XMLDSIG_NAMESPACE}" '
-        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" Id="idPackageSignature">'
+        f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}"'
+        f"{signature_markup_compatibility_namespace}"
+        f"{signature_markup_compatibility_attribute}"
+        ' Id="idPackageSignature">'
         "<ds:SignedInfo><ds:CanonicalizationMethod "
         'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
         "<ds:SignatureMethod "
@@ -8937,6 +8976,7 @@ def _write_package_signature_coverage_document(
         f"{additional_signed_info_reference}"
         "</ds:SignedInfo>"
         "<ds:SignatureValue>PACKAGE_COVERAGE_SIGNATURE_DO_NOT_LEAK</ds:SignatureValue>"
+        f"{signature_markup_compatibility_element}"
         f'<ds:Object Id="{package_object_id}"><ds:Manifest>'
         f"{root_relationship_manifest_reference}"
         f"{word_relationship_manifest_reference}"

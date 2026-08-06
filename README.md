@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.54 focuses on Office Open XML Word documents and templates and
+Version 0.55 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -254,6 +254,12 @@ conformance, select an `AlternateContent` branch, resolve a feature prefix,
 apply a target Office version, preprocess or save a package, or predict what
 any document client will load or render.
 
+That Word-part inventory is separate from OPC package signatures. OPC §10.5.2
+forbids MCE-namespace elements and attributes inside a Digital Signature XML
+Signature part, so DocFence rejects that markup anywhere in a recognized
+package XML signature. The signature constraint neither expands the Word-part
+MCE inventory nor selects, preprocesses, or interprets a branch.
+
 Sensitivity-label metadata has a separate inventory because a general custom
 property count does not describe the governance state that Office can retain.
 DocFence recognizes the Office 2021 `LabelInfo` part by its standard package
@@ -291,8 +297,10 @@ An omitted, relative, or absolute URI fails the recognized signature shape
 closed. Every XMLDSIG `DigestMethod/@Algorithm` in a recognized package
 signature must also avoid OPC's expressly forbidden MD5 URI. Every XMLDSIG
 `ds:XPath` element is likewise prohibited anywhere in a recognized package
-Signature. These exact stored-syntax rules do not broadly reject, endorse, or
-cryptographically assess SHA-1 or other algorithms.
+Signature. OPC §10.5.2 also prohibits every MCE-namespace element and
+attribute anywhere in that recognized Signature. These exact stored-syntax
+rules do not broadly reject, endorse, or cryptographically assess SHA-1 or
+other algorithms, and the MCE rule does not evaluate compatibility markup.
 
 Reports expose only aggregate origin-part, XML-signature-part, certificate-part,
 SignedInfo-reference, manifest-reference, relationship-reference, inline-X.509
@@ -309,14 +317,16 @@ looks for a direct `SignedInfo` local-fragment reference to a direct
 manifests it resolves exact local part URI/content-type references with
 case-sensitive content-type matching. OPC's global `ds:XPath` prohibition is
 enforced before this coverage audit, including transform parameters on
-references outside the bounded chain. Before a manifest reference can be
-credited, its direct XMLDSIG children must be the optional `ds:Transforms`, one
+references outside the bounded chain. OPC §10.5.2's global MCE-namespace
+element/attribute prohibition is enforced at the same recognized-signature
+boundary. Before a manifest reference can be credited, its direct XMLDSIG
+children must be the optional `ds:Transforms`, one
 `ds:DigestMethod` with a nonblank `Algorithm`, and one direct, attribute-free,
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
 that order. The recognized-signature boundary already rejects OPC's expressly
-forbidden MD5 URI in every `DigestMethod` and every `ds:XPath` element; it
-does not otherwise endorse, cryptographically assess, or broadly reject
-algorithms such as legacy SHA-1.
+forbidden MD5 URI in every `DigestMethod`, every `ds:XPath` element, and MCE
+namespace markup; it does not otherwise endorse, cryptographically assess, or
+broadly reject algorithms such as legacy SHA-1.
 It then recognizes standard OPC
 relationship-transform declarations: one direct `ds:Transforms` list
 containing only the supported OPC relationship and XML Canonicalization
@@ -339,8 +349,8 @@ review-visible.
 For a non-relationship package part, the audit accepts no transform list or one
 direct nonempty list of only OPC-supported XML Canonicalization transforms. An
 empty, duplicate, relationship, or unknown transform list is unsupported and
-does not credit that part with coverage. A signature carrying `ds:XPath` is
-rejected before this coverage decision.
+does not credit that part with coverage. A signature carrying `ds:XPath` or MCE
+namespace markup is rejected before this coverage decision.
 
 This remains deliberately narrower than cryptographic or client-effective
 coverage. DocFence does not parse, decode, or recompute reference digests or

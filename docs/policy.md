@@ -695,6 +695,12 @@ member paths, and private fingerprints never leave the process. The private
 signature retains the recognized elements and attributes, so a same-count
 branch or rule-value rewrite remains review-visible.
 
+This inventory is limited to Word members. Separately, OPC §10.5.2 makes MCE
+namespace elements or attributes malformed anywhere in a recognized package
+Digital Signature XML Signature part; DocFence rejects such a signature. That
+structural signature rule does not select, preprocess, or otherwise interpret
+MCE markup.
+
 `require_no_markup_compatibility` fails whenever a candidate contains a
 recognized MCE element or attribute. `no_markup_compatibility_changes` protects
 an approved baseline instead. Neither rule validates MCE conformance, selects
@@ -765,7 +771,9 @@ topology or XMLDSIG shape fails closed. Every XMLDSIG
 OPC's expressly forbidden MD5 URI; this is not a broad cryptographic judgment
 about SHA-1 or other algorithms. Every XMLDSIG `ds:XPath` element is also
 rejected anywhere in the recognized Signature because OPC says it shall not be
-present; DocFence does not parse or execute XPath.
+present. OPC §10.5.2 also forbids MCE-namespace elements and attributes
+anywhere in that Signature. DocFence does not parse or execute XPath, validate
+MCE conformance, or select an MCE branch.
 
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,
@@ -818,11 +826,11 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `ds:DigestValue`, without non-whitespace direct text. It may omit transforms
 or carry one direct nonempty list of only OPC's two XML Canonicalization
 algorithms. The global recognized-signature boundary rejects every XMLDSIG
-`ds:XPath` element before this bounded binding/manifest chain is evaluated;
-relationship and unknown transform declarations leave coverage unavailable. A
-`DigestMethod` in the recognized signature cannot use OPC's expressly forbidden
-MD5 URI; the audit does not otherwise judge an algorithm's cryptographic
-suitability.
+`ds:XPath` element and MCE-namespace markup before this bounded
+binding/manifest chain is evaluated; relationship and unknown transform
+declarations leave coverage unavailable. A `DigestMethod` in the
+recognized signature cannot use OPC's expressly forbidden MD5 URI; the audit
+does not otherwise judge an algorithm's cryptographic suitability.
 DocFence checks that stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
@@ -830,8 +838,8 @@ URI plus case-sensitive matching content type. Before a manifest reference is
 credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
-non-whitespace direct text, in that order; the globally rejected exact MD5 URI
-or any `ds:XPath` element cannot lend coverage.
+non-whitespace direct text, in that order; the globally rejected exact MD5 URI,
+any `ds:XPath` element, or MCE-namespace markup cannot lend coverage.
 Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with

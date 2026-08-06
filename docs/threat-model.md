@@ -150,6 +150,12 @@ validate MCE conformance or infer whether a stored branch can be selected.
 DocFence never resolves a feature prefix, applies a target version, preprocesses
 or saves a package, chooses a branch, or renders an MCE result.
 
+This Word-part MCE inventory does not relax OPC's package-signature syntax:
+under §10.5.2, a recognized Digital Signature XML Signature part with an MCE
+namespace element or attribute is rejected. That structural check does not
+select or interpret an MCE branch and does not cause signature parts to enter
+the Word-part inventory.
+
 DrawingML nonvisual visibility receives a separate private-digest treatment.
 DocFence reads only direct unqualified hidden attributes on its supported
 DrawingML nonvisual-property QNames in supported Word stories. It reports
@@ -206,6 +212,11 @@ rejected because OPC says the XPath element shall not be present. This is a
 global stored-markup check: DocFence neither parses nor evaluates an XPath
 expression or transform.
 
+OPC §10.5.2 likewise says a Digital Signature XML Signature part shall not
+contain MCE-namespace elements or attributes. DocFence rejects either form
+anywhere in a recognized package signature. This is a structural namespace
+check, not MCE conformance validation, branch selection, or preprocessing.
+
 A separate static declaration audit follows only one direct
 `ds:Object Id="idPackageObject"` with no other attributes and exactly direct
 `ds:Manifest` then `ds:SignatureProperties` children, plus exactly one
@@ -214,7 +225,8 @@ must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
 `DigestValue` shape; when present, transforms can use only OPC's two XML
 Canonicalization algorithms. OPC's global `ds:XPath` prohibition is
 enforced before this bounded declaration chain is evaluated, including
-references outside the chain. It does not decode or recompute the digest,
+references outside the chain, as is OPC §10.5.2's MCE-namespace
+element/attribute prohibition. It does not decode or recompute the digest,
 execute transforms, or verify XMLDSIG. It resolves only that package-specific
 manifest using the binding reference's direct URI fragment. Its direct
 `SignatureProperties` must have one `SignatureProperty` with the fixed
@@ -230,8 +242,8 @@ manifest reference is credited, its direct XMLDSIG children must be optional
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. The global recognized-signature
 boundary rejects OPC's expressly forbidden MD5 URI and every `ds:XPath`
-element; DocFence does not otherwise judge an algorithm's cryptographic
-suitability. It then
+element, plus MCE-namespace markup; DocFence does not otherwise judge an
+algorithm's cryptographic suitability. It then
 recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML
 Canonicalization algorithms, with exactly one relationship transform
