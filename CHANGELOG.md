@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.56.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to reject every XMLDSIG
+  `ds:Transform` whose `Algorithm` is not OPC's Relationship Transform URI or
+  one of OPC's two permitted XML Canonicalization URIs, as required by OPC
+  §10.5.8.1. A missing algorithm is rejected too.
+- This global stored-syntax boundary applies before the bounded declaration
+  coverage audit, including an additional same-document `SignedInfo` reference.
+  It does not resolve or execute a transform, recompute a digest, verify XMLDSIG,
+  or make a trust decision.
+- Added regressions for an unsupported transform in both a non-coverage
+  `SignedInfo` reference and otherwise fully declared coverage paths, plus a
+  positive non-coverage canonicalization case. Corpus and release-profile
+  evidence is recorded with the release.
+
 ## 0.55.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to reject every element or

@@ -385,7 +385,7 @@ _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS: Final = frozenset(
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments",
     }
 )
-_OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS: Final = (
+_OPC_SUPPORTED_TRANSFORM_ALGORITHMS: Final = (
     _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
     | frozenset({_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM})
 )
@@ -2843,6 +2843,16 @@ def _has_opc_disallowed_digest_method(root: ET.Element) -> bool:
     )
 
 
+def _has_opc_disallowed_transform_algorithm(root: ET.Element) -> bool:
+    """Return whether a package signature declares a non-OPC transform algorithm."""
+
+    return any(
+        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "Transform")
+        and element.attrib.get("Algorithm") not in _OPC_SUPPORTED_TRANSFORM_ALGORITHMS
+        for element in root.iter()
+    )
+
+
 def _has_opc_disallowed_xpath_element(root: ET.Element) -> bool:
     """Return whether a package signature contains OPC's forbidden XPath element."""
 
@@ -3033,8 +3043,7 @@ def _relationship_manifest_reference_coverage(
     transforms = list(transforms_elements[0])
     if not transforms or any(
         _qualified_name(transform.tag) != (_XMLDSIG_NAMESPACE, "Transform")
-        or transform.attrib.get("Algorithm")
-        not in _OPC_SUPPORTED_MANIFEST_TRANSFORM_ALGORITHMS
+        or transform.attrib.get("Algorithm") not in _OPC_SUPPORTED_TRANSFORM_ALGORITHMS
         or not _transform_has_no_opc_disallowed_xpath_element(transform)
         for transform in transforms
     ):
@@ -3222,6 +3231,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
             for reference in signed_info_references
         )
         or _has_opc_disallowed_digest_method(root)
+        or _has_opc_disallowed_transform_algorithm(root)
         or _has_opc_disallowed_xpath_element(root)
         or _has_opc_disallowed_markup_compatibility(root)
     ):

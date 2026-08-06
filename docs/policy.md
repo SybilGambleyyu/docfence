@@ -769,11 +769,14 @@ An omitted, relative, or absolute URI is malformed. Malformed recognized
 topology or XMLDSIG shape fails closed. Every XMLDSIG
 `DigestMethod/@Algorithm` in a recognized package signature must also avoid
 OPC's expressly forbidden MD5 URI; this is not a broad cryptographic judgment
-about SHA-1 or other algorithms. Every XMLDSIG `ds:XPath` element is also
-rejected anywhere in the recognized Signature because OPC says it shall not be
-present. OPC §10.5.2 also forbids MCE-namespace elements and attributes
-anywhere in that Signature. DocFence does not parse or execute XPath, validate
-MCE conformance, or select an MCE branch.
+about SHA-1 or other algorithms. Every XMLDSIG `ds:Transform/@Algorithm` must
+be OPC's Relationship Transform URI or one of its two XML Canonicalization
+URIs; a missing or other URI is malformed anywhere in the recognized
+Signature. Every XMLDSIG `ds:XPath` element is also rejected anywhere in the
+recognized Signature because OPC says it shall not be present. OPC §10.5.2
+also forbids MCE-namespace elements and attributes anywhere in that Signature.
+DocFence does not parse or execute XPath or a transform, validate MCE
+conformance, or select an MCE branch.
 
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,
@@ -825,12 +828,13 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `Algorithm`, then one direct, attribute-free, child-free, nonempty
 `ds:DigestValue`, without non-whitespace direct text. It may omit transforms
 or carry one direct nonempty list of only OPC's two XML Canonicalization
-algorithms. The global recognized-signature boundary rejects every XMLDSIG
-`ds:XPath` element and MCE-namespace markup before this bounded
-binding/manifest chain is evaluated; relationship and unknown transform
-declarations leave coverage unavailable. A `DigestMethod` in the
-recognized signature cannot use OPC's expressly forbidden MD5 URI; the audit
-does not otherwise judge an algorithm's cryptographic suitability.
+algorithms. The global recognized-signature boundary rejects every non-OPC
+`ds:Transform/@Algorithm`, every XMLDSIG `ds:XPath` element, and
+MCE-namespace markup before this bounded binding/manifest chain is evaluated;
+an otherwise allowed relationship transform in this unsupported coverage
+position leaves coverage unavailable. A `DigestMethod` in the recognized
+signature cannot use OPC's expressly forbidden MD5 URI; the audit does not
+otherwise judge an algorithm's cryptographic suitability.
 DocFence checks that stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
@@ -839,7 +843,8 @@ credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order; the globally rejected exact MD5 URI,
-any `ds:XPath` element, or MCE-namespace markup cannot lend coverage.
+any non-OPC `ds:Transform/@Algorithm`, any `ds:XPath` element, or
+MCE-namespace markup cannot lend coverage.
 Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
@@ -861,9 +866,9 @@ unsupported reference and none of its selectors are credited with coverage.
 For a non-relationship package part, supported references have no
 `ds:Transforms` element or exactly one direct nonempty `ds:Transforms` list of
 XMLDSIG `Transform` elements using only the two OPC-supported XML
-Canonicalization algorithms. Empty or duplicate lists, a relationship transform,
-or an unknown transform are unsupported rather than being treated as part
-coverage.
+Canonicalization algorithms. Empty or duplicate lists and a relationship
+transform are unsupported rather than being treated as part coverage; a non-OPC
+transform algorithm has already rejected the recognized signature.
 
 The bounded Word scope comprises every non-relationship member under `word/`,
 root-package relationships whose type is `officeDocument`, and every stored

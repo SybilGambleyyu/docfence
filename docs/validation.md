@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.55 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.56 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -91,8 +91,9 @@ following properties:
   algorithms and missing or unsupported canonicalization-method algorithms,
   explicit empty and fragment same-document SignedInfo references plus missing,
   package-relative, and absolute SignedInfo reference URIs,
-  an MD5 digest method, MCE-namespace attribute and element, and an
-  XPath-bearing transform on additional non-coverage SignedInfo references,
+  an MD5 digest method, non-OPC transform algorithm, MCE-namespace attribute
+  and element, and an XPath-bearing transform on additional non-coverage
+  SignedInfo references,
   unavailable/external/non-root/duplicate origin
   relationships, and unavailable/external signature and certificate targets.
   The static declared-coverage boundary has a fully declared synthetic package
@@ -104,8 +105,8 @@ following properties:
   bearing, missing-child, extra-child, nonstandard-format, and
   format/value-mismatched timestamp declarations,
   direct package-object binding references with no transform or either
-  canonicalization form, plus unsupported/relationship/empty/duplicate
-  transform lists, `ds:XPath` parameters in binding, relationship, and part
+  canonicalization form, plus relationship/empty/duplicate transform lists,
+  `ds:XPath` parameters in binding, relationship, and part
   transforms, plus an XPath-bearing additional non-coverage SignedInfo
   reference, and missing, misordered, malformed, nested, extra, or
   text-bearing binding digest children, plus MD5 digest-method declarations in
@@ -118,8 +119,8 @@ following properties:
   canonicalization after a relationship transform, duplicate direct
   `ds:Transforms` lists, duplicate relationship transforms for one
   relationships part, direct part references with permitted C14N-only and
-  unsupported empty/duplicate/relationship/unknown transform lists, an
-  unsupported trailing transform, missing or misordered XMLDSIG digest
+  unsupported empty/duplicate/relationship transform lists, missing or
+  misordered XMLDSIG digest
   children, a missing digest-method algorithm, an unexpected digest-value
   attribute or nested element, unexpected reference text, an extra direct
   digest child, same-count selector reassignment,
@@ -709,5 +710,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.55 contract; see
+only, not field evaluation. Those limits are explicit in the 0.56 contract; see
 [threat model](threat-model.md).

@@ -3441,6 +3441,12 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     xpath_additional_signed_info_reference = (
         tmp_path / "xpath-additional-signed-info-reference.docx"
     )
+    unsupported_transform_additional_signed_info_reference = (
+        tmp_path / "unsupported-transform-additional-signed-info-reference.docx"
+    )
+    missing_transform_algorithm_additional_signed_info_reference = (
+        tmp_path / "missing-transform-algorithm-additional-signed-info-reference.docx"
+    )
     missing_signed_info_reference_uri = (
         tmp_path / "missing-signed-info-reference-uri.docx"
     )
@@ -3518,6 +3524,16 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         additional_signed_info_reference_transform_mode=(
             "canonicalization_with_xpath_parameter"
         ),
+    )
+    _write_package_digital_signature_document(
+        unsupported_transform_additional_signed_info_reference,
+        include_additional_signed_info_reference=True,
+        additional_signed_info_reference_transform_mode="unsupported_transform",
+    )
+    _write_package_digital_signature_document(
+        missing_transform_algorithm_additional_signed_info_reference,
+        include_additional_signed_info_reference=True,
+        additional_signed_info_reference_transform_mode="missing_algorithm",
     )
     _write_package_digital_signature_document(
         missing_signed_info_reference_uri,
@@ -3600,6 +3616,8 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         unsupported_canonicalization_method,
         md5_additional_signed_info_reference,
         xpath_additional_signed_info_reference,
+        unsupported_transform_additional_signed_info_reference,
+        missing_transform_algorithm_additional_signed_info_reference,
         missing_signed_info_reference_uri,
         package_part_signed_info_reference,
         external_signed_info_reference,
@@ -3669,6 +3687,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     xpath_word_part_transform = tmp_path / "xpath-word-part-transform.docx"
     xpath_additional_signed_info_reference = (
         tmp_path / "xpath-additional-signed-info-reference.docx"
+    )
+    canonicalized_additional_signed_info_reference = (
+        tmp_path / "canonicalized-additional-signed-info-reference.docx"
+    )
+    unsupported_transform_additional_signed_info_reference = (
+        tmp_path / "unsupported-transform-additional-signed-info-reference.docx"
     )
     markup_compatibility_attribute_in_signature = (
         tmp_path / "markup-compatibility-attribute-in-signature.docx"
@@ -3809,6 +3833,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         additional_signed_info_reference_transform_mode=(
             "canonicalization_with_xpath_parameter"
         ),
+    )
+    _write_package_signature_coverage_document(
+        canonicalized_additional_signed_info_reference,
+        additional_signed_info_reference_transform_mode="canonicalization",
+    )
+    _write_package_signature_coverage_document(
+        unsupported_transform_additional_signed_info_reference,
+        additional_signed_info_reference_transform_mode="unsupported_transform",
     )
     _write_package_signature_coverage_document(
         markup_compatibility_attribute_in_signature,
@@ -3989,6 +4021,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         ]
         == expected_fully_declared
     )
+    assert (
+        load_snapshot(canonicalized_additional_signed_info_reference).public_dict()[
+            "package_signature_coverage"
+        ]
+        == expected_fully_declared
+    )
     expected_unsupported_relationship_transform = {
         **expected_fully_declared,
         "declared_covered_word_relationship_count": 0,
@@ -3998,7 +4036,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     for document in (
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
-        unsupported_trailing_transform,
         multiple_transforms_elements,
     ):
         assert (
@@ -4026,7 +4063,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "unsupported_package_manifest_reference_count": 1,
     }
     for document in (
-        unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
@@ -4049,6 +4085,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         xpath_relationship_transform,
         xpath_word_part_transform,
         xpath_additional_signed_info_reference,
+        unsupported_trailing_transform,
+        unsupported_word_part_transform,
+        unsupported_transform_additional_signed_info_reference,
         markup_compatibility_attribute_in_signature,
         markup_compatibility_element_in_signature,
     ):
@@ -4103,7 +4142,6 @@ rules:
     for document in (
         missing_relationship_canonicalization,
         misordered_relationship_canonicalization,
-        unsupported_trailing_transform,
         multiple_transforms_elements,
     ):
         assert {
@@ -4133,7 +4171,6 @@ rules:
             ).findings
         } == {"DFP092", "DFP093"}
     for document in (
-        unsupported_word_part_transform,
         relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
@@ -4341,7 +4378,6 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         ) == (1, 0)
 
     for mode in (
-        "unsupported_transform",
         "relationship_transform",
         "multiple_transforms_elements",
         "empty_transforms",
@@ -4356,6 +4392,14 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
             coverage.signature_with_declared_package_coverage_count,
             coverage.signature_without_declared_package_coverage_count,
         ) == (0, 1)
+
+    document = tmp_path / "bound-object-reference-transform-unsupported.docx"
+    _write_package_signature_coverage_document(
+        document,
+        package_object_binding_transform_mode="unsupported_transform",
+    )
+    with pytest.raises(DocumentFormatError):
+        load_snapshot(document)
 
     document = tmp_path / "bound-object-reference-transform-xpath.docx"
     _write_package_signature_coverage_document(
@@ -9107,6 +9151,7 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}"/>'
     )
     unsupported_transform = '<ds:Transform Algorithm="urn:docfence:test:unsupported"/>'
+    missing_algorithm_transform = "<ds:Transform/>"
 
     if mode == "none":
         return ""
@@ -9120,6 +9165,8 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         return f"<ds:Transforms>{canonicalization_transform_with_xpath}</ds:Transforms>"
     if mode == "unsupported_transform":
         return f"<ds:Transforms>{unsupported_transform}</ds:Transforms>"
+    if mode == "missing_algorithm":
+        return f"<ds:Transforms>{missing_algorithm_transform}</ds:Transforms>"
     if mode == "relationship_transform":
         return f"<ds:Transforms>{relationship_transform}</ds:Transforms>"
     if mode == "multiple_transforms_elements":
