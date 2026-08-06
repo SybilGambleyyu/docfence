@@ -379,6 +379,10 @@ _OPC_SIGNATURE_TIME_VALUE_PATTERNS: Final = {
 _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM: Final = (
     "http://schemas.openxmlformats.org/package/2006/RelationshipTransform"
 )
+_OPC_RELATIONSHIP_SELECTOR_ATTRIBUTES: Final = {
+    (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference"): "SourceId",
+    (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipsGroupReference"): "SourceType",
+}
 _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS: Final = frozenset(
     {
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
@@ -2813,13 +2817,6 @@ def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
 
     parent_by_child = {child: parent for parent in root.iter() for child in parent}
     relationship_transform_part_names: set[str] = set()
-    selector_names = frozenset(
-        {
-            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference"),
-            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipsGroupReference"),
-        }
-    )
-
     for element in root.iter():
         qualified_name = _qualified_name(element.tag)
         if (
@@ -2853,7 +2850,10 @@ def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
             return True
         relationship_transform_part_names.add(parsed_reference[0])
 
-        if not any(_qualified_name(child.tag) in selector_names for child in element):
+        if not any(
+            _qualified_name(child.tag) in _OPC_RELATIONSHIP_SELECTOR_ATTRIBUTES
+            for child in element
+        ):
             return True
         transform_children = list(transforms)
         transform_index = transform_children.index(element)
@@ -2866,6 +2866,29 @@ def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
         ):
             return True
 
+    return False
+
+
+def _has_opc_invalid_relationship_selector_markup(root: ET.Element) -> bool:
+    """Return whether an OPC relationship selector violates its required shape."""
+
+    parent_by_child = {child: parent for parent in root.iter() for child in parent}
+    for element in root.iter():
+        required_attribute = _OPC_RELATIONSHIP_SELECTOR_ATTRIBUTES.get(
+            _qualified_name(element.tag)
+        )
+        if required_attribute is None:
+            continue
+
+        parent = parent_by_child.get(element)
+        if (
+            parent is None
+            or _qualified_name(parent.tag) != (_XMLDSIG_NAMESPACE, "Transform")
+            or parent.attrib.get("Algorithm") != _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+            or set(element.attrib) != {required_attribute}
+            or list(element)
+        ):
+            return True
     return False
 
 
@@ -3237,6 +3260,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
         or _has_opc_disallowed_digest_method(root)
         or _has_opc_disallowed_transform_algorithm(root)
         or _has_opc_invalid_relationship_transform_markup(root)
+        or _has_opc_invalid_relationship_selector_markup(root)
         or _has_opc_disallowed_xpath_element(root)
         or _has_opc_disallowed_markup_compatibility(root)
     ):

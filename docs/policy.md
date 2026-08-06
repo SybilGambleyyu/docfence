@@ -790,6 +790,15 @@ A violation is malformed even when it occurs outside the bounded coverage
 chain. This validates stored placement only: it does not resolve the declared
 target, interpret selectors, or execute a transform.
 
+Every OPC relationship selector is also globally constrained. A direct
+`opc:RelationshipReference` child of a Relationship Transform must have exactly
+`SourceId` and no child elements; a direct
+`opc:RelationshipsGroupReference` must have exactly `SourceType` and no child
+elements. The selectors may not occur anywhere else in the recognized
+Signature. Missing, wrong, or extra attributes and nested selector markup are
+malformed before coverage is considered. This does not resolve or interpret a
+selector value.
+
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,
 relationship-reference, inline-X.509-certificate, and signature-property
@@ -841,8 +850,9 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `ds:DigestValue`, without non-whitespace direct text. It may omit transforms
 or carry one direct nonempty list of only OPC's two XML Canonicalization
 algorithms. The global recognized-signature boundary rejects every non-OPC
-`ds:Transform/@Algorithm`, every malformed Relationship Transform, every XMLDSIG
-`ds:XPath` element, and MCE-namespace markup before this bounded
+`ds:Transform/@Algorithm`, every malformed Relationship Transform or
+relationship selector, every XMLDSIG `ds:XPath` element, and MCE-namespace
+markup before this bounded
 binding/manifest chain is evaluated; a Relationship Transform in this binding
 position is therefore malformed. A `DigestMethod` in the recognized
 signature cannot use OPC's expressly forbidden MD5 URI; the audit does not
@@ -855,19 +865,21 @@ credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order; the globally rejected exact MD5 URI,
-any non-OPC `ds:Transform/@Algorithm`, malformed Relationship Transform,
-any `ds:XPath` element, or MCE-namespace markup cannot lend coverage.
+any non-OPC `ds:Transform/@Algorithm`, malformed Relationship Transform or
+relationship selector, any `ds:XPath` element, or MCE-namespace markup cannot
+lend coverage.
 Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
 exactly one relationship transform immediately followed by XML Canonicalization
 (with or without comments), and exact `RelationshipReference/@SourceId` or
-`RelationshipsGroupReference/@SourceType` selectors. An unsupported URI,
-reference-child shape, or relationship-transform/selector
-syntax is not assumed to be coverage: it is reported only as an aggregate
-unsupported reference; a missing member, content-type mismatch, missing
-relationship item, or selector that selects no stored relationship is reported
-as an aggregate unresolved reference.
+`RelationshipsGroupReference/@SourceType` selectors. A selector-placement or
+selector-shape failure has already rejected the recognized Signature. An
+unsupported URI, reference-child shape, or other relationship-transform syntax
+is not assumed to be coverage: it is reported only as an aggregate unsupported
+reference; a missing member, content-type mismatch, missing relationship item,
+or selector that selects no stored relationship is reported as an aggregate
+unresolved reference.
 
 OPC permits no more than one Relationship Transform for a particular
 relationships part in one XML signature. DocFence enforces that limit across

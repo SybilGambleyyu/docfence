@@ -2,6 +2,26 @@
 
 All notable changes are documented here.
 
+## 0.58.0 — 2026-08-06
+
+- Hardened every recognized OPC XML signature to reject an OPC relationship
+  selector unless it is a direct child of a Relationship Transform. A
+  `RelationshipReference` must carry exactly `SourceId` and a
+  `RelationshipsGroupReference` exactly `SourceType`; either selector must
+  have no child elements. This applies everywhere in the recognized Signature,
+  not only inside the bounded declaration-coverage chain.
+- This is a narrow stored-markup boundary for OPC §§10.5.9–10.5.10 and their
+  schema types. It does not resolve or interpret a selector value, execute a
+  transform, recompute a digest, verify XMLDSIG, or make a trust decision.
+- Added regressions for a standalone selector, missing, wrong, and extra
+  selector attributes, and nested selector markup. Against 0.57, those forms
+  previously remained accepted (typically as unsupported coverage); 0.58 rejects
+  them while the standards-shaped declaration remains accepted. The public
+  USENIX OOXML Signature Security corpus contains 106 direct selector elements
+  across its 38 Relationship Transforms, all with the expected shape, and its
+  29 DOCX profiles are identical to 0.57
+  (`8a4b968515b0ea36d8db1430b79315b6045a95f9fa14a037cf044fd29639f7f2`).
+
 ## 0.57.0 — 2026-08-06
 
 - Hardened every recognized OPC XML signature so its Relationship Transform URI

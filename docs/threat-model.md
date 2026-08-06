@@ -223,6 +223,13 @@ only once as a Relationship Transform target in a recognized XML signature.
 This is a stored-placement check, not target resolution, selector
 interpretation, or transform execution.
 
+Every `opc:RelationshipReference` and `opc:RelationshipsGroupReference` in a
+recognized signature is also checked globally. It must be a direct child of a
+Relationship Transform; the former has exactly `SourceId`, the latter exactly
+`SourceType`, and neither may have child elements. A standalone selector,
+another parent, a missing, wrong, or extra attribute, or nested selector markup
+is malformed. This is not selector-value resolution or interpretation.
+
 Every XMLDSIG `ds:XPath` element in a recognized package signature is also
 rejected because OPC says the XPath element shall not be present. This is a
 global stored-markup check: DocFence neither parses nor evaluates an XPath
@@ -239,9 +246,10 @@ A separate static declaration audit follows only one direct
 direct `SignedInfo` local-fragment reference to that object. That binding
 must carry XMLDSIG's direct optional `Transforms`, `DigestMethod`, then
 `DigestValue` shape; when present, transforms can use only OPC's two XML
-Canonicalization algorithms. OPC's global `ds:Transform/@Algorithm` restriction
-and `ds:XPath` prohibition are enforced before this bounded declaration chain
-is evaluated, including references outside the chain, as is OPC §10.5.2's
+Canonicalization algorithms. OPC's global `ds:Transform/@Algorithm` restriction,
+Relationship Transform local context, relationship-selector shape, and
+`ds:XPath` prohibition are enforced before this bounded declaration chain is
+evaluated, including references outside the chain, as is OPC §10.5.2's
 MCE-namespace element/attribute prohibition. It does not decode or recompute
 the digest, execute transforms, or verify XMLDSIG. It resolves only that
 package-specific manifest using the binding reference's direct URI fragment. Its direct
@@ -259,7 +267,7 @@ direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. The global recognized-signature
 boundary rejects OPC's expressly forbidden MD5 URI and every `ds:XPath`
 element, every non-OPC transform algorithm, every malformed Relationship
-Transform, and MCE-namespace markup; DocFence
+Transform or relationship selector, and MCE-namespace markup; DocFence
 does not otherwise judge an algorithm's cryptographic suitability. It then
 recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML

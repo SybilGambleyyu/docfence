@@ -3344,7 +3344,7 @@ def test_package_digital_signature_inventory_is_private_and_semantic(
         "certificate_part_count": 1,
         "signed_info_reference_count": 1,
         "manifest_reference_count": 1,
-        "relationship_reference_count": 1,
+        "relationship_reference_count": 0,
         "inline_x509_certificate_count": 1,
         "signature_property_count": 1,
     }
@@ -3450,6 +3450,9 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     relationship_transform_additional_signed_info_reference = (
         tmp_path / "relationship-transform-additional-signed-info-reference.docx"
     )
+    standalone_relationship_selector = (
+        tmp_path / "standalone-relationship-selector.docx"
+    )
     missing_signed_info_reference_uri = (
         tmp_path / "missing-signed-info-reference-uri.docx"
     )
@@ -3546,6 +3549,10 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         ),
     )
     _write_package_digital_signature_document(
+        standalone_relationship_selector,
+        include_standalone_relationship_selector=True,
+    )
+    _write_package_digital_signature_document(
         missing_signed_info_reference_uri,
         signed_info_reference_uri=None,
     )
@@ -3629,6 +3636,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         unsupported_transform_additional_signed_info_reference,
         missing_transform_algorithm_additional_signed_info_reference,
         relationship_transform_additional_signed_info_reference,
+        standalone_relationship_selector,
         missing_signed_info_reference_uri,
         package_part_signed_info_reference,
         external_signed_info_reference,
@@ -3665,6 +3673,21 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
     xpath_relationship_transform = tmp_path / "xpath-relationship-transform.docx"
     missing_relationship_selector = tmp_path / "missing-relationship-selector.docx"
+    relationship_selector_missing_attribute = (
+        tmp_path / "relationship-selector-missing-attribute.docx"
+    )
+    relationship_selector_empty_value = (
+        tmp_path / "relationship-selector-empty-value.docx"
+    )
+    relationship_selector_extra_attribute = (
+        tmp_path / "relationship-selector-extra-attribute.docx"
+    )
+    relationship_selector_nested_markup = (
+        tmp_path / "relationship-selector-nested-markup.docx"
+    )
+    relationship_group_selector_wrong_attribute = (
+        tmp_path / "relationship-group-selector-wrong-attribute.docx"
+    )
     relationship_transform_wrong_content_type = (
         tmp_path / "relationship-transform-wrong-content-type.docx"
     )
@@ -3793,6 +3816,34 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         missing_relationship_selector,
         word_relationship_transform_mode="missing_selector",
+    )
+    _write_package_signature_coverage_document(
+        relationship_selector_missing_attribute,
+        word_relationship_selector_markup="<opc:RelationshipReference/>",
+    )
+    _write_package_signature_coverage_document(
+        relationship_selector_empty_value,
+        word_relationship_selector_markup='<opc:RelationshipReference SourceId=""/>',
+    )
+    _write_package_signature_coverage_document(
+        relationship_selector_extra_attribute,
+        word_relationship_selector_markup=(
+            '<opc:RelationshipReference SourceId="rIdStyles" '
+            'Unexpected="DOCFENCE_SELECTOR_ATTRIBUTE_DO_NOT_LEAK"/>'
+        ),
+    )
+    _write_package_signature_coverage_document(
+        relationship_selector_nested_markup,
+        word_relationship_selector_markup=(
+            '<opc:RelationshipReference SourceId="rIdStyles">'
+            "<opc:UnexpectedSelectorChild/></opc:RelationshipReference>"
+        ),
+    )
+    _write_package_signature_coverage_document(
+        relationship_group_selector_wrong_attribute,
+        word_relationship_selector_markup=(
+            '<opc:RelationshipsGroupReference SourceId="rIdStyles"/>'
+        ),
     )
     _write_package_signature_coverage_document(
         relationship_transform_wrong_content_type,
@@ -4043,12 +4094,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         == 2
     )
     assert (
-        load_snapshot(
-            nonstandard_source_type_selector
-        ).package_signature_coverage.unsupported_package_manifest_reference_count
-        == 1
-    )
-    assert (
         load_snapshot(canonicalization_with_comments).public_dict()[
             "package_signature_coverage"
         ]
@@ -4066,7 +4111,7 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "declared_uncovered_word_relationship_count": 1,
         "unsupported_package_manifest_reference_count": 1,
     }
-    for document in (multiple_transforms_elements,):
+    for document in (multiple_transforms_elements, relationship_selector_empty_value):
         assert (
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_unsupported_relationship_transform
@@ -4106,6 +4151,11 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     for document in (
         xpath_relationship_transform,
         missing_relationship_selector,
+        relationship_selector_missing_attribute,
+        relationship_selector_extra_attribute,
+        relationship_selector_nested_markup,
+        relationship_group_selector_wrong_attribute,
+        nonstandard_source_type_selector,
         relationship_transform_wrong_content_type,
         xpath_word_part_transform,
         xpath_additional_signed_info_reference,
@@ -4169,7 +4219,7 @@ rules:
             diff_documents(fully_declared, unsupported_manifest_reference), policy
         ).findings
     } == {"DFP092", "DFP093"}
-    for document in (multiple_transforms_elements,):
+    for document in (multiple_transforms_elements, relationship_selector_empty_value):
         assert {
             finding.rule_id
             for finding in apply_policy(
@@ -8608,6 +8658,7 @@ def _write_package_digital_signature_document(
         "http://www.w3.org/2001/04/xmlenc#sha256"
     ),
     additional_signed_info_reference_transform_mode: str = "none",
+    include_standalone_relationship_selector: bool = False,
     signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
     inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
     signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
@@ -8735,6 +8786,11 @@ def _write_package_digital_signature_document(
         if include_additional_signed_info_reference
         else ""
     )
+    standalone_relationship_selector = (
+        '<opc:RelationshipReference SourceId="rIdDocument1"/>'
+        if include_standalone_relationship_selector
+        else ""
+    )
     signature_xml = (
         f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
         f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
@@ -8764,7 +8820,7 @@ def _write_package_digital_signature_document(
         'Id="idSignatureDetails" Target="#idPackageSignature">'
         f"<opc:SignatureTime>{signature_comment}</opc:SignatureTime>"
         "</ds:SignatureProperty></ds:SignatureProperties>"
-        '<opc:RelationshipReference SourceId="rIdDocument1"/>'
+        f"{standalone_relationship_selector}"
         f"</ds:Object></ds:{signature_root_name}>"
     ).encode()
 
@@ -8833,6 +8889,7 @@ def _write_package_signature_coverage_document(
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
     word_relationship_transform_mode: str = "standard",
+    word_relationship_selector_markup: str | None = None,
     word_relationship_manifest_content_type: str = (_PACKAGE_RELATIONSHIP_CONTENT_TYPE),
     word_relationship_digest_mode: str = "standard",
     include_duplicate_word_relationship_manifest_reference: bool = False,
@@ -8916,7 +8973,9 @@ def _write_package_signature_coverage_document(
         f"{root_relationship_transforms}"
         f"{digest_reference}</ds:Reference>"
     )
-    if select_word_relationship_by_type:
+    if word_relationship_selector_markup is not None:
+        word_relationship_selector = word_relationship_selector_markup
+    elif select_word_relationship_by_type:
         selector_name = (
             "RelationshipReference"
             if use_nonstandard_source_type_selector

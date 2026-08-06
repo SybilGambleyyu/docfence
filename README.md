@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.57 focuses on Office Open XML Word documents and templates and
+Version 0.58 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -316,6 +316,16 @@ recognized XML signature. A violation anywhere in that Signature fails the
 recognized signature shape closed; this checks stored placement and does not
 resolve a target, interpret selectors, or execute a transform.
 
+OPC relationship selectors have their own global shape boundary. Every
+`opc:RelationshipReference` must be a direct child of a Relationship Transform,
+have exactly a `SourceId` attribute, and have no child elements. Every
+`opc:RelationshipsGroupReference` has the corresponding direct-parent rule,
+exactly `SourceType`, and no child elements. A selector that is standalone,
+under another transform, missing or carrying the wrong or extra attribute, or
+containing nested XML fails the recognized signature shape closed. This does
+not resolve, require a particular meaning for, or otherwise interpret a
+selector value.
+
 Reports expose only aggregate origin-part, XML-signature-part, certificate-part,
 SignedInfo-reference, manifest-reference, relationship-reference, inline-X.509
 certificate, and signature-property counts. Signer/certificate data, signature
@@ -330,8 +340,9 @@ looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
 manifests it resolves exact local part URI/content-type references with
 case-sensitive content-type matching. OPC's global `ds:Transform/@Algorithm`
-restriction, Relationship Transform local-context requirements, and
-`ds:XPath` prohibition are enforced before this coverage audit,
+restriction, Relationship Transform local-context and selector-shape
+requirements, and `ds:XPath` prohibition are enforced before this coverage
+audit,
 including references outside the bounded chain. OPC §10.5.2's global
 MCE-namespace element/attribute prohibition is enforced at the same
 recognized-signature boundary. Before a manifest reference can be credited, its direct XMLDSIG
@@ -340,8 +351,8 @@ children must be the optional `ds:Transforms`, one
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
 that order. The recognized-signature boundary already rejects OPC's expressly
 forbidden MD5 URI in every `DigestMethod`, every non-OPC `ds:Transform`
-algorithm, every malformed Relationship Transform, every `ds:XPath` element,
-and MCE namespace markup; it does not
+algorithm, every malformed Relationship Transform or relationship selector,
+every `ds:XPath` element, and MCE namespace markup; it does not
 otherwise endorse, cryptographically assess, or broadly reject algorithms such
 as legacy SHA-1.
 It then recognizes standard OPC
