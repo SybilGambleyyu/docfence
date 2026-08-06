@@ -4281,6 +4281,51 @@ rules:
         assert marker not in rendered
 
 
+def test_package_signature_coverage_matches_selectors_ascii_case_insensitively(
+    tmp_path,
+) -> None:
+    baseline = tmp_path / "selector-case-baseline.docx"
+    case_insensitive_id = tmp_path / "selector-case-id.docx"
+    case_insensitive_type = tmp_path / "selector-case-type.docx"
+    case_colliding_ids = tmp_path / "selector-case-colliding-ids.docx"
+    styles_type = (
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"
+    )
+
+    _write_package_signature_coverage_document(baseline)
+    _write_package_signature_coverage_document(
+        case_insensitive_id,
+        selected_word_relationship_id="RIDSTYLES",
+    )
+    _write_package_signature_coverage_document(
+        case_insensitive_type,
+        word_relationship_selector_markup=(
+            f'<opc:RelationshipsGroupReference SourceType="{styles_type.upper()}"/>'
+        ),
+    )
+    _write_package_signature_coverage_document(
+        case_colliding_ids,
+        include_ascii_case_colliding_style_relationship=True,
+        selected_word_relationship_id="ridstyles",
+    )
+
+    expected = load_snapshot(baseline).public_dict()["package_signature_coverage"]
+    assert (
+        load_snapshot(case_insensitive_id).public_dict()["package_signature_coverage"]
+        == expected
+    )
+    assert (
+        load_snapshot(case_insensitive_type).public_dict()["package_signature_coverage"]
+        == expected
+    )
+    assert load_snapshot(case_colliding_ids).public_dict()[
+        "package_signature_coverage"
+    ] == {
+        **expected,
+        "declared_covered_word_relationship_count": 2,
+    }
+
+
 def test_package_signature_coverage_requires_opc_signature_time_shape(
     tmp_path,
 ) -> None:
@@ -8885,6 +8930,7 @@ def _write_package_signature_coverage_document(
     include_case_mismatched_manifest_content_type: bool = False,
     include_unsupported_manifest_reference: bool = False,
     include_duplicate_style_relationship: bool = False,
+    include_ascii_case_colliding_style_relationship: bool = False,
     selected_word_relationship_id: str = "rIdStyles",
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
@@ -8924,6 +8970,11 @@ def _write_package_signature_coverage_document(
     if include_duplicate_style_relationship:
         word_relationships.append(
             '<Relationship Id="rIdStyleDuplicate" '
+            f'Type="{styles_relationship_type}" Target="styles.xml"/>'
+        )
+    if include_ascii_case_colliding_style_relationship:
+        word_relationships.append(
+            '<Relationship Id="RIDSTYLES" '
             f'Type="{styles_relationship_type}" Target="styles.xml"/>'
         )
     if include_unsigned_word_surface:

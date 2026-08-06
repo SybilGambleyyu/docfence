@@ -273,8 +273,11 @@ recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML
 Canonicalization algorithms, with exactly one relationship transform
 immediately followed by XML Canonicalization (with or without comments), then
-exact `RelationshipReference/@SourceId` and
-`RelationshipsGroupReference/@SourceType` selectors. Its public surface
+`RelationshipReference/@SourceId` and
+`RelationshipsGroupReference/@SourceType` selector shapes. Within this bounded
+declaration audit, selector values match stored relationship IDs and types
+ASCII-case-insensitively and cover every match, as OPC §10.6 requires. Its
+public surface
 is aggregate-only: signatures with or without a declaration link; covered and
 uncovered Word parts and relationships; and unresolved or unsupported
 references. Object identifiers, raw reference URIs, selectors, relationship

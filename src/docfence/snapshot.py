@@ -383,6 +383,9 @@ _OPC_RELATIONSHIP_SELECTOR_ATTRIBUTES: Final = {
     (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference"): "SourceId",
     (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipsGroupReference"): "SourceType",
 }
+_ASCII_CASEFOLD_TRANSLATION: Final = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+)
 _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS: Final = frozenset(
     {
         "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
@@ -3139,10 +3142,18 @@ def _relationship_manifest_reference_coverage(
             if set(selector.attrib) != {"SourceId"} or not source_id:
                 unsupported_reference_count += 1
                 continue
-            if source_id in relationships:
-                selected_relationship_ids.add((source_part, source_id))
-            else:
+            normalized_source_id = _ascii_casefold(source_id)
+            matching_ids = [
+                relationship_id
+                for relationship_id in relationships
+                if _ascii_casefold(relationship_id) == normalized_source_id
+            ]
+            if not matching_ids:
                 unresolved_reference_count += 1
+                continue
+            selected_relationship_ids.update(
+                (source_part, relationship_id) for relationship_id in matching_ids
+            )
             continue
 
         if qualified_selector == (
@@ -3153,10 +3164,12 @@ def _relationship_manifest_reference_coverage(
             if set(selector.attrib) != {"SourceType"} or not source_type:
                 unsupported_reference_count += 1
                 continue
+            normalized_source_type = _ascii_casefold(source_type)
             matching_ids = [
                 relationship_id
                 for relationship_id, relationship in relationships.items()
-                if relationship.relationship_type == source_type
+                if _ascii_casefold(relationship.relationship_type)
+                == normalized_source_type
             ]
             if not matching_ids:
                 unresolved_reference_count += 1
@@ -3173,6 +3186,12 @@ def _relationship_manifest_reference_coverage(
         unresolved_reference_count=unresolved_reference_count,
         unsupported_reference_count=unsupported_reference_count,
     )
+
+
+def _ascii_casefold(value: str) -> str:
+    """Fold ASCII letters without changing non-ASCII relationship values."""
+
+    return value.translate(_ASCII_CASEFOLD_TRANSLATION)
 
 
 def _reference_has_supported_canonicalization_transforms(reference: ET.Element) -> bool:

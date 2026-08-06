@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.58 focuses on Office Open XML Word documents and templates and
+Version 0.59 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -361,8 +361,10 @@ containing only the supported OPC relationship and XML Canonicalization
 algorithms, with exactly one relationship transform immediately followed by
 XML Canonicalization (with or without comments), then exact
 `RelationshipReference/@SourceId` and
-`RelationshipsGroupReference/@SourceType` selectors. The recognized-signature
-boundary rejects more than one Relationship Transform for the same declared
+`RelationshipsGroupReference/@SourceType` selector shapes. Within this bounded
+coverage audit, each selector matches stored relationship IDs or types
+ASCII-case-insensitively and covers every matching relationship, as OPC §10.6
+requires. The recognized-signature boundary rejects more than one Relationship Transform for the same declared
 relationships part across every manifest in that Signature. Public output
 contains only aggregate counts for signatures with and without that declaration
 chain; covered and uncovered `word/` non-relationship parts; covered and

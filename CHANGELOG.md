@@ -2,6 +2,25 @@
 
 All notable changes are documented here.
 
+## 0.59.0 — 2026-08-06
+
+- Corrected the bounded static OPC Relationship Transform resolver to match
+  `RelationshipReference/@SourceId` and
+  `RelationshipsGroupReference/@SourceType` values ASCII
+  case-insensitively, as required by OPC §10.6. A selector now covers every
+  stored relationship whose ID or type matches under that rule, including
+  distinct stored IDs that differ only by ASCII letter case.
+- This changes declared-coverage resolution only. The global selector-shape
+  boundary remains the 0.58 contract: it neither interprets a value nor
+  executes a transform, recomputes a digest, verifies XMLDSIG, or decides
+  trust.
+- Added regressions for case-insensitive ID and type selection plus
+  case-colliding IDs. The public USENIX OOXML Signature Security corpus has no
+  case-only selector matches or folded-ID collisions across its 29 DOCX files,
+  21 parseable XML signature parts, 38 Relationship Transforms, and 106
+  selectors; its profiles are identical to 0.58
+  (`8a4b968515b0ea36d8db1430b79315b6045a95f9fa14a037cf044fd29639f7f2`).
+
 ## 0.58.0 — 2026-08-06
 
 - Hardened every recognized OPC XML signature to reject an OPC relationship

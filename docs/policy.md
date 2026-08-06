@@ -872,8 +872,11 @@ Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
 exactly one relationship transform immediately followed by XML Canonicalization
-(with or without comments), and exact `RelationshipReference/@SourceId` or
-`RelationshipsGroupReference/@SourceType` selectors. A selector-placement or
+(with or without comments), and `RelationshipReference/@SourceId` or
+`RelationshipsGroupReference/@SourceType` selector shapes. Within this bounded
+coverage audit, selector values match stored relationship IDs and types
+ASCII-case-insensitively and cover every match, as OPC §10.6 requires. A
+selector-placement or
 selector-shape failure has already rejected the recognized Signature. An
 unsupported URI, reference-child shape, or other relationship-transform syntax
 is not assumed to be coverage: it is reported only as an aggregate unsupported
