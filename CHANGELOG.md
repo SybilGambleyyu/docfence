@@ -2,6 +2,24 @@
 
 All notable changes are documented here.
 
+## 0.63.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts with XMLDSIG's direct transform
+  attribute declarations: every `ds:Transforms` is attribute-free and every
+  `ds:Transform` has exactly its required `Algorithm` attribute. Extra
+  attributes now fail the recognized signature shape closed, including on
+  otherwise unrelated `SignedInfo` references and bounded manifest references.
+- This is a narrow stored-grammar check from XMLDSIG Core's `TransformsType`
+  and `TransformType`, paired with OPC's existing transform-algorithm
+  restriction. It does not validate arbitrary transform parameters or child
+  markup, execute a transform, canonicalize XML, recompute a digest, verify a
+  signature, validate a certificate, or decide trust.
+- Added regressions for attribute-bearing transform containers and transforms
+  both inside a manifest path and on a non-coverage `SignedInfo` reference.
+  The public USENIX OOXML Signature Security corpus has 63 attribute-free
+  `Transforms` elements and 101 `Transform` elements with only `Algorithm`;
+  all 29 captured outcomes are byte-for-byte identical to 0.62.
+
 ## 0.62.0 — 2026-08-06
 
 - Hardened the bounded static OPC package-manifest coverage audit to accept

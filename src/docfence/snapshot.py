@@ -2805,14 +2805,25 @@ def _has_opc_disallowed_digest_method(root: ET.Element) -> bool:
     )
 
 
-def _has_opc_disallowed_transform_algorithm(root: ET.Element) -> bool:
-    """Return whether a package signature declares a non-OPC transform algorithm."""
+def _has_opc_invalid_transform_markup(root: ET.Element) -> bool:
+    """Return whether XMLDSIG transform markup violates the bounded OPC grammar.
 
-    return any(
-        _qualified_name(element.tag) == (_XMLDSIG_NAMESPACE, "Transform")
-        and element.attrib.get("Algorithm") not in _OPC_SUPPORTED_TRANSFORM_ALGORITHMS
-        for element in root.iter()
-    )
+    XMLDSIG ``TransformsType`` has no attributes, while ``TransformType`` has
+    only its required ``Algorithm`` attribute. OPC also limits that algorithm
+    everywhere in a recognized package signature.
+    """
+
+    for element in root.iter():
+        qualified_name = _qualified_name(element.tag)
+        if qualified_name == (_XMLDSIG_NAMESPACE, "Transforms"):
+            if element.attrib:
+                return True
+        elif qualified_name == (_XMLDSIG_NAMESPACE, "Transform") and (
+            set(element.attrib) != {"Algorithm"}
+            or element.attrib["Algorithm"] not in _OPC_SUPPORTED_TRANSFORM_ALGORITHMS
+        ):
+            return True
+    return False
 
 
 def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
@@ -3333,7 +3344,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
             for reference in signed_info_references
         )
         or _has_opc_disallowed_digest_method(root)
-        or _has_opc_disallowed_transform_algorithm(root)
+        or _has_opc_invalid_transform_markup(root)
         or _has_opc_invalid_relationship_transform_markup(root)
         or _has_opc_invalid_relationship_selector_markup(root)
         or _has_opc_disallowed_xpath_element(root)

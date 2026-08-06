@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.62 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.63 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -650,7 +650,7 @@ duplicate-document, and evil-type attacker variants are rejected for static
 declaration gaps. This is a structural compatibility smoke test over a bounded
 scope, not a claim that signatures are valid, trusted, exhaustive, or that a
 client will handle any sample in a particular way; the fixtures are not runtime
-dependencies. For 0.62, the full public corpus contains 38 Relationship
+dependencies. For 0.63, the full public corpus contains 38 Relationship
 Transforms and 106 direct relationship selectors in 21 parseable XML signature
 parts (22 XML signature parts across 29 DOCX files); every selector has the
 expected direct parent, attribute, and child-free shape. All 21 parseable
@@ -660,7 +660,9 @@ The corpus has 152 package-manifest references; none of its 133 resolvable
 references requires a case-only ContentType match. Its `Reference` attributes
 are only `URI` (161 references) or `Type` plus `URI` (61 references), and
 all 243 XMLDSIG `DigestMethod` elements carry only `Algorithm`. Public
-profiles are byte-for-byte identical to 0.61.
+profiles also contain 63 attribute-free `Transforms` elements and 101
+`Transform` elements with only `Algorithm`; all 29 captured outcomes are
+byte-for-byte identical to 0.62.
 
 For the Word-protection boundary, the release check profiles two independent
 Wordprocessing protection assets from Microsoft's open-source
@@ -729,5 +731,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.62 contract; see
+only, not field evaluation. Those limits are explicit in the 0.63 contract; see
 [threat model](threat-model.md).

@@ -223,6 +223,13 @@ Canonicalization URIs. A missing or other URI is rejected anywhere in the
 Signature, even outside the bounded declaration chain. DocFence does not
 resolve or execute a transform.
 
+XMLDSIG's `TransformsType` declares no attributes, while `TransformType`
+declares only its required `Algorithm`. DocFence therefore rejects an
+attribute-bearing `ds:Transforms` or a `ds:Transform` with a missing, wrong,
+or extra attribute anywhere in a recognized package signature. This is a
+direct stored-grammar check, not validation of arbitrary transform parameters
+or child markup.
+
 A permitted Relationship Transform must also occupy OPC's required local
 package context: a direct `ds:Transform` under a direct
 `ds:Manifest/ds:Reference/ds:Transforms` chain whose URI declares a `.rels`

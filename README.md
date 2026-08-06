@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.62 focuses on Office Open XML Word documents and templates and
+Version 0.63 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -306,6 +306,8 @@ signature must also avoid OPC's expressly forbidden MD5 URI. Every XMLDSIG
 Canonicalization URIs or its Relationship Transform URI; a missing or other
 URI fails the recognized signature shape closed. Every XMLDSIG `ds:XPath`
 element is likewise prohibited anywhere in a recognized package Signature.
+Every XMLDSIG `ds:Transforms` element must be attribute-free, and every
+`ds:Transform` must carry exactly its required `Algorithm` attribute.
 OPC §10.5.2 also prohibits every MCE-namespace element and attribute anywhere
 in that recognized Signature. These exact stored-syntax rules do not broadly
 reject, endorse, or cryptographically assess SHA-1 or other algorithms, and

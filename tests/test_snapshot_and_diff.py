@@ -3722,6 +3722,22 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
             load_snapshot(document)
 
 
+def test_package_digital_signature_rejects_xml_dsig_transform_attributes(
+    tmp_path,
+) -> None:
+    for mode in (
+        "canonicalization_with_transforms_attribute",
+        "canonicalization_with_transform_attribute",
+    ):
+        document = tmp_path / f"additional-signed-info-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            additional_signed_info_reference_transform_mode=mode,
+        )
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
+
+
 def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     fully_declared = tmp_path / "fully-declared.docx"
     unsigned_word_surface = tmp_path / "unsigned-word-surface.docx"
@@ -3786,6 +3802,8 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     canonicalized_word_part_with_comments = (
         tmp_path / "canonicalized-word-part-with-comments.docx"
     )
+    word_part_transforms_attribute = tmp_path / "word-part-transforms-attribute.docx"
+    word_part_transform_attribute = tmp_path / "word-part-transform-attribute.docx"
     xpath_word_part_transform = tmp_path / "xpath-word-part-transform.docx"
     xpath_additional_signed_info_reference = (
         tmp_path / "xpath-additional-signed-info-reference.docx"
@@ -3966,6 +3984,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         canonicalized_word_part_with_comments,
         word_part_transform_mode="canonicalization_with_comments",
+    )
+    _write_package_signature_coverage_document(
+        word_part_transforms_attribute,
+        word_part_transform_mode="canonicalization_with_transforms_attribute",
+    )
+    _write_package_signature_coverage_document(
+        word_part_transform_attribute,
+        word_part_transform_mode="canonicalization_with_transform_attribute",
     )
     _write_package_signature_coverage_document(
         xpath_word_part_transform,
@@ -4227,6 +4253,8 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         relationship_group_selector_wrong_attribute,
         nonstandard_source_type_selector,
         relationship_transform_wrong_content_type,
+        word_part_transforms_attribute,
+        word_part_transform_attribute,
         xpath_word_part_transform,
         xpath_additional_signed_info_reference,
         relationship_transform_additional_signed_info_reference,
@@ -9467,6 +9495,17 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         return ""
     if mode == "canonicalization":
         return f"<ds:Transforms>{canonicalization_transform}</ds:Transforms>"
+    if mode == "canonicalization_with_transforms_attribute":
+        return (
+            '<ds:Transforms Unexpected="1">'
+            f"{canonicalization_transform}</ds:Transforms>"
+        )
+    if mode == "canonicalization_with_transform_attribute":
+        return (
+            '<ds:Transforms><ds:Transform Algorithm="'
+            f'{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}" Unexpected="1"/>'
+            "</ds:Transforms>"
+        )
     if mode == "canonicalization_with_comments":
         return (
             f"<ds:Transforms>{canonicalization_with_comments_transform}</ds:Transforms>"

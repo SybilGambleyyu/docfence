@@ -784,6 +784,12 @@ conformance, or select an MCE branch. The direct-sequence rule is not full
 XMLDSIG schema validation: it does not validate base64 lexical content, method
 parameters, KeyInfo/Object payloads, a digest, or a signature.
 
+XMLDSIG `ds:Transforms` elements must be attribute-free, and every
+`ds:Transform` must have exactly its required `Algorithm` attribute. An
+extra attribute is malformed anywhere in the recognized Signature, including
+outside the bounded coverage chain. This direct grammar check does not validate
+arbitrary transform parameters or child markup.
+
 When that permitted URI is a Relationship Transform, its local package syntax
 is also mandatory: it must be a direct `ds:Transform` under a direct
 `ds:Manifest/ds:Reference/ds:Transforms` chain. The reference URI must declare a
