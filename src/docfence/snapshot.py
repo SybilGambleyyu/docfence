@@ -3173,6 +3173,8 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
     ]
     if (
         len(canonicalization_methods) != 1
+        or canonicalization_methods[0].attrib.get("Algorithm")
+        not in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
         or len(signature_methods) != 1
         or not signed_info_references
     ):

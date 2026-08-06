@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.51.0 — 2026-08-06
+
+- Hardened recognized OPC XML signature parts to require their one direct
+  `SignedInfo/CanonicalizationMethod/@Algorithm` to be exactly one of OPC's two
+  permitted XML Canonicalization URIs: C14N or C14N with comments. A missing or
+  other URI now fails the recognized XML signature shape closed instead of
+  being inventoried as though it were an OPC signature.
+- This is a narrow stored-syntax boundary: DocFence does not execute
+  canonicalization, validate a `SignatureMethod`, recompute a digest, verify a
+  signature, or make a trust decision.
+- Added regression coverage for both permitted methods and missing or
+  unsupported algorithms. The public USENIX OOXML Signature Security corpus
+  had 22 XML signature parts: all 21 parseable declarations used standard C14N;
+  the remaining attacker part was empty and already failed XML parsing.
+
 ## 0.50.0 — 2026-08-06
 
 - Hardened the bounded OPC package-signature declaration audit to reject the

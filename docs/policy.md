@@ -754,8 +754,10 @@ relationships must originate at a recognized XML-signature part. Each must be
 internal, resolve to a stored member, and have the expected content type.
 Recognized XML signature parts must have the XMLDSIG `Signature` root, exactly
 one direct `SignedInfo` and `SignatureValue`, and the basic direct
-canonicalization/signature-method/reference shape. Malformed recognized
-topology or XMLDSIG shape fails closed.
+canonicalization/signature-method/reference shape. The one direct
+`CanonicalizationMethod/@Algorithm` must be exactly one of OPC's two permitted
+XML Canonicalization URIs (with or without comments); a missing or other URI is
+malformed. Malformed recognized topology or XMLDSIG shape fails closed.
 
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,

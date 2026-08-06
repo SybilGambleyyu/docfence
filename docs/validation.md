@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.50 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.51 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -87,7 +87,9 @@ following properties:
   noncanonical relationship targets, content-type-only signature residue,
   conventional orphan origins, same-count signature/certificate mutations,
   JSON/Markdown/SARIF redaction, policy findings, malformed XMLDSIG roots and
-  SignedInfo shape, unavailable/external/non-root/duplicate origin
+  SignedInfo shape including both permitted OPC `CanonicalizationMethod`
+  algorithms and missing or unsupported canonicalization-method algorithms,
+  unavailable/external/non-root/duplicate origin
   relationships, and unavailable/external signature and certificate targets.
   The static declared-coverage boundary has a fully declared synthetic package
   fixture plus uncovered Word parts and relationships, an unbound package
@@ -702,5 +704,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.50 contract; see
+only, not field evaluation. Those limits are explicit in the 0.51 contract; see
 [threat model](threat-model.md).

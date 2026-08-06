@@ -3427,6 +3427,13 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     conventional_origin_only = tmp_path / "conventional-origin-only.docx"
     wrong_signature_root = tmp_path / "wrong-signature-root.docx"
     missing_signature_method = tmp_path / "missing-signature-method.docx"
+    canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
+    missing_canonicalization_method_algorithm = (
+        tmp_path / "missing-canonicalization-method-algorithm.docx"
+    )
+    unsupported_canonicalization_method = (
+        tmp_path / "unsupported-canonicalization-method.docx"
+    )
     external_origin_relationship = tmp_path / "external-origin-relationship.docx"
     non_root_origin_relationship = tmp_path / "non-root-origin-relationship.docx"
     missing_origin_target = tmp_path / "missing-origin-target.docx"
@@ -3463,6 +3470,22 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     _write_package_digital_signature_document(
         missing_signature_method,
         omit_signature_method=True,
+    )
+    _write_package_digital_signature_document(
+        canonicalization_with_comments,
+        canonicalization_method_algorithm=(
+            "http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"
+        ),
+    )
+    _write_package_digital_signature_document(
+        missing_canonicalization_method_algorithm,
+        canonicalization_method_algorithm=None,
+    )
+    _write_package_digital_signature_document(
+        unsupported_canonicalization_method,
+        canonicalization_method_algorithm=(
+            "urn:docfence:test:unsupported-canonicalization"
+        ),
     )
     _write_package_digital_signature_document(
         external_origin_relationship,
@@ -3509,7 +3532,11 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         certificate_content_type="application/octet-stream",
     )
 
-    for document in (noncanonical_relationship, content_type_only):
+    for document in (
+        noncanonical_relationship,
+        content_type_only,
+        canonicalization_with_comments,
+    ):
         snapshot = load_snapshot(document)
         assert snapshot.package_digital_signatures.signature_origin_part_count == 1
         assert snapshot.package_digital_signatures.xml_signature_part_count == 1
@@ -3522,6 +3549,8 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     for document in (
         wrong_signature_root,
         missing_signature_method,
+        missing_canonicalization_method_algorithm,
+        unsupported_canonicalization_method,
         external_origin_relationship,
         non_root_origin_relationship,
         missing_origin_target,
@@ -8416,6 +8445,9 @@ def _write_package_digital_signature_document(
     duplicate_origin_relationship: bool = False,
     wrong_signature_root: bool = False,
     omit_signature_method: bool = False,
+    canonicalization_method_algorithm: str | None = (
+        "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+    ),
     signature_value: str = "PACKAGE_SIGNATURE_VALUE_DO_NOT_LEAK",
     inline_certificate_marker: str = "PACKAGE_INLINE_X509_DO_NOT_LEAK",
     signature_comment: str = "PACKAGE_SIGNATURE_COMMENT_DO_NOT_LEAK",
@@ -8516,13 +8548,18 @@ def _write_package_digital_signature_document(
             'Algorithm="http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"/>'
         )
     )
+    canonicalization_method_algorithm_attribute = (
+        ""
+        if canonicalization_method_algorithm is None
+        else f' Algorithm="{canonicalization_method_algorithm}"'
+    )
     signature_xml = (
         f'<ds:{signature_root_name} xmlns:ds="{_XMLDSIG_NAMESPACE}" '
         f'xmlns:opc="{_OPC_DIGITAL_SIGNATURE_NAMESPACE}" '
         'Id="idPackageSignature">'
         "<ds:SignedInfo>"
-        "<ds:CanonicalizationMethod "
-        'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"/>'
+        f"<ds:CanonicalizationMethod"
+        f"{canonicalization_method_algorithm_attribute}/>"
         f"{signature_method}"
         '<ds:Reference URI="#idPackageObject">'
         '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>'
