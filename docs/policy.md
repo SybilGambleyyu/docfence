@@ -787,7 +787,7 @@ parameters, KeyInfo/Object payloads, a digest, or a signature.
 When that permitted URI is a Relationship Transform, its local package syntax
 is also mandatory: it must be a direct `ds:Transform` under a direct
 `ds:Manifest/ds:Reference/ds:Transforms` chain. The reference URI must declare a
-`.rels` part with OPC's exact relationships content type; the transform must
+`.rels` part with OPC's case-insensitive relationships content type; the transform must
 contain at least one direct `opc:RelationshipReference` or
 `opc:RelationshipsGroupReference`; and its immediate following transform must
 be XML Canonicalization (with or without comments). One recognized XML
@@ -866,7 +866,7 @@ otherwise judge an algorithm's cryptographic suitability.
 DocFence checks that stored syntax and the binding URI fragment, but
 does not decode or recompute its digest, execute transforms, verify a signature,
 or establish trust. Supported manifest part references use an exact local part
-URI plus case-sensitive matching content type. Before a manifest reference is
+URI plus ASCII-case-insensitive matching content type. Before a manifest reference is
 credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no

@@ -2847,7 +2847,9 @@ def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
         if (
             parsed_reference is None
             or not parsed_reference[0].endswith(".rels")
-            or parsed_reference[1] != _PACKAGE_RELATIONSHIP_CONTENT_TYPE
+            or not _opc_content_types_match(
+                parsed_reference[1], _PACKAGE_RELATIONSHIP_CONTENT_TYPE
+            )
             or parsed_reference[0] in relationship_transform_part_names
         ):
             return True
@@ -2958,7 +2960,9 @@ def _resolve_package_manifest_reference(
                 unresolved_reference_count=0,
                 unsupported_reference_count=1,
             )
-        if content_types.get(part_name, "") != expected_content_type:
+        if not _opc_content_types_match(
+            content_types.get(part_name, ""), expected_content_type
+        ):
             return _ManifestReferenceResolution(
                 covered_part_name=None,
                 covered_relationship_ids=frozenset(),
@@ -2971,7 +2975,9 @@ def _resolve_package_manifest_reference(
             unresolved_reference_count=0,
             unsupported_reference_count=0,
         )
-    if expected_content_type != _PACKAGE_RELATIONSHIP_CONTENT_TYPE:
+    if not _opc_content_types_match(
+        expected_content_type, _PACKAGE_RELATIONSHIP_CONTENT_TYPE
+    ):
         return _ManifestReferenceResolution(
             covered_part_name=None,
             covered_relationship_ids=frozenset(),
@@ -2979,7 +2985,9 @@ def _resolve_package_manifest_reference(
             unsupported_reference_count=1,
         )
     actual_content_type = content_types.get(part_name)
-    if actual_content_type is not None and actual_content_type != expected_content_type:
+    if actual_content_type is not None and not _opc_content_types_match(
+        actual_content_type, expected_content_type
+    ):
         return _ManifestReferenceResolution(
             covered_part_name=None,
             covered_relationship_ids=frozenset(),
@@ -3189,9 +3197,15 @@ def _relationship_manifest_reference_coverage(
 
 
 def _ascii_casefold(value: str) -> str:
-    """Fold ASCII letters without changing non-ASCII relationship values."""
+    """Fold ASCII letters without changing non-ASCII OPC comparison values."""
 
     return value.translate(_ASCII_CASEFOLD_TRANSLATION)
+
+
+def _opc_content_types_match(left: str, right: str) -> bool:
+    """Compare OPC manifest ContentType values case-insensitively."""
+
+    return _ascii_casefold(left) == _ascii_casefold(right)
 
 
 def _reference_has_supported_canonicalization_transforms(reference: ET.Element) -> bool:

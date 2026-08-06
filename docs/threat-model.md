@@ -226,7 +226,7 @@ resolve or execute a transform.
 A permitted Relationship Transform must also occupy OPC's required local
 package context: a direct `ds:Transform` under a direct
 `ds:Manifest/ds:Reference/ds:Transforms` chain whose URI declares a `.rels`
-part with the exact relationships content type. It must contain at least one
+part with the case-insensitive relationships content type. It must contain at least one
 direct OPC relationship selector and be immediately followed by one of OPC's
 two XML Canonicalization transforms. A declared relationships part may occur
 only once as a Relationship Transform target in a recognized XML signature.
@@ -269,8 +269,8 @@ That property must contain only an attribute-free `opc:SignatureTime` with
 attribute-free `opc:Format` then `opc:Value` children; the value must match
 one of OPC's six declared time-precision forms. This is a bounded syntax check
 for a claimed timestamp, not an assertion about timestamp accuracy, authority,
-or signature validity. From that bounded link, it resolves exact part
-URI/content-type references with case-sensitive content-type matching. Before a
+or signature validity. From that bounded link, it resolves exact part URIs
+with ASCII-case-insensitive content-type matching. Before a
 manifest reference is credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no

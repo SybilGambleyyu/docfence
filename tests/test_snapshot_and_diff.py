@@ -3727,9 +3727,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     unsigned_word_surface = tmp_path / "unsigned-word-surface.docx"
     unbound_package_object = tmp_path / "unbound-package-object.docx"
     unresolved_manifest_reference = tmp_path / "unresolved-manifest-reference.docx"
-    mismatched_manifest_content_type = (
-        tmp_path / "mismatched-manifest-content-type.docx"
-    )
     unsupported_manifest_reference = tmp_path / "unsupported-manifest-reference.docx"
     selected_styles = tmp_path / "selected-styles.docx"
     selected_duplicate = tmp_path / "selected-duplicate.docx"
@@ -3842,10 +3839,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     _write_package_signature_coverage_document(
         unresolved_manifest_reference,
         include_unresolved_manifest_reference=True,
-    )
-    _write_package_signature_coverage_document(
-        mismatched_manifest_content_type,
-        include_case_mismatched_manifest_content_type=True,
     )
     _write_package_signature_coverage_document(
         unsupported_manifest_reference,
@@ -4114,12 +4107,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     assert (
         load_snapshot(
-            mismatched_manifest_content_type
-        ).package_signature_coverage.unresolved_package_manifest_reference_count
-        == 1
-    )
-    assert (
-        load_snapshot(
             unsupported_manifest_reference
         ).package_signature_coverage.unsupported_package_manifest_reference_count
         == 1
@@ -4277,12 +4264,6 @@ rules:
     assert {
         finding.rule_id
         for finding in apply_policy(
-            diff_documents(fully_declared, mismatched_manifest_content_type), policy
-        ).findings
-    } == {"DFP092", "DFP093"}
-    assert {
-        finding.rule_id
-        for finding in apply_policy(
             diff_documents(fully_declared, unsupported_manifest_reference), policy
         ).findings
     } == {"DFP092", "DFP093"}
@@ -4391,6 +4372,35 @@ def test_package_signature_coverage_matches_selectors_ascii_case_insensitively(
         **expected,
         "declared_covered_word_relationship_count": 2,
     }
+
+
+def test_package_signature_coverage_matches_content_types_case_insensitively(
+    tmp_path,
+) -> None:
+    baseline = tmp_path / "manifest-content-type-baseline.docx"
+    case_varied_word_part = tmp_path / "manifest-content-type-word-part.docx"
+    case_varied_relationship_part = (
+        tmp_path / "manifest-content-type-relationship-part.docx"
+    )
+
+    _write_package_signature_coverage_document(baseline)
+    _write_package_signature_coverage_document(
+        case_varied_word_part,
+        styles_manifest_content_type="APPLICATION/XML",
+    )
+    _write_package_signature_coverage_document(
+        case_varied_relationship_part,
+        word_relationship_manifest_content_type=(
+            _PACKAGE_RELATIONSHIP_CONTENT_TYPE.upper()
+        ),
+    )
+
+    expected = load_snapshot(baseline).public_dict()["package_signature_coverage"]
+    for document in (case_varied_word_part, case_varied_relationship_part):
+        assert (
+            load_snapshot(document).public_dict()["package_signature_coverage"]
+            == expected
+        )
 
 
 def test_package_signature_coverage_requires_opc_signature_time_shape(
@@ -9028,7 +9038,7 @@ def _write_package_signature_coverage_document(
     signed_info_references_package_object: bool = True,
     include_unsigned_word_surface: bool = False,
     include_unresolved_manifest_reference: bool = False,
-    include_case_mismatched_manifest_content_type: bool = False,
+    styles_manifest_content_type: str = "application/xml",
     include_unsupported_manifest_reference: bool = False,
     include_duplicate_style_relationship: bool = False,
     include_ascii_case_colliding_style_relationship: bool = False,
@@ -9208,11 +9218,6 @@ def _write_package_signature_coverage_document(
         f'<ds:Reference URI="word/unsupported.xml">{digest_reference}</ds:Reference>'
         if include_unsupported_manifest_reference
         else ""
-    )
-    styles_manifest_content_type = (
-        "APPLICATION/XML"
-        if include_case_mismatched_manifest_content_type
-        else "application/xml"
     )
     signature_markup_compatibility_namespace = (
         f' xmlns:mc="{_MARKUP_COMPATIBILITY_NAMESPACE}"'

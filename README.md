@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.60 focuses on Office Open XML Word documents and templates and
+Version 0.61 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -315,8 +315,8 @@ lexical content, method parameters, KeyInfo or Object payloads, or cryptography.
 
 The Relationship Transform URI has its own mandatory local context. It must be
 a direct `ds:Transform` under a direct `ds:Manifest/ds:Reference/ds:Transforms`
-chain whose reference URI declares a `.rels` part with the exact OPC
-relationships content type. The transform must contain at least one direct
+chain whose reference URI declares a `.rels` part with OPC's
+case-insensitive relationships content type. The transform must contain at least one direct
 `opc:RelationshipReference` or `opc:RelationshipsGroupReference` and its immediate
 next transform must be one of the two XML Canonicalization forms. Only one
 Relationship Transform may name a given declared relationships part in one
@@ -346,8 +346,8 @@ The companion static declared package-signature coverage inventory follows a
 small, inspectable declaration chain. For each recognized XML signature, it
 looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
-manifests it resolves exact local part URI/content-type references with
-case-sensitive content-type matching. OPC's global `ds:Transform/@Algorithm`
+manifests it resolves exact local part URIs with ASCII-case-insensitive
+content-type matching. OPC's global `ds:Transform/@Algorithm`
 restriction, Relationship Transform local-context and selector-shape
 requirements, and `ds:XPath` prohibition are enforced before this coverage
 audit,

@@ -2,6 +2,21 @@
 
 All notable changes are documented here.
 
+## 0.61.0 — 2026-08-06
+
+- Corrected bounded static OPC package-manifest coverage to compare
+  `?ContentType=` values ASCII case-insensitively, as required by OPC
+  §10.5.7.3. This applies to ordinary part references, relationship-part
+  references, and the global Relationship Transform local-context check.
+  Local part URI syntax and names remain exact.
+- This changes declaration-resolution semantics only. It does not execute a
+  transform, recompute a digest, verify XMLDSIG, validate a certificate, or
+  decide trust.
+- Added regressions for case-varied ordinary-part and relationship-part media
+  types. The public USENIX OOXML Signature Security corpus has 152
+  package-manifest references, 133 resolvable references, and no case-only
+  ContentType matches; public profiles are identical to 0.60.
+
 ## 0.60.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts with XMLDSIG's direct
