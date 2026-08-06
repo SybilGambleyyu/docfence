@@ -213,6 +213,16 @@ Canonicalization URIs. A missing or other URI is rejected anywhere in the
 Signature, even outside the bounded declaration chain. DocFence does not
 resolve or execute a transform.
 
+A permitted Relationship Transform must also occupy OPC's required local
+package context: a direct `ds:Transform` under a direct
+`ds:Manifest/ds:Reference/ds:Transforms` chain whose URI declares a `.rels`
+part with the exact relationships content type. It must contain at least one
+direct OPC relationship selector and be immediately followed by one of OPC's
+two XML Canonicalization transforms. A declared relationships part may occur
+only once as a Relationship Transform target in a recognized XML signature.
+This is a stored-placement check, not target resolution, selector
+interpretation, or transform execution.
+
 Every XMLDSIG `ds:XPath` element in a recognized package signature is also
 rejected because OPC says the XPath element shall not be present. This is a
 global stored-markup check: DocFence neither parses nor evaluates an XPath
@@ -248,7 +258,8 @@ manifest reference is credited, its direct XMLDSIG children must be optional
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order. The global recognized-signature
 boundary rejects OPC's expressly forbidden MD5 URI and every `ds:XPath`
-element, every non-OPC transform algorithm, and MCE-namespace markup; DocFence
+element, every non-OPC transform algorithm, every malformed Relationship
+Transform, and MCE-namespace markup; DocFence
 does not otherwise judge an algorithm's cryptographic suitability. It then
 recognizes standard relationship-transform declarations: one direct
 `ds:Transforms` list containing only the supported OPC relationship and XML
@@ -262,16 +273,16 @@ references. Object identifiers, raw reference URIs, selectors, relationship
 IDs/types, part paths, and digest material remain private. A same-count
 coverage reassignment is retained in the private semantic signature.
 
-Within one XML signature, the audit also counts relationship transforms for
-each relationships part within that one package-specific manifest. More than
-one transform for the same part is unsupported and credits none of those
-selectors. That preserves the OPC per-relationships-part constraint without
-exposing the part, selector, or relationship identity.
+Within one XML signature, the recognized-signature boundary also rejects more
+than one Relationship Transform for the same declared relationships part across
+every manifest. That preserves the OPC per-relationships-part constraint
+without exposing the part, selector, or relationship identity.
 
 For a non-relationship package part, the audit accepts no transform list or one
-direct nonempty list of only the two OPC XML Canonicalization algorithms. Empty,
-duplicate, and relationship transform lists are unsupported and do not credit
-the part; a non-OPC transform algorithm has already rejected the signature.
+direct nonempty list of only the two OPC XML Canonicalization algorithms. Empty
+and duplicate lists are unsupported and do not credit the part; a Relationship
+Transform in that context is malformed, and a non-OPC transform algorithm has
+already rejected the signature.
 This is structural filtering of a small declared subset, not transform execution.
 
 Word editing/write-protection state receives the same dedicated treatment.

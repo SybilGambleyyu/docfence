@@ -2600,35 +2600,6 @@ def _declared_package_signature_coverage(
     unresolved_reference_count = 0
     unsupported_reference_count = 0
 
-    # OPC limits a relationships part to one relationship transform per XML
-    # signature. Count this single package manifest before resolving its
-    # references, so a duplicate never contributes partial coverage.
-    relationship_transform_counts_by_part: dict[str, int] = {}
-    for reference in manifest:
-        if _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference"):
-            continue
-        parsed_reference = _package_manifest_reference_member_name(
-            reference.attrib.get("URI")
-        )
-        if parsed_reference is None:
-            continue
-        part_name, _ = parsed_reference
-        if not part_name.endswith(".rels"):
-            continue
-        relationship_transform_count = _relationship_transform_count(reference)
-        if relationship_transform_count:
-            relationship_transform_counts_by_part[part_name] = (
-                relationship_transform_counts_by_part.get(part_name, 0)
-                + relationship_transform_count
-            )
-    duplicate_relationship_transform_part_names = frozenset(
-        part_name
-        for part_name, relationship_transform_count in (
-            relationship_transform_counts_by_part.items()
-        )
-        if relationship_transform_count > 1
-    )
-
     records.append(
         (
             "package_signature_coverage_bound_manifest_object",
@@ -2645,28 +2616,12 @@ def _declared_package_signature_coverage(
                 )
             )
             continue
-        parsed_reference = _package_manifest_reference_member_name(
-            reference.attrib.get("URI")
+        resolution = _resolve_package_manifest_reference(
+            reference,
+            members,
+            content_types,
+            relationship_maps,
         )
-        relationship_transform_is_duplicated = (
-            parsed_reference is not None
-            and parsed_reference[0] in duplicate_relationship_transform_part_names
-            and _relationship_transform_count(reference) > 0
-        )
-        if relationship_transform_is_duplicated:
-            resolution = _ManifestReferenceResolution(
-                covered_part_name=None,
-                covered_relationship_ids=frozenset(),
-                unresolved_reference_count=0,
-                unsupported_reference_count=1,
-            )
-        else:
-            resolution = _resolve_package_manifest_reference(
-                reference,
-                members,
-                content_types,
-                relationship_maps,
-            )
         covered_part_names.update(
             part_name
             for part_name in (resolution.covered_part_name,)
@@ -2851,6 +2806,67 @@ def _has_opc_disallowed_transform_algorithm(root: ET.Element) -> bool:
         and element.attrib.get("Algorithm") not in _OPC_SUPPORTED_TRANSFORM_ALGORITHMS
         for element in root.iter()
     )
+
+
+def _has_opc_invalid_relationship_transform_markup(root: ET.Element) -> bool:
+    """Return whether a Relationship Transform lacks OPC's required context."""
+
+    parent_by_child = {child: parent for parent in root.iter() for child in parent}
+    relationship_transform_part_names: set[str] = set()
+    selector_names = frozenset(
+        {
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipReference"),
+            (_OPC_DIGITAL_SIGNATURE_NAMESPACE, "RelationshipsGroupReference"),
+        }
+    )
+
+    for element in root.iter():
+        qualified_name = _qualified_name(element.tag)
+        if (
+            qualified_name != (_XMLDSIG_NAMESPACE, "Transform")
+            or element.attrib.get("Algorithm") != _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
+        ):
+            continue
+
+        transforms = parent_by_child.get(element)
+        reference = parent_by_child.get(transforms) if transforms is not None else None
+        manifest = parent_by_child.get(reference) if reference is not None else None
+        if (
+            transforms is None
+            or _qualified_name(transforms.tag) != (_XMLDSIG_NAMESPACE, "Transforms")
+            or reference is None
+            or _qualified_name(reference.tag) != (_XMLDSIG_NAMESPACE, "Reference")
+            or manifest is None
+            or _qualified_name(manifest.tag) != (_XMLDSIG_NAMESPACE, "Manifest")
+        ):
+            return True
+
+        parsed_reference = _package_manifest_reference_member_name(
+            reference.attrib.get("URI")
+        )
+        if (
+            parsed_reference is None
+            or not parsed_reference[0].endswith(".rels")
+            or parsed_reference[1] != _PACKAGE_RELATIONSHIP_CONTENT_TYPE
+            or parsed_reference[0] in relationship_transform_part_names
+        ):
+            return True
+        relationship_transform_part_names.add(parsed_reference[0])
+
+        if not any(_qualified_name(child.tag) in selector_names for child in element):
+            return True
+        transform_children = list(transforms)
+        transform_index = transform_children.index(element)
+        if (
+            transform_index + 1 >= len(transform_children)
+            or _qualified_name(transform_children[transform_index + 1].tag)
+            != (_XMLDSIG_NAMESPACE, "Transform")
+            or transform_children[transform_index + 1].attrib.get("Algorithm")
+            not in _XML_CANONICALIZATION_TRANSFORM_ALGORITHMS
+        ):
+            return True
+
+    return False
 
 
 def _has_opc_disallowed_xpath_element(root: ET.Element) -> bool:
@@ -3171,18 +3187,6 @@ def _transform_has_no_opc_disallowed_xpath_element(transform: ET.Element) -> boo
     return not _has_opc_disallowed_xpath_element(transform)
 
 
-def _relationship_transform_count(reference: ET.Element) -> int:
-    """Count direct OPC relationship transforms for one manifest reference."""
-
-    return sum(
-        _qualified_name(transform.tag) == (_XMLDSIG_NAMESPACE, "Transform")
-        and transform.attrib.get("Algorithm") == _OPC_RELATIONSHIP_TRANSFORM_ALGORITHM
-        for transforms in reference
-        if _qualified_name(transforms.tag) == (_XMLDSIG_NAMESPACE, "Transforms")
-        for transform in transforms
-    )
-
-
 def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]:
     """Check a bounded XMLDSIG shape without verifying cryptographic validity."""
 
@@ -3232,6 +3236,7 @@ def _validate_package_digital_signature_root(root: ET.Element) -> dict[str, int]
         )
         or _has_opc_disallowed_digest_method(root)
         or _has_opc_disallowed_transform_algorithm(root)
+        or _has_opc_invalid_relationship_transform_markup(root)
         or _has_opc_disallowed_xpath_element(root)
         or _has_opc_disallowed_markup_compatibility(root)
     ):

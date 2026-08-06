@@ -2,6 +2,29 @@
 
 All notable changes are documented here.
 
+## 0.57.0 — 2026-08-06
+
+- Hardened every recognized OPC XML signature so its Relationship Transform URI
+  has the required local package context. It must be a direct
+  `ds:Transform` in a direct `ds:Manifest/ds:Reference/ds:Transforms`
+  chain whose URI declares a `.rels` part with OPC's exact relationships
+  content type; it must contain at least one direct OPC relationship selector
+  and be immediately followed by one of OPC's XML Canonicalization transforms.
+  A declared relationships part can have only one such transform per recognized
+  XML signature.
+- This stored-syntax boundary applies before the bounded declaration-coverage
+  audit, including otherwise unrelated `SignedInfo` references. It does not
+  resolve a manifest target, interpret a selector, execute a transform,
+  recompute a digest, verify XMLDSIG, or make a trust decision.
+- Added regressions for a transform outside a manifest, a missing selector,
+  missing or misordered following canonicalization, a wrong relationships
+  content type, a transform naming an ordinary Word part, and duplicate
+  transforms for one declared relationships part. The public USENIX OOXML
+  Signature Security corpus has 29 DOCX files, 22
+  XML signature parts (21 parseable), and 38 Relationship Transforms; all meet
+  this boundary and its public profiles are identical to 0.56
+  (`8a4b968515b0ea36d8db1430b79315b6045a95f9fa14a037cf044fd29639f7f2`).
+
 ## 0.56.0 — 2026-08-06
 
 - Hardened recognized OPC XML signature parts to reject every XMLDSIG

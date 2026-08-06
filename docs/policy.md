@@ -778,6 +778,18 @@ also forbids MCE-namespace elements and attributes anywhere in that Signature.
 DocFence does not parse or execute XPath or a transform, validate MCE
 conformance, or select an MCE branch.
 
+When that permitted URI is a Relationship Transform, its local package syntax
+is also mandatory: it must be a direct `ds:Transform` under a direct
+`ds:Manifest/ds:Reference/ds:Transforms` chain. The reference URI must declare a
+`.rels` part with OPC's exact relationships content type; the transform must
+contain at least one direct `opc:RelationshipReference` or
+`opc:RelationshipsGroupReference`; and its immediate following transform must
+be XML Canonicalization (with or without comments). One recognized XML
+signature may name a declared relationships part with that transform only once.
+A violation is malformed even when it occurs outside the bounded coverage
+chain. This validates stored placement only: it does not resolve the declared
+target, interpret selectors, or execute a transform.
+
 Public output reports only aggregate origin-part, XML-signature-part,
 certificate-part, SignedInfo-reference, manifest-reference,
 relationship-reference, inline-X.509-certificate, and signature-property
@@ -829,10 +841,10 @@ optional `ds:Transforms`, one `ds:DigestMethod` with a nonblank
 `ds:DigestValue`, without non-whitespace direct text. It may omit transforms
 or carry one direct nonempty list of only OPC's two XML Canonicalization
 algorithms. The global recognized-signature boundary rejects every non-OPC
-`ds:Transform/@Algorithm`, every XMLDSIG `ds:XPath` element, and
-MCE-namespace markup before this bounded binding/manifest chain is evaluated;
-an otherwise allowed relationship transform in this unsupported coverage
-position leaves coverage unavailable. A `DigestMethod` in the recognized
+`ds:Transform/@Algorithm`, every malformed Relationship Transform, every XMLDSIG
+`ds:XPath` element, and MCE-namespace markup before this bounded
+binding/manifest chain is evaluated; a Relationship Transform in this binding
+position is therefore malformed. A `DigestMethod` in the recognized
 signature cannot use OPC's expressly forbidden MD5 URI; the audit does not
 otherwise judge an algorithm's cryptographic suitability.
 DocFence checks that stored syntax and the binding URI fragment, but
@@ -843,8 +855,8 @@ credited, its direct XMLDSIG children must be optional
 `ds:Transforms`, one `ds:DigestMethod` with a nonblank `Algorithm`, and one
 direct, attribute-free, child-free, nonempty `ds:DigestValue`, with no
 non-whitespace direct text, in that order; the globally rejected exact MD5 URI,
-any non-OPC `ds:Transform/@Algorithm`, any `ds:XPath` element, or
-MCE-namespace markup cannot lend coverage.
+any non-OPC `ds:Transform/@Algorithm`, malformed Relationship Transform,
+any `ds:XPath` element, or MCE-namespace markup cannot lend coverage.
 Supported
 relationship references use one direct `ds:Transforms` list containing only
 the supported OPC relationship and XML Canonicalization algorithms, with
@@ -857,18 +869,18 @@ unsupported reference; a missing member, content-type mismatch, missing
 relationship item, or selector that selects no stored relationship is reported
 as an aggregate unresolved reference.
 
-OPC permits no more than one relationship transform for a particular
-relationships part in one XML signature. DocFence counts transform-bearing
-references to each relationship part within that one package-specific manifest.
-If a part has more than one, every such declaration remains an aggregate
-unsupported reference and none of its selectors are credited with coverage.
+OPC permits no more than one Relationship Transform for a particular
+relationships part in one XML signature. DocFence enforces that limit across
+every manifest in the recognized Signature, before coverage is evaluated; a
+duplicate is malformed rather than an aggregate unsupported reference.
 
 For a non-relationship package part, supported references have no
 `ds:Transforms` element or exactly one direct nonempty `ds:Transforms` list of
 XMLDSIG `Transform` elements using only the two OPC-supported XML
-Canonicalization algorithms. Empty or duplicate lists and a relationship
-transform are unsupported rather than being treated as part coverage; a non-OPC
-transform algorithm has already rejected the recognized signature.
+Canonicalization algorithms. Empty or duplicate lists are unsupported rather
+than being treated as part coverage. A Relationship Transform in this context
+is malformed; a non-OPC transform algorithm has already rejected the
+recognized signature.
 
 The bounded Word scope comprises every non-relationship member under `word/`,
 root-package relationships whose type is `officeDocument`, and every stored

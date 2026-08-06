@@ -3447,6 +3447,9 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
     missing_transform_algorithm_additional_signed_info_reference = (
         tmp_path / "missing-transform-algorithm-additional-signed-info-reference.docx"
     )
+    relationship_transform_additional_signed_info_reference = (
+        tmp_path / "relationship-transform-additional-signed-info-reference.docx"
+    )
     missing_signed_info_reference_uri = (
         tmp_path / "missing-signed-info-reference-uri.docx"
     )
@@ -3536,6 +3539,13 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         additional_signed_info_reference_transform_mode="missing_algorithm",
     )
     _write_package_digital_signature_document(
+        relationship_transform_additional_signed_info_reference,
+        include_additional_signed_info_reference=True,
+        additional_signed_info_reference_transform_mode=(
+            "relationship_transform_with_selector_and_canonicalization"
+        ),
+    )
+    _write_package_digital_signature_document(
         missing_signed_info_reference_uri,
         signed_info_reference_uri=None,
     )
@@ -3618,6 +3628,7 @@ def test_package_digital_signature_discovery_and_invalid_topology(tmp_path) -> N
         xpath_additional_signed_info_reference,
         unsupported_transform_additional_signed_info_reference,
         missing_transform_algorithm_additional_signed_info_reference,
+        relationship_transform_additional_signed_info_reference,
         missing_signed_info_reference_uri,
         package_part_signed_info_reference,
         external_signed_info_reference,
@@ -3653,6 +3664,10 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     canonicalization_with_comments = tmp_path / "canonicalization-with-comments.docx"
     xpath_relationship_transform = tmp_path / "xpath-relationship-transform.docx"
+    missing_relationship_selector = tmp_path / "missing-relationship-selector.docx"
+    relationship_transform_wrong_content_type = (
+        tmp_path / "relationship-transform-wrong-content-type.docx"
+    )
     md5_relationship_digest = tmp_path / "md5-relationship-digest.docx"
     missing_relationship_canonicalization = (
         tmp_path / "missing-relationship-canonicalization.docx"
@@ -3690,6 +3705,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     canonicalized_additional_signed_info_reference = (
         tmp_path / "canonicalized-additional-signed-info-reference.docx"
+    )
+    relationship_transform_additional_signed_info_reference = (
+        tmp_path / "relationship-transform-additional-signed-info-reference.docx"
     )
     unsupported_transform_additional_signed_info_reference = (
         tmp_path / "unsupported-transform-additional-signed-info-reference.docx"
@@ -3773,6 +3791,14 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         word_relationship_transform_mode="xpath_parameter",
     )
     _write_package_signature_coverage_document(
+        missing_relationship_selector,
+        word_relationship_transform_mode="missing_selector",
+    )
+    _write_package_signature_coverage_document(
+        relationship_transform_wrong_content_type,
+        word_relationship_manifest_content_type="application/xml",
+    )
+    _write_package_signature_coverage_document(
         md5_relationship_digest,
         word_relationship_digest_mode="md5_digest_algorithm",
     )
@@ -3839,6 +3865,12 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         additional_signed_info_reference_transform_mode="canonicalization",
     )
     _write_package_signature_coverage_document(
+        relationship_transform_additional_signed_info_reference,
+        additional_signed_info_reference_transform_mode=(
+            "relationship_transform_with_selector_and_canonicalization"
+        ),
+    )
+    _write_package_signature_coverage_document(
         unsupported_transform_additional_signed_info_reference,
         additional_signed_info_reference_transform_mode="unsupported_transform",
     )
@@ -3860,7 +3892,9 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
     )
     _write_package_signature_coverage_document(
         relationship_word_part_transform,
-        word_part_transform_mode="relationship_transform",
+        word_part_transform_mode=(
+            "relationship_transform_with_selector_and_canonicalization"
+        ),
     )
     _write_package_signature_coverage_document(
         multiple_word_part_transforms,
@@ -3948,7 +3982,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         missing_package_signature_properties,
         nonstandard_package_specific_object_id,
         extra_package_specific_object_child,
-        duplicate_package_specific_object,
         duplicate_package_specific_object_reference,
     ):
         assert (
@@ -4033,21 +4066,11 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "declared_uncovered_word_relationship_count": 1,
         "unsupported_package_manifest_reference_count": 1,
     }
-    for document in (
-        missing_relationship_canonicalization,
-        misordered_relationship_canonicalization,
-        multiple_transforms_elements,
-    ):
+    for document in (multiple_transforms_elements,):
         assert (
             load_snapshot(document).public_dict()["package_signature_coverage"]
             == expected_unsupported_relationship_transform
         )
-    assert load_snapshot(duplicate_relationship_transform).public_dict()[
-        "package_signature_coverage"
-    ] == {
-        **expected_unsupported_relationship_transform,
-        "unsupported_package_manifest_reference_count": 2,
-    }
     for document in (
         canonicalized_word_part,
         canonicalized_word_part_with_comments,
@@ -4063,7 +4086,6 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
         "unsupported_package_manifest_reference_count": 1,
     }
     for document in (
-        relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
         missing_word_part_digest_value,
@@ -4083,10 +4105,18 @@ def test_package_signature_coverage_is_private_and_semantic(tmp_path) -> None:
             load_snapshot(document)
     for document in (
         xpath_relationship_transform,
+        missing_relationship_selector,
+        relationship_transform_wrong_content_type,
         xpath_word_part_transform,
         xpath_additional_signed_info_reference,
+        relationship_transform_additional_signed_info_reference,
         unsupported_trailing_transform,
+        missing_relationship_canonicalization,
+        misordered_relationship_canonicalization,
+        duplicate_relationship_transform,
+        duplicate_package_specific_object,
         unsupported_word_part_transform,
+        relationship_word_part_transform,
         unsupported_transform_additional_signed_info_reference,
         markup_compatibility_attribute_in_signature,
         markup_compatibility_element_in_signature,
@@ -4139,18 +4169,7 @@ rules:
             diff_documents(fully_declared, unsupported_manifest_reference), policy
         ).findings
     } == {"DFP092", "DFP093"}
-    for document in (
-        missing_relationship_canonicalization,
-        misordered_relationship_canonicalization,
-        multiple_transforms_elements,
-    ):
-        assert {
-            finding.rule_id
-            for finding in apply_policy(
-                diff_documents(fully_declared, document), policy
-            ).findings
-        } == {"DFP092", "DFP093"}
-    for document in (duplicate_relationship_transform,):
+    for document in (multiple_transforms_elements,):
         assert {
             finding.rule_id
             for finding in apply_policy(
@@ -4161,7 +4180,6 @@ rules:
         missing_package_signature_properties,
         nonstandard_package_specific_object_id,
         extra_package_specific_object_child,
-        duplicate_package_specific_object,
         duplicate_package_specific_object_reference,
     ):
         assert {
@@ -4171,7 +4189,6 @@ rules:
             ).findings
         } == {"DFP092", "DFP093"}
     for document in (
-        relationship_word_part_transform,
         multiple_word_part_transforms,
         empty_word_part_transforms,
         missing_word_part_digest_value,
@@ -4378,7 +4395,6 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
         ) == (1, 0)
 
     for mode in (
-        "relationship_transform",
         "multiple_transforms_elements",
         "empty_transforms",
     ):
@@ -4393,13 +4409,14 @@ def test_package_signature_coverage_requires_bound_object_reference_shape(
             coverage.signature_without_declared_package_coverage_count,
         ) == (0, 1)
 
-    document = tmp_path / "bound-object-reference-transform-unsupported.docx"
-    _write_package_signature_coverage_document(
-        document,
-        package_object_binding_transform_mode="unsupported_transform",
-    )
-    with pytest.raises(DocumentFormatError):
-        load_snapshot(document)
+    for mode in ("unsupported_transform", "relationship_transform"):
+        document = tmp_path / f"bound-object-reference-transform-{mode}.docx"
+        _write_package_signature_coverage_document(
+            document,
+            package_object_binding_transform_mode=mode,
+        )
+        with pytest.raises(DocumentFormatError):
+            load_snapshot(document)
 
     document = tmp_path / "bound-object-reference-transform-xpath.docx"
     _write_package_signature_coverage_document(
@@ -8816,6 +8833,7 @@ def _write_package_signature_coverage_document(
     select_word_relationship_by_type: bool = False,
     use_nonstandard_source_type_selector: bool = False,
     word_relationship_transform_mode: str = "standard",
+    word_relationship_manifest_content_type: str = (_PACKAGE_RELATIONSHIP_CONTENT_TYPE),
     word_relationship_digest_mode: str = "standard",
     include_duplicate_word_relationship_manifest_reference: bool = False,
     package_object_id: str = "idPackageObject",
@@ -8921,7 +8939,7 @@ def _write_package_signature_coverage_document(
     )
     word_relationship_manifest_reference = (
         f'<ds:Reference URI="/word/_rels/document.xml.rels?ContentType='
-        f'{_PACKAGE_RELATIONSHIP_CONTENT_TYPE}">'
+        f'{word_relationship_manifest_content_type}">'
         f"{word_relationship_transforms}{word_relationship_digest_markup}"
         "</ds:Reference>"
     )
@@ -9095,6 +9113,9 @@ def _package_signature_relationship_transforms(
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
         f"{selector}</ds:Transform>"
     )
+    relationship_transform_without_selector = (
+        f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}"/>'
+    )
     relationship_transform_with_xpath = (
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
         f"{selector}<ds:XPath>true()</ds:XPath></ds:Transform>"
@@ -9114,6 +9135,10 @@ def _package_signature_relationship_transforms(
         transforms = relationship_transform + canonicalization_with_comments_transform
     elif mode == "xpath_parameter":
         transforms = relationship_transform_with_xpath + canonicalization_transform
+    elif mode == "missing_selector":
+        transforms = (
+            relationship_transform_without_selector + canonicalization_transform
+        )
     elif mode == "missing_canonicalization":
         transforms = relationship_transform
     elif mode == "canonicalization_before_relationship":
@@ -9150,6 +9175,11 @@ def _package_signature_part_transforms(*, mode: str) -> str:
     relationship_transform = (
         f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}"/>'
     )
+    relationship_transform_with_selector_and_canonicalization = (
+        f'<ds:Transform Algorithm="{_OPC_RELATIONSHIP_TRANSFORM_ALGORITHM}">'
+        '<opc:RelationshipReference SourceId="rIdStyles"/></ds:Transform>'
+        f'<ds:Transform Algorithm="{_XML_CANONICALIZATION_TRANSFORM_ALGORITHM}"/>'
+    )
     unsupported_transform = '<ds:Transform Algorithm="urn:docfence:test:unsupported"/>'
     missing_algorithm_transform = "<ds:Transform/>"
 
@@ -9169,6 +9199,12 @@ def _package_signature_part_transforms(*, mode: str) -> str:
         return f"<ds:Transforms>{missing_algorithm_transform}</ds:Transforms>"
     if mode == "relationship_transform":
         return f"<ds:Transforms>{relationship_transform}</ds:Transforms>"
+    if mode == "relationship_transform_with_selector_and_canonicalization":
+        return (
+            "<ds:Transforms>"
+            f"{relationship_transform_with_selector_and_canonicalization}"
+            "</ds:Transforms>"
+        )
     if mode == "multiple_transforms_elements":
         return (
             f"<ds:Transforms>{canonicalization_transform}</ds:Transforms>"

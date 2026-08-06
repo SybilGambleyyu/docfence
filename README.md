@@ -119,7 +119,7 @@ command can make selected changes fail closed, starting with `docfence init`.
 
 ## Current boundary
 
-Version 0.56 focuses on Office Open XML Word documents and templates and
+Version 0.57 focuses on Office Open XML Word documents and templates and
 deliberately keeps a small, inspectable contract:
 
 - bounded `.docx` / `.docm` / `.dotx` / `.dotm` ZIP packages;
@@ -305,6 +305,17 @@ in that recognized Signature. These exact stored-syntax rules do not broadly
 reject, endorse, or cryptographically assess SHA-1 or other algorithms, and
 the MCE rule does not evaluate compatibility markup.
 
+The Relationship Transform URI has its own mandatory local context. It must be
+a direct `ds:Transform` under a direct `ds:Manifest/ds:Reference/ds:Transforms`
+chain whose reference URI declares a `.rels` part with the exact OPC
+relationships content type. The transform must contain at least one direct
+`opc:RelationshipReference` or `opc:RelationshipsGroupReference` and its immediate
+next transform must be one of the two XML Canonicalization forms. Only one
+Relationship Transform may name a given declared relationships part in one
+recognized XML signature. A violation anywhere in that Signature fails the
+recognized signature shape closed; this checks stored placement and does not
+resolve a target, interpret selectors, or execute a transform.
+
 Reports expose only aggregate origin-part, XML-signature-part, certificate-part,
 SignedInfo-reference, manifest-reference, relationship-reference, inline-X.509
 certificate, and signature-property counts. Signer/certificate data, signature
@@ -319,7 +330,8 @@ looks for a direct `SignedInfo` local-fragment reference to a direct
 `ds:Object` with exactly one direct package `ds:Manifest`. From those bound
 manifests it resolves exact local part URI/content-type references with
 case-sensitive content-type matching. OPC's global `ds:Transform/@Algorithm`
-restriction and `ds:XPath` prohibition are enforced before this coverage audit,
+restriction, Relationship Transform local-context requirements, and
+`ds:XPath` prohibition are enforced before this coverage audit,
 including references outside the bounded chain. OPC §10.5.2's global
 MCE-namespace element/attribute prohibition is enforced at the same
 recognized-signature boundary. Before a manifest reference can be credited, its direct XMLDSIG
@@ -328,7 +340,8 @@ children must be the optional `ds:Transforms`, one
 child-free, nonempty `ds:DigestValue`, with no non-whitespace direct text, in
 that order. The recognized-signature boundary already rejects OPC's expressly
 forbidden MD5 URI in every `DigestMethod`, every non-OPC `ds:Transform`
-algorithm, every `ds:XPath` element, and MCE namespace markup; it does not
+algorithm, every malformed Relationship Transform, every `ds:XPath` element,
+and MCE namespace markup; it does not
 otherwise endorse, cryptographically assess, or broadly reject algorithms such
 as legacy SHA-1.
 It then recognizes standard OPC
@@ -337,10 +350,9 @@ containing only the supported OPC relationship and XML Canonicalization
 algorithms, with exactly one relationship transform immediately followed by
 XML Canonicalization (with or without comments), then exact
 `RelationshipReference/@SourceId` and
-`RelationshipsGroupReference/@SourceType` selectors. Within one XML signature,
-it also rejects every transform-bearing declaration for a relationships part
-when more than one relationship transform targets that same part across bound
-manifests. Public output
+`RelationshipsGroupReference/@SourceType` selectors. The recognized-signature
+boundary rejects more than one Relationship Transform for the same declared
+relationships part across every manifest in that Signature. Public output
 contains only aggregate counts for signatures with and without that declaration
 chain; covered and uncovered `word/` non-relationship parts; covered and
 uncovered root `officeDocument` relationships; covered and uncovered
@@ -352,11 +364,10 @@ review-visible.
 
 For a non-relationship package part, the audit accepts no transform list or one
 direct nonempty list of only OPC-supported XML Canonicalization transforms. An
-empty, duplicate, or relationship transform list is unsupported and does not
-credit that part with coverage; a non-OPC transform algorithm has already
-rejected the recognized signature. A signature carrying a disallowed
-`ds:Transform/@Algorithm`, `ds:XPath`, or MCE namespace markup is rejected
-before this coverage decision.
+empty or duplicate list is unsupported and does not credit that part with
+coverage. A Relationship Transform in that context is malformed and rejects
+the recognized signature before this coverage decision, as do a disallowed
+`ds:Transform/@Algorithm`, `ds:XPath`, or MCE namespace markup.
 
 This remains deliberately narrower than cryptographic or client-effective
 coverage. DocFence does not parse, decode, or recompute reference digests or

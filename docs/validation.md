@@ -1,6 +1,6 @@
 # Validation notes
 
-DocFence 0.56 is validated as a parser and reporting boundary, not as a Word
+DocFence 0.57 is validated as a parser and reporting boundary, not as a Word
 renderer. The test suite constructs small OOXML packages with controlled body,
 header, footer, footnote, endnote, comment, and glossary stories and checks the
 following properties:
@@ -105,7 +105,8 @@ following properties:
   bearing, missing-child, extra-child, nonstandard-format, and
   format/value-mismatched timestamp declarations,
   direct package-object binding references with no transform or either
-  canonicalization form, plus relationship/empty/duplicate transform lists,
+  canonicalization form, plus a malformed Relationship Transform and
+  empty/duplicate transform lists,
   `ds:XPath` parameters in binding, relationship, and part
   transforms, plus an XPath-bearing additional non-coverage SignedInfo
   reference, and missing, misordered, malformed, nested, extra, or
@@ -115,11 +116,13 @@ following properties:
   unresolved and unsupported manifest references, a case-mismatched content
   type, standard `RelationshipsGroupReference/@SourceType` selectors,
   malformed nonstandard `RelationshipReference/@SourceType` lookalikes,
-  both OPC XML Canonicalization algorithms, missing or misordered
-  canonicalization after a relationship transform, duplicate direct
-  `ds:Transforms` lists, duplicate relationship transforms for one
-  relationships part, direct part references with permitted C14N-only and
-  unsupported empty/duplicate/relationship transform lists, missing or
+  both OPC XML Canonicalization algorithms, a Relationship Transform outside a
+  manifest on an additional SignedInfo reference, a missing relationship
+  selector, missing or misordered following canonicalization, a Relationship
+  Transform with a wrong relationships content type or naming a Word part, and
+  duplicate Relationship Transforms for one declared relationships part,
+  duplicate direct `ds:Transforms` lists, direct part references with permitted
+  C14N-only and unsupported empty/duplicate lists, missing or
   misordered XMLDSIG digest
   children, a missing digest-method algorithm, an unexpected digest-value
   attribute or nested element, unexpected reference text, an extra direct
@@ -641,7 +644,11 @@ duplicate-document, and evil-type attacker variants are rejected for static
 declaration gaps. This is a structural compatibility smoke test over a bounded
 scope, not a claim that signatures are valid, trusted, exhaustive, or that a
 client will handle any sample in a particular way; the fixtures are not runtime
-dependencies.
+dependencies. For 0.57, the full public corpus contains 38 Relationship
+Transforms in 21 parseable XML signature parts (22 XML signature parts across
+29 DOCX files); every one satisfies the new local-context requirements and its
+public profiles are byte-for-byte identical to 0.56
+(`8a4b968515b0ea36d8db1430b79315b6045a95f9fa14a037cf044fd29639f7f2`).
 
 For the Word-protection boundary, the release check profiles two independent
 Wordprocessing protection assets from Microsoft's open-source
@@ -710,5 +717,5 @@ resolve a group, calculate an editable region, or infer effective range
 authorization. It does not evaluate a `DOCVARIABLE` field, run a macro, resolve
 a document-variable name or template, or infer whether a stored variable is
 used or visible. Exact-literal same-scope association is stored-package evidence
-only, not field evaluation. Those limits are explicit in the 0.56 contract; see
+only, not field evaluation. Those limits are explicit in the 0.57 contract; see
 [threat model](threat-model.md).
